@@ -15,7 +15,7 @@ LOGO_APP_H = "LOGO H APP.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# Colores Premium por Categoría
+# Paleta de Colores Stulio Designs
 COLOR_MAP = {
     "Hogar": "#FFB347", "Servicios": "#FFB347", "Salud": "#B39EB5", 
     "Transporte": "#77B5FE", "Obligaciones": "#FF6961", "Alimentación": "#FDFD96", 
@@ -27,6 +27,8 @@ st.markdown("""
     header {visibility: hidden;}
     [data-testid="stHeader"] {display: none;}
     .stApp { background: #0e1117; color: #dee2e6; }
+    
+    /* Tarjetas de Métricas Superiores */
     .card {
         background-color: #ffffff; border-radius: 15px; padding: 20px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.4); margin-bottom: 15px;
@@ -34,11 +36,16 @@ st.markdown("""
     }
     .card-label { font-size: 0.85rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
     .card-value { font-size: 1.8rem; font-weight: 800; color: #1a1d21; margin: 5px 0; }
+    
+    /* Barras de Categoría Optimizadas (Recortadas) */
     .legend-bar {
-        padding: 12px 20px; border-radius: 10px; margin-bottom: 8px; 
-        font-size: 1.1rem; font-weight: bold; color: #1a1d21; 
+        padding: 8px 15px; border-radius: 8px; margin-bottom: 6px; 
+        font-size: 1rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
+        max-width: 85%; /* BARRA RECORTADA */
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
+    
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
     .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
     </style>
@@ -74,12 +81,12 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     if df_g.empty: return it, 0.0, 0.0, it, it, 0.0
     vp = df_g[df_g["Pagado"] == True]["Monto"].sum()
     vpy = df_g[df_g["Pagado"] == False]["Valor Referencia"].sum()
-    fondos_actuales = it - vp
-    saldo_final = it - vp - vpy
-    ahorro_p = (saldo_final / it * 100) if it > 0 else 0
-    return it, vp, vpy, fondos_actuales, saldo_final, ahorro_p
+    fondos_act = it - vp
+    saldo_fin = it - vp - vpy
+    ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
+    return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-# --- 3. MOTOR PDF CON DETALLE TABLA ---
+# --- 3. MOTOR PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, titulo_reporte, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -100,12 +107,8 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, titulo_reporte, anio):
     for m in meses:
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
-        
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
-        nom_m = i_m["Nomina"].sum() if not i_m.empty else 0.0
-        otr_m = i_m["Otros"].sum() if not i_m.empty else 0.0
-        it_m, vp_m, vpy_m, _, bf_m, _ = calcular_metricas(g_m, nom_m, otr_m, s_ant_m)
-        
+        it_m, vp_m, vpy_m, _, bf_m, _ = calcular_metricas(g_m, i_m["Nomina"].sum() if not i_m.empty else 0, i_m["Otros"].sum() if not i_m.empty else 0, s_ant_m)
         if y < 250: c.showPage(); y = header_pdf(c, titulo_reporte, anio)
         c.setStrokeColor(HexColor("#dddddd")); c.setFillColor(HexColor("#f2f2f2"))
         c.roundRect(50, y-85, 510, 95, 10, fill=1, stroke=1)
@@ -113,7 +116,6 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, titulo_reporte, anio):
         c.setFont("Helvetica", 10); c.drawString(70, y-42, f"Ingresos: $ {it_m:,.0f} | Pagado: $ {vp_m:,.0f} | Pendiente: $ {vpy_m:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-75, f"BALANCE FINAL: $ {bf_m:,.0f}")
         y -= 110
-        
         if not g_m.empty:
             c.setFillColor(HexColor("#1a1d21")); c.setFont("Helvetica-Bold", 9)
             c.drawString(55, y, "Categoría"); c.drawString(150, y, "Descripción"); c.drawRightString(400, y, "Ref."); c.drawRightString(480, y, "Monto"); c.drawRightString(550, y, "Estado")
@@ -135,23 +137,14 @@ if not st.session_state.autenticado:
     with col2:
         st.markdown("<h1 style='text-align: center; color: #d4af37;'>My Finance</h1>", unsafe_allow_html=True)
         st.markdown("<p style='text-align: center; margin-top:-20px;'>by Stulio Designs</p>", unsafe_allow_html=True)
-        tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
-        usuarios = cargar_usuarios()
-        with tab_log:
-            u_in = st.text_input("Usuario").strip()
-            p_in = st.text_input("Contraseña", type="password").strip()
-            if st.button("Iniciar Sesión", use_container_width=True):
-                if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
-                    st.session_state.autenticado, st.session_state.usuario_id = True, u_in
-                    st.rerun()
-                else: st.error("❌ Datos incorrectos")
-        with tab_reg:
-            rn_user = st.text_input("Nuevo Usuario")
-            rn_pass = st.text_input("Nueva Contraseña", type="password")
-            if st.button("Crear Cuenta"):
-                if rn_user and rn_pass:
-                    usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_user}
-                    guardar_usuarios(usuarios); st.success("✅ Cuenta creada.")
+        u_in = st.text_input("Usuario").strip()
+        p_in = st.text_input("Contraseña", type="password").strip()
+        if st.button("Iniciar Sesión"):
+            usuarios = cargar_usuarios()
+            if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
+                st.session_state.autenticado, st.session_state.usuario_id = True, u_in
+                st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
+                st.rerun()
     st.stop()
 
 # --- 5. DASHBOARD ---
@@ -165,7 +158,6 @@ with st.sidebar:
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
     
-    # LÓGICA DE ARRASTRE DE SALDO ANTERIOR
     idx = periodos_list.index(mes_s)
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
     anio_ant = anio_s if idx > 0 else anio_s - 1
@@ -180,31 +172,17 @@ with st.sidebar:
     st.divider()
     arrastrar = st.toggle(f"Arrastrar saldo de {mes_ant}", value=not i_prev.empty)
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
-    
     s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastrar else (float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0), disabled=arrastrar)
     n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
     st.divider()
-    st.subheader("📊 Reportes y Balances")
-    c_r1, c_r2 = st.columns(2)
-    with c_r1:
-        if st.button(f"📄 PDF {mes_s[:3]}"):
-            p = generar_pdf_profesional(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
-            st.download_button(f"PDF_{mes_s}.pdf", p, f"PDF_{mes_s}.pdf")
-    with c_r2:
-        df_ex = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
-        out = BytesIO()
-        with pd.ExcelWriter(out, engine='xlsxwriter') as wr: df_ex.to_excel(wr, index=False)
-        st.download_button(f"📊 Excel {mes_s[:3]}", out.getvalue(), f"Excel_{mes_s}.xlsx")
-    
-    if st.button(f"📥 Balance Semestre 1 ({anio_s})"):
+    if st.button(f"📄 PDF {mes_s[:3]}"):
+        p = generar_pdf_profesional(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
+        st.download_button(f"PDF_{mes_s}.pdf", p, f"PDF_{mes_s}.pdf")
+    if st.button(f"📥 Balance S1 {anio_s}"):
         p = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
         st.download_button("S1.pdf", p, "S1.pdf")
-    if st.button(f"📥 Balance Semestre 2 ({anio_s})"):
-        p = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "Balance S2", anio_s)
-        st.download_button("S2.pdf", p, "S2.pdf")
-
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
 # --- 6. CUERPO PRINCIPAL ---
@@ -231,23 +209,26 @@ m1, m2, m3, m4 = st.columns(4)
 m1.markdown(f'<div class="card"><div class="card-label">Ingresos</div><div class="card-value">$ {it:,.0f}</div></div>', unsafe_allow_html=True)
 m2.markdown(f'<div class="card"><div class="card-label">Fondos Actuales</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m3.markdown(f'<div class="card"><div class="card-label">Pendiente</div><div class="card-value" style="color:#e74c3c;">$ {vpy:,.0f}</div></div>', unsafe_allow_html=True)
-m4.markdown(f'<div class="card"><div class="card-label">Saldo Final (Ahorro)</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
+m4.markdown(f'<div class="card"><div class="card-label">Saldo (Ahorro)</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 🚀 INFOGRAFIAS REPOTENCIADAS ---
+# --- 🚀 INFOGRAFIAS AJUSTADAS ---
 st.markdown("### 📊 Análisis Financiero Pro")
-c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.4, 1, 1.2])
+c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
 with c_graf_dona:
-    st.markdown("**Desglose por Categoría**")
-    if not df_ed.empty and df_ed["Monto"].sum() > 0:
-        fig_pie = px.pie(df_ed, values='Monto', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
-        fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0, b=0, l=0, r=0))
+    st.markdown("**Desglose por Categoría (Pagado)**")
+    # Filtramos solo lo que está marcado como Pagado para este gráfico de gastos reales
+    df_pagados = df_ed[df_ed["Pagado"] == True]
+    if not df_pagados.empty and df_pagados["Monto"].sum() > 0:
+        fig_pie = px.pie(df_pagados, values='Monto', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
+        fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
         
-        df_sum = df_ed.groupby("Categoría")["Monto"].sum().reset_index()
+        # BARRAS DE SUBTOTALES (RECORTADAS Y CLARAS)
+        df_sum = df_pagados.groupby("Categoría")["Monto"].sum().reset_index()
         for _, r in df_sum.iterrows():
             st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"], "#eee")}">{r["Categoría"]} <span>$ {r["Monto"]:,.0f}</span></div>', unsafe_allow_html=True)
-    else: st.info("ℹ️ Agregue gastos.")
+    else: st.info("ℹ️ No hay pagos registrados este mes.")
 
 with c_graf_ahorro:
     st.markdown("**Eficiencia de Ahorro**")
@@ -258,8 +239,9 @@ with c_graf_ahorro:
     st.plotly_chart(fig_gauge, use_container_width=True)
 
 with c_graf_status:
-    st.markdown("**Estado del Dinero**")
-    labels_status = ['Pagado', 'Pendiente', 'Ahorro (Saldo)']
+    st.markdown("**Estado General del Presupuesto**")
+    # Aquí sí se ven los pagos pendientes (Rojo)
+    labels_status = ['Ya Pagado', 'Pendiente', 'Ahorro (Saldo)']
     values_status = [vp, vpy, saldo_fin]
     colors_status = ['#2ecc71', '#e74c3c', '#d4af37']
     
