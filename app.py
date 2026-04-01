@@ -44,7 +44,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. MOTOR DE DATOS ---
+# --- 2. MOTOR DE DATOS Y USUARIOS ---
 def cargar_usuarios():
     if os.path.exists(USER_DB):
         with open(USER_DB, "r") as f:
@@ -78,7 +78,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-# --- 3. REPARACIÓN DE MÓDULO REPORTES ---
+# --- 3. MÓDULO DE REPORTES MEJORADO ---
 def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -107,17 +107,17 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         c.roundRect(50, y-80, 510, 85, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(70, y-40, f"Ingresos: $ {it_m:,.0f} | Pagados: $ {vp_m:,.0f} | Pendientes: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL: $ {bf_m:,.0f}")
+        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL (AHORRO): $ {bf_m:,.0f}")
         y -= 100
         
         if not g_m.empty:
             c.setFont("Helvetica-Bold", 8); c.setFillColor(HexColor("#1a1d21"))
-            c.drawString(60, y, "Categoría"); c.drawString(160, y, "Descripción"); c.drawRightString(480, y, "Monto"); c.drawRightString(540, y, "Estado")
+            c.drawString(60, y, "Categoría"); c.drawString(160, y, "Descripción"); c.drawRightString(480, y, "Monto"); c.drawRightString(540, y, "Pagado")
             y -= 12; c.setFont("Helvetica", 8); c.setFillColor(colors.black)
             for _, r in g_m.iterrows():
                 if y < 50: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
                 c.drawString(60, y, str(r['Categoría'])); c.drawString(160, y, str(r['Descripción'])[:40])
-                c.drawRightString(480, y, f"{r['Monto']:,.0f}"); c.drawRightString(540, y, "OK" if r['Pagado'] else "...")
+                c.drawRightString(480, y, f"{r['Monto']:,.0f}"); c.drawRightString(540, y, "SÍ" if r['Pagado'] else "NO")
                 y -= 12
             y -= 20
     c.showPage(); c.save(); buf.seek(0)
@@ -125,17 +125,31 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
 
 # --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
+
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.markdown("<h1 style='text-align: center; color: #d4af37;'>My Finance</h1>", unsafe_allow_html=True)
-        u_in = st.text_input("Usuario").strip()
-        p_in = st.text_input("Contraseña", type="password").strip()
-        if st.button("Entrar"):
-            usuarios = cargar_usuarios()
-            if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
-                st.session_state.autenticado, st.session_state.usuario_id = True, u_in
-                st.rerun()
+        st.markdown("<p style='text-align: center; margin-top: -20px;'>by Stulio Designs</p>", unsafe_allow_html=True)
+        tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
+        usuarios = cargar_usuarios()
+        with tab_log:
+            u_in = st.text_input("Usuario").strip()
+            p_in = st.text_input("Contraseña", type="password").strip()
+            if st.button("Iniciar Sesión", use_container_width=True):
+                if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
+                    st.session_state.autenticado, st.session_state.usuario_id = True, u_in
+                    st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
+                    st.rerun()
+                else: st.error("❌ Datos incorrectos")
+        with tab_reg:
+            rn_full = st.text_input("Nombre Completo")
+            rn_user = st.text_input("Nuevo Usuario")
+            rn_pass = st.text_input("Nueva Contraseña", type="password")
+            if st.button("Crear Cuenta"):
+                if rn_user and rn_pass:
+                    usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
+                    guardar_usuarios(usuarios); st.success("✅ Cuenta creada.")
     st.stop()
 
 # --- 5. DASHBOARD ---
@@ -146,8 +160,9 @@ periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
 
 with st.sidebar:
     if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, width=150)
+    st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
-    mes_s = st.selectbox("Mes", periodos_list, index=datetime.now().month-1)
+    mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
     
     idx = periodos_list.index(mes_s)
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
@@ -167,31 +182,40 @@ with st.sidebar:
     n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
+    # --- NUEVOS MÓDULOS DE REPORTES ---
     st.divider()
-    st.subheader("📊 Descargas")
-    if st.button(f"📄 PDF {mes_s[:3]}"):
-        pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
-        st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
-    
-    df_excel_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        df_excel_mes.to_excel(writer, index=False, sheet_name='Detalle')
-    st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
+    st.subheader("📑 Extractos del Mes")
+    col_ex1, col_ex2 = st.columns(2)
+    with col_ex1:
+        if st.button(f"📄 PDF {mes_s[:3]}"):
+            pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
+            st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
+    with col_ex2:
+        df_excel_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_excel_mes.to_excel(writer, index=False, sheet_name='Detalle')
+        st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
 
-    if st.button("📥 Semestre 1"):
-        pdf_s = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
-        st.download_button("Balance_S1.pdf", pdf_s, "S1.pdf")
+    st.divider()
+    st.subheader("📈 Balances Semestrales")
+    if st.button("📥 Semestre 1 (Ene-Jun)"):
+        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance 1er Semestre", anio_s)
+        st.download_button("S1.pdf", pdf_s1, "Balance_S1.pdf")
+    if st.button("📥 Semestre 2 (Jul-Dic)"):
+        pdf_s2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "Balance 2do Semestre", anio_s)
+        st.download_button("S2.pdf", pdf_s2, "Balance_S2.pdf")
 
+    st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. HEADER ---
+# --- 6. CUERPO PRINCIPAL ---
 c_logo_h, c_title = st.columns([1, 4])
 with c_logo_h: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
 
-# Lógica de Datos y Recurrencia
+# Lógica de Datos
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
@@ -202,7 +226,7 @@ df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
 })
 
-# MÉTRICAS (TARJETAS RECUPERADAS)
+# MÉTRICAS (LAS 5 TARJETAS RECUPERADAS)
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -212,13 +236,12 @@ m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 🚀 INFOGRAFIAS REPOTENCIADAS ---
+# --- 🚀 INFOGRAFIAS ---
 st.markdown("### 📊 Análisis de Gastos")
 c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
 with c_graf_dona:
     st.markdown("**Desglose Presupuestado (Monto + Pendiente)**")
-    # Mostramos el peso de cada categoría sumando monto real y valor de referencia pendiente
     df_ed['Total_Cat'] = df_ed.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not df_ed.empty and df_ed["Total_Cat"].sum() > 0:
         fig_pie = px.pie(df_ed, values='Total_Cat', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
