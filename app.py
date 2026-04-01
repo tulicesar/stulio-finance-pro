@@ -68,7 +68,6 @@ def cargar_bd():
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
         if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
         if "Usuario" not in df_i.columns: df_i["Usuario"] = "tulicesar"
-        if "Recurrente" not in df_g.columns: df_g["Recurrente"] = False
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
@@ -91,7 +90,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
         vpy += max(0.0, r - m) if pag.iloc[i] else max(r, m)
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 4. MOTOR DE PDF ---
+# --- 4. MOTOR DE PDF PROFESIONAL (CORREGIDO PARA MOSTRAR TODO EL SEMESTRE) ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -108,19 +107,35 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     c.setFont("Helvetica-Bold", 14); c.drawRightString(560, y, f"Balance Semestral {sem_nom} - {anio}")
     y -= 45
     c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(1.5); c.line(50, y, 560, y); y -= 40
+    
     for m in meses:
-        if y < 160: c.showPage(); c.setFillColor(colors.white); c.rect(0,0,612,792,fill=1); y=740
+        if y < 160: 
+            c.showPage()
+            c.setFillColor(colors.white); c.rect(0,0,612,792,fill=1)
+            y=740
+        
+        # Filtramos datos
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio)]
-        if i_m.empty: continue
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio)]
-        it_m, vp_m, vpy_m, fb_m, bf_m = calcular_metricas(g_m, i_m["Nomina"].sum(), i_m["Otros"].sum(), i_m["SaldoAnterior"].iloc[0])
+        
+        # Si no hay ingresos, asumimos valores en 0 pero NO saltamos el mes
+        s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
+        nom_m = i_m["Nomina"].sum() if not i_m.empty else 0.0
+        otr_m = i_m["Otros"].sum() if not i_m.empty else 0.0
+        
+        it_m, vp_m, vpy_m, fb_m, bf_m = calcular_metricas(g_m, nom_m, otr_m, s_ant_m)
+        
         c.setStrokeColor(HexColor("#dddddd")); c.setFillColor(HexColor("#f2f2f2"))
         c.roundRect(50, y-85, 510, 95, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"PERIODO: {m}")
         c.setFont("Helvetica", 10); c.drawString(70, y-42, f"Ingresos: $ {it_m:,.0f} | Fondos: $ {fb_m:,.0f}")
         c.drawString(310, y-42, f"Pagado: $ {vp_m:,.0f} | Proyectado: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-75, f"BALANCE FINAL: $ {bf_m:,.0f}")
+        
+        color_balance = HexColor("#d4af37") if bf_m >= 0 else colors.red
+        c.setFillColor(color_balance); c.setFont("Helvetica-Bold", 11)
+        c.drawString(70, y-75, f"BALANCE FINAL: $ {bf_m:,.0f}")
         y -= 115
+        
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
@@ -190,11 +205,13 @@ with st.sidebar:
     col_pdf1, col_pdf2 = st.columns(2)
     with col_pdf1:
         if st.button("📥 S1"):
+            # De Enero-Febrero a Junio-Julio
             pdf1 = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[1:7], "S1", anio_s)
             st.download_button(f"S1_{anio_s}.pdf", pdf1, f"S1_{anio_s}.pdf")
     with col_pdf2:
         if st.button("📥 S2"):
-            pdf2 = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[7:13] if len(periodos_list)>12 else periodos_list[7:], "S2", anio_s)
+            # De Julio-Agosto a Noviembre-Diciembre
+            pdf2 = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[7:12], "S2", anio_s)
             st.download_button(f"S2_{anio_s}.pdf", pdf2, f"S2_{anio_s}.pdf")
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
@@ -205,21 +222,15 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA GLOBAL (CORREGIDA) ---
+# LÓGICA DE RECURRENCIA GLOBAL
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
-
-# 1. Obtener la lista maestra de TODO lo que el usuario ha marcado como Recurrente alguna vez
 df_rec_master = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
-
-# 2. Verificar qué falta en el mes actual
 nombres_actuales = df_mes["Descripción"].tolist() if not df_mes.empty else []
 nuevos_items = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
-
 if not nuevos_items.empty:
     nuevos_items["Pagado"] = False
     nuevos_items["Monto"] = 0
-    # No usamos rerun aquí para permitir edición inmediata
     df_mes = pd.concat([df_mes, nuevos_items], ignore_index=True)
 
 df_v = df_mes.reset_index(drop=True)
