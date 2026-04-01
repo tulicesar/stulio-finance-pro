@@ -60,18 +60,28 @@ def guardar_usuarios(db):
 
 # --- 3. LÓGICA DE NEGOCIO ---
 def cargar_bd():
-    columnas_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Usuario"]
+    # Columnas con 'Recurrente' y 'Usuario'
+    columnas_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
     columnas_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
+    
     if not os.path.exists(BASE_FILE):
         return pd.DataFrame(columns=columnas_g), pd.DataFrame(columns=columnas_i)
+    
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
+        
+        # Parches de seguridad para columnas faltantes
         if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
         if "Usuario" not in df_i.columns: df_i["Usuario"] = "tulicesar"
+        if "Recurrente" not in df_g.columns: df_g["Recurrente"] = False
+        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0)
+        
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
+        df_g["Recurrente"] = df_g["Recurrente"].fillna(False).astype(bool)
+        
         return df_g, df_i
     except:
         return pd.DataFrame(columns=columnas_g), pd.DataFrame(columns=columnas_i)
@@ -90,7 +100,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
         vpy += max(0.0, r - m) if pag.iloc[i] else max(r, m)
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 4. MOTOR DE PDF SEMESTRAL (RESTAURADO) ---
+# --- 4. MOTOR DE PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -185,7 +195,6 @@ with st.sidebar:
     n_in = st.number_input("Ingreso Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros Ingresos", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
     
-    # BOTONES DE REPORTE SEMESTRAL
     st.divider()
     st.subheader("📄 Reportes Semestrales")
     col_pdf1, col_pdf2 = st.columns(2)
@@ -206,18 +215,20 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# TABLA
+# TABLA REGISTRO
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario", "Ítem"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
+# --- CAMBIOS EN CONFIG_C: "MONTO" Y "RECURRENTE" CON CHECK ---
 config_c = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
-    "Monto": st.column_config.NumberColumn("Valor Pagado", format="$ %,d"),
+    "Monto": st.column_config.NumberColumn("Monto", format="$ %,d"),
     "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
-    "Pagado": st.column_config.CheckboxColumn("¿Pagado?")
+    "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
+    "Recurrente": st.column_config.CheckboxColumn("🔁")
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
@@ -247,12 +258,14 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     )
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
+    
     df_i_nuevo = pd.DataFrame({
         "Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], 
         "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]
     })
     mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
     df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
+    
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False)
         df_if.to_excel(w, sheet_name="Ingresos", index=False)
