@@ -20,8 +20,6 @@ if 'usuario_id' not in st.session_state:
     st.session_state.usuario_id = ""
 if 'u_nombre_completo' not in st.session_state:
     st.session_state.u_nombre_completo = "Usuario Pro"
-if 'saldo_manual' not in st.session_state:
-    st.session_state.saldo_manual = 0.0
 
 st.markdown("""
     <style>
@@ -90,7 +88,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
         vpy += max(0.0, r - m) if pag.iloc[i] else max(r, m)
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 4. MOTOR DE PDF PROFESIONAL ---
+# --- 4. MOTOR DE PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -111,12 +109,10 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
         if y < 160: c.showPage(); c.setFillColor(colors.white); c.rect(0,0,612,792,fill=1); y=740
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio)]
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio)]
-        
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
         nom_m = i_m["Nomina"].sum() if not i_m.empty else 0.0
         otr_m = i_m["Otros"].sum() if not i_m.empty else 0.0
         it_m, vp_m, vpy_m, fb_m, bf_m = calcular_metricas(g_m, nom_m, otr_m, s_ant_m)
-
         c.setStrokeColor(HexColor("#dddddd")); c.setFillColor(HexColor("#f2f2f2"))
         c.roundRect(50, y-85, 510, 95, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
@@ -161,7 +157,6 @@ df_g_raw, df_i_raw = cargar_bd()
 df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
 
-# --- CAMBIO AQUÍ: MESES COMO DIOS MANDA ---
 periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", 
                  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
@@ -169,51 +164,61 @@ with st.sidebar:
     if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, width=150)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026, 2027], index=1)
-    mes_s = st.selectbox("Seleccione Mes", periodos_list)
+    mes_s = st.selectbox("Mes Actual", periodos_list)
     idx = periodos_list.index(mes_s)
     
-    # Lógica de arrastre de mes calendario anterior
+    # --- 🚀 LÓGICA DE ARRASTRE AUTOMÁTICO ---
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
     anio_ant = anio_s if idx > 0 else anio_s - 1
+    
+    # Calculamos saldo del mes pasado
+    i_prev = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
+    g_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
+    
+    saldo_auto = 0.0
+    hay_datos_previos = not i_prev.empty
+    if hay_datos_previos:
+        _, _, _, _, bf_pasado = calcular_metricas(g_prev, i_prev["Nomina"].sum(), i_prev["Otros"].sum(), i_prev["SaldoAnterior"].iloc[0])
+        saldo_auto = float(bf_pasado)
 
     st.divider()
-    if st.button("🔄 Arrastrar Saldo de " + mes_ant):
-        i_ant = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
-        g_ant = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
-        if not i_ant.empty:
-            _, _, _, _, bf_pasado = calcular_metricas(g_ant, i_ant["Nomina"].sum(), i_ant["Otros"].sum(), i_ant["SaldoAnterior"].iloc[0])
-            st.session_state.saldo_manual = float(bf_pasado)
-            st.success(f"Saldo de {mes_ant} arrastrado.")
-        else: st.warning(f"No hay datos de {mes_ant}.")
+    st.subheader("💰 Balance de Ingresos")
+    
+    # Toggle activo por defecto. Se desactiva visualmente si no hay datos.
+    arrastrar = st.toggle(f"Arrastrar saldo de {mes_ant}", value=hay_datos_previos, help="Toma el balance final del mes anterior automáticamente.")
+    
+    if arrastrar and not hay_datos_previos:
+        st.caption(f"⚠️ No hay datos guardados de {mes_ant}.")
 
+    # Si arrastrar está activo, usamos saldo_auto. Si no, buscamos lo guardado o dejamos en 0.
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
-    val_s = float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else st.session_state.saldo_manual
-
-    s_in = st.number_input("Saldo Anterior", value=val_s)
-    n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
-    o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
+    val_s_actual = float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0
+    
+    s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastrar else val_s_actual, disabled=arrastrar)
+    n_in = st.number_input("Ingreso Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
+    o_in = st.number_input("Otros Ingresos", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
     
     st.divider()
-    st.subheader("📄 Reportes Semestrales")
+    st.subheader("📄 Reportes")
     col_pdf1, col_pdf2 = st.columns(2)
     with col_pdf1:
         if st.button("📥 Ene-Jun"):
             pdf1 = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "1er Semestre", anio_s)
-            st.download_button(f"Reporte_S1_{anio_s}.pdf", pdf1, f"Reporte_S1_{anio_s}.pdf")
+            st.download_button(f"S1_{anio_s}.pdf", pdf1, f"S1_{anio_s}.pdf")
     with col_pdf2:
         if st.button("📥 Jul-Dic"):
             pdf2 = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "2do Semestre", anio_s)
-            st.download_button(f"Reporte_S2_{anio_s}.pdf", pdf2, f"Reporte_S2_{anio_s}.pdf")
+            st.download_button(f"S2_{anio_s}.pdf", pdf2, f"S2_{anio_s}.pdf")
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# HEADER
+# CUERPO
 c_l, c_t = st.columns([1, 4])
 with c_l: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# LÓGICA DE RECURRENCIA (Basada en descripción única)
+# LÓGICA DE RECURRENCIA
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_rec_master = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
@@ -236,7 +241,7 @@ config_c = {
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# MÉTRICAS Y GRÁFICOS
+# MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
@@ -244,6 +249,7 @@ metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("�
 for i, (lab, val, col) in enumerate(metrics):
     cards[i].markdown(f'<div class="card"><div class="card-label">{lab}</div><div class="card-value" style="color:{col}">{f_c(val)}</div></div>', unsafe_allow_html=True)
 
+# GRÁFICOS
 cg1, cg2 = st.columns([2, 1])
 with cg1:
     fig = go.Figure(go.Scatter(y=[it, fb, bf], mode='lines+markers', line=dict(color='#d4af37', width=4), fill='tozeroy'))
