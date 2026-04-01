@@ -19,13 +19,8 @@ if 'autenticado' not in st.session_state:
 if 'usuario_id' not in st.session_state: 
     st.session_state.usuario_id = ""
 
-# CSS: Eliminamos la barra superior (header) y ajustamos el diseño
 st.markdown("""
     <style>
-    /* Ocultar la barra superior de Streamlit */
-    header {visibility: hidden;}
-    [data-testid="stHeader"] {display: none;}
-    
     .stApp { background: linear-gradient(135deg, #1a1d21 0%, #111315 100%); color: #dee2e6; }
     .card {
         background-color: #ffffff;
@@ -45,25 +40,19 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. MOTOR DE USUARIOS ---
+# --- 2. MOTOR DE DATOS ---
 def cargar_usuarios():
-    if os.path.exists(USER_DB):
-        with open(USER_DB, "r") as f:
-            try:
-                return json.load(f)
-            except:
-                return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
-    else:
-        # Si no existe, creamos el inicial pero lo guardamos de inmediato
+    if not os.path.exists(USER_DB):
         db_inicial = {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
-        guardar_usuarios(db_inicial)
+        with open(USER_DB, "w") as f: json.dump(db_inicial, f)
         return db_inicial
+    with open(USER_DB, "r") as f:
+        try: return json.load(f)
+        except: return {}
 
 def guardar_usuarios(db):
-    with open(USER_DB, "w") as f:
-        json.dump(db, f, indent=4)
+    with open(USER_DB, "w") as f: json.dump(db, f)
 
-# --- 3. LÓGICA DE NEGOCIO ---
 def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
@@ -91,7 +80,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 4. MOTOR PDF ---
+# --- 3. MOTOR PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -124,7 +113,7 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 5. ACCESO CON REGISTRO ---
+# --- 4. ACCESO ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -147,16 +136,13 @@ if not st.session_state.autenticado:
             rn_user = st.text_input("Nuevo Usuario")
             rn_pass = st.text_input("Nueva Contraseña", type="password")
             if st.button("Crear Cuenta", use_container_width=True):
-                if rn_user in usuarios:
-                    st.warning("Ese usuario ya existe.")
-                elif rn_user and rn_pass:
+                if rn_user and rn_pass:
                     usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
                     guardar_usuarios(usuarios)
-                    st.success("✅ Cuenta creada. Ya puedes entrar.")
-                else: st.error("Completa todos los campos.")
+                    st.success("✅ Cuenta creada.")
     st.stop()
 
-# --- 6. DASHBOARD ---
+# --- 5. DASHBOARD ---
 df_g_raw, df_i_raw = cargar_bd()
 df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
@@ -197,23 +183,36 @@ with st.sidebar:
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- HEADER (LOGOS Y TÍTULO) ---
+# --- HEADER ---
 c_l, c_t = st.columns([1, 4])
 with c_l: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA (REGLA DE LA CADENA) ---
+# --- 🚀 MOTOR DE RECURRENCIA DINÁMICA (REGLA DE LA CADENA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-if d_act_i.empty and df_mes.empty:
-    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
-    if not df_prev_rec.empty:
-        df_new = df_prev_rec.copy()
-        df_new["Pagado"] = False
-        df_new["Monto"] = 0
-        df_mes = df_new
+# REGLA: Si el mes no tiene gastos registrados, buscamos en la historia el ESTADO MÁS RECIENTE
+if df_mes.empty:
+    # 1. Buscamos todos los gastos del usuario ordenados por fecha de más reciente a más viejo
+    # Creamos un mapeo de meses a números para ordenar correctamente
+    mes_to_num = {m: i+1 for i, m in enumerate(periodos_list)}
+    df_history = df_g_user.copy()
+    if not df_history.empty:
+        df_history['mes_num'] = df_history['Periodo'].map(mes_to_num)
+        df_history = df_history.sort_values(by=['Año', 'mes_num'], ascending=False)
+        
+        # 2. Obtenemos el último registro de cada descripción (su estado actual)
+        df_latest_state = df_history.drop_duplicates(subset=['Descripción'])
+        
+        # 3. Filtramos solo los que en su última aparición tengan el check de Recurrente ACTIVADO
+        df_to_inject = df_latest_state[df_latest_state["Movimiento Recurrente"] == True].copy()
+        
+        if not df_to_inject.empty:
+            df_to_inject["Pagado"] = False
+            df_to_inject["Monto"] = 0
+            df_mes = df_to_inject.drop(columns=['mes_num'])
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario"]:
@@ -226,7 +225,7 @@ config_c = {
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
     "Movimiento Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
-df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_{mes_s}_{anio_s}")
+df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_v6_{mes_s}")
 
 # MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
