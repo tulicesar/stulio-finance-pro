@@ -6,7 +6,7 @@ import json
 from io import BytesIO
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN Y ESTILO (RESTAURADO) ---
+# --- 1. CONFIGURACIÓN Y ESTILO (RESTAURADO AL 100%) ---
 st.set_page_config(page_title="STULIO FINANCE PRO", layout="wide", page_icon="🔮")
 
 LOGO_APP_V = "LOGO APP.png"      
@@ -55,7 +55,7 @@ def cargar_usuarios():
 def guardar_usuarios(db):
     with open(USER_DB, "w") as f: json.dump(db, f)
 
-# --- 3. LÓGICA DE NEGOCIO (SIN ERRORES DE TYPE) ---
+# --- 3. LÓGICA DE NEGOCIO ---
 def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
@@ -65,7 +65,7 @@ def cargar_bd():
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
         for col in ["Monto", "Valor Referencia"]:
-            df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0)
+            df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
         df_g["Recurrente"] = df_g["Recurrente"].fillna(False).astype(bool)
         if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
@@ -74,12 +74,13 @@ def cargar_bd():
     except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i)
 
 def calcular_metricas(df_g, nom, otr, s_ant):
-    # Limpieza profunda para evitar TypeError
-    temp = df_g.copy()
-    temp["Monto"] = pd.to_numeric(temp["Monto"], errors='coerce').fillna(0)
-    temp["Valor Referencia"] = pd.to_numeric(temp["Valor Referencia"], errors='coerce').fillna(0)
-    
     it = float(s_ant) + float(nom) + float(otr)
+    if df_g.empty: return it, 0.0, 0.0, it, it
+    
+    temp = df_g.copy()
+    temp["Monto"] = pd.to_numeric(temp["Monto"], errors='coerce').fillna(0.0)
+    temp["Valor Referencia"] = pd.to_numeric(temp["Valor Referencia"], errors='coerce').fillna(0.0)
+    
     vp = temp[temp["Pagado"] == True]["Monto"].sum()
     fb = it - vp
     
@@ -88,10 +89,10 @@ def calcular_metricas(df_g, nom, otr, s_ant):
         mon = float(r["Monto"])
         return max(0.0, ref - mon) if r["Pagado"] else max(ref, mon)
     
-    vpy = temp.apply(deuda_pendiente, axis=1).sum() if not temp.empty else 0
+    vpy = temp.apply(deuda_pendiente, axis=1).sum()
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 4. MOTOR PDF (RESTAURADO) ---
+# --- 4. MOTOR PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -146,15 +147,16 @@ if not st.session_state.autenticado:
                 else: st.error("❌ Datos incorrectos")
         with tab_reg:
             rn_full = st.text_input("Nombre Completo")
-            rn_user = st.text_input("Usuario Login")
-            rn_pass = st.text_input("Clave", type="password")
-            if st.button("Crear"):
-                usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
-                guardar_usuarios(usuarios)
-                st.success("Hecho!")
+            rn_user = st.text_input("Usuario (Login)")
+            rn_pass = st.text_input("Contraseña", type="password")
+            if st.button("Crear Cuenta"):
+                if rn_full and rn_user and rn_pass:
+                    usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
+                    guardar_usuarios(usuarios)
+                    st.success("✅ Cuenta creada.")
     st.stop()
 
-# --- 6. DASHBOARD (LOGOS Y FILTRO) ---
+# --- 6. DASHBOARD ---
 df_g_raw, df_i_raw = cargar_bd()
 df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
@@ -171,6 +173,7 @@ with st.sidebar:
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
     anio_ant = anio_s if idx > 0 else anio_s - 1
     
+    # Arrastre automático
     i_prev = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
     g_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
     saldo_auto = 0.0
@@ -178,60 +181,65 @@ with st.sidebar:
         _, _, _, _, bf_pasado = calcular_metricas(g_prev, i_prev["Nomina"].sum(), i_prev["Otros"].sum(), i_prev["SaldoAnterior"].iloc[0])
         saldo_auto = float(bf_pasado)
 
+    st.divider()
     arrastrar = st.toggle(f"Arrastrar saldo de {mes_ant}", value=not i_prev.empty)
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
+    
     s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastrar else (float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0), disabled=arrastrar)
-    n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
-    o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
-
+    n_in = st.number_input("Ingreso Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
+    o_in = st.number_input("Otros Ingresos", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
+    
     st.divider()
     if st.button("📥 Ene-Jun"):
-        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "1er Semestre", anio_s)
+        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "S1", anio_s)
         st.download_button(f"S1_{anio_s}.pdf", pdf, f"S1_{anio_s}.pdf")
     if st.button("📥 Jul-Dic"):
-        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "2do Semestre", anio_s)
+        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "S2", anio_s)
         st.download_button(f"S2_{anio_s}.pdf", pdf, f"S2_{anio_s}.pdf")
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- HEADER ---
+# HEADER
 c_l, c_t = st.columns([1, 4])
 with c_l: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 RECURRENCIA ---
+# --- 🚀 LÓGICA DE RECURRENCIA MEJORADA (SOLO SI EL MES ES NUEVO) ---
+st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
-df_rec_master = df_g_user[df_g_user["Recurrente"] == True].sort_values(by=["Año"], ascending=False).drop_duplicates(subset=["Descripción"])
-nombres_actuales = df_mes["Descripción"].tolist() if not df_mes.empty else []
-faltantes = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
-if not faltantes.empty:
-    faltantes["Pagado"] = False; faltantes["Monto"] = 0
-    df_mes = pd.concat([df_mes, faltantes], ignore_index=True)
+
+# Solo inyectamos recurrentes SI EL MES NUNCA SE HA GUARDADO (es decir, no hay ingresos guardados para ese mes)
+if d_act_i.empty and df_mes.empty:
+    df_rec_master = df_g_user[df_g_user["Recurrente"] == True].sort_values(by=["Año"], ascending=False).drop_duplicates(subset=["Descripción"])
+    if not df_rec_master.empty:
+        df_rec_master["Pagado"] = False
+        df_rec_master["Monto"] = 0
+        df_mes = df_rec_master.copy()
+        st.info("✨ Mes nuevo: Se cargaron tus movimientos recurrentes.")
 
 df_v = df_mes.reset_index(drop=True)
-for c in ["Año", "Periodo", "Usuario"]:
+for c in ["Año", "Periodo", "Usuario", "Ítem"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
 config_c = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
-    "Monto": st.column_config.NumberColumn("Monto", format="$ %,d"),
-    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
+    "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
     "Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
-df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_editor_v3")
+df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v3")
 
-# --- MÉTRICAS (INFOGRAFÍA RESTAURADA) ---
+# MÉTRICAS E INFOGRAFÍA (RESTAURADO)
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
-
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
-metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("✅ Pagado", vp, "#28a745"), ("⏳ Pendiente", vpy, "#e74c3c"), ("⚖️ Final", bf, "#00D2FF")]
+metrics = [("💵 INGRESOS", it, "#1a1d21"), ("🏦 FONDOS", fb, "#2575fc"), ("✅ PAGADO", vp, "#28a745"), ("⏳ PENDIENTE", vpy, "#e74c3c"), ("⚖️ FINAL", bf, "#00D2FF")]
 for i, (lab, val, col) in enumerate(metrics):
     cards[i].markdown(f'<div class="card"><div class="card-label">{lab}</div><div class="card-value" style="color:{col}">{f_c(val)}</div></div>', unsafe_allow_html=True)
 
-# --- GRÁFICOS (PLOTLY RESTAURADO) ---
+# GRÁFICOS (RESTAURADO)
 cg1, cg2 = st.columns([2, 1])
 with cg1:
     fig = go.Figure(go.Scatter(y=[it, fb, bf], mode='lines+markers', line=dict(color='#d4af37', width=4), fill='tozeroy'))
