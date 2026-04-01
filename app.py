@@ -42,6 +42,7 @@ st.markdown("""
 
 # --- 2. MOTOR DE DATOS ---
 def cargar_bd():
+    # Eliminada la columna 'Ítem' de la definición
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
     if not os.path.exists(BASE_FILE):
@@ -49,12 +50,11 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
+        if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"]) # Limpieza por si existía
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
         df_g["Recurrente"] = df_g["Recurrente"].fillna(False).astype(bool)
-        if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
-        if "Usuario" not in df_i.columns: df_i["Usuario"] = "tulicesar"
         return df_g, df_i
     except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i)
 
@@ -66,13 +66,10 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     temp["Valor Referencia"] = pd.to_numeric(temp["Valor Referencia"], errors='coerce').fillna(0.0)
     vp = temp[temp["Pagado"] == True]["Monto"].sum()
     fb = it - vp
-    def deuda(r):
-        ref, mon = float(r["Valor Referencia"]), float(r["Monto"])
-        return max(0.0, ref - mon) if r["Pagado"] else max(ref, mon)
-    vpy = temp.apply(deuda, axis=1).sum()
+    vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 3. MOTOR PDF (RESTAURADO) ---
+# --- 3. MOTOR PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -84,14 +81,13 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     y = 750
     c.setFillColor(HexColor("#1a1d21"))
     c.setFont("Helvetica-Bold", 18); c.drawString(50, y, "STULIO FINANCE")
-    c.setFont("Helvetica", 10); c.drawString(50, y-15, f"Propietario: {st.session_state.usuario_id}")
     c.setFont("Helvetica-Bold", 14); c.drawRightString(560, y, f"Balance {sem_nom} - {anio}")
     y -= 45
     c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(1.5); c.line(50, y, 560, y); y -= 40
     for m in meses:
         if y < 160: c.showPage(); c.setFillColor(colors.white); c.rect(0,0,612,792,fill=1); y=740
-        i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio)]
-        g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio)]
+        i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
+        g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
         nom_m = i_m["Nomina"].sum() if not i_m.empty else 0.0
         otr_m = i_m["Otros"].sum() if not i_m.empty else 0.0
@@ -106,7 +102,7 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 4. LOGIN ---
+# --- 4. ACCESO ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -153,11 +149,10 @@ with st.sidebar:
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
     st.divider()
-    st.subheader("📄 Generar Balances")
-    if st.button("📥 S1 (Ene-Jun)"):
+    if st.button("📥 Ene-Jun"):
         pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "1er Semestre", anio_s)
         st.download_button(f"S1_{anio_s}.pdf", pdf, f"S1_{anio_s}.pdf")
-    if st.button("📥 S2 (Jul-Dic)"):
+    if st.button("📥 Jul-Dic"):
         pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "2do Semestre", anio_s)
         st.download_button(f"S2_{anio_s}.pdf", pdf, f"S2_{anio_s}.pdf")
     
@@ -169,21 +164,21 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 REGISTRO ---
+# --- 🚀 LÓGICA DE RECURRENCIA DINÁMICA ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# BOTÓN PARA CARGAR RECURRENTES (AQUÍ TÚ MANDAS, NADA ES AUTOMÁTICO)
-with st.expander("🛠️ Herramientas de Carga"):
-    if st.button("🔄 Cargar Mis Movimientos Recurrentes"):
-        df_rec = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
-        if not df_rec.empty:
-            df_rec["Pagado"] = False; df_rec["Monto"] = 0
-            df_mes = pd.concat([df_mes, df_rec[~df_rec["Descripción"].isin(df_mes["Descripción"].tolist())]], ignore_index=True)
-            st.success("Cargados. No olvides Guardar Cambios.")
+# Si el mes no tiene registros, busca todos los marcados como Recurrente en CUALQUIER mes anterior
+if df_mes.empty:
+    df_recurrentes_master = df_g_user[df_g_user["Recurrente"] == True].sort_values(by="Año", ascending=False).drop_duplicates(subset=["Descripción"])
+    if not df_recurrentes_master.empty:
+        df_recurrentes_master["Pagado"] = False
+        df_recurrentes_master["Monto"] = 0
+        df_mes = df_recurrentes_master.copy()
 
+# Eliminamos columnas técnicas para la visualización (ÍTEM ELIMINADO AQUÍ)
 df_v = df_mes.reset_index(drop=True)
-for c in ["Año", "Periodo", "Usuario"]:
+for c in ["Año", "Periodo", "Usuario", "Ítem"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
 config_c = {
@@ -195,7 +190,7 @@ config_c = {
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic")
 
-# MÉTRICAS (TARJETAS BLANCAS)
+# MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
