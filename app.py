@@ -60,28 +60,20 @@ def guardar_usuarios(db):
 
 # --- 3. LÓGICA DE NEGOCIO ---
 def cargar_bd():
-    # Columnas con 'Recurrente' y 'Usuario'
     columnas_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
     columnas_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
-    
     if not os.path.exists(BASE_FILE):
         return pd.DataFrame(columns=columnas_g), pd.DataFrame(columns=columnas_i)
-    
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        
-        # Parches de seguridad para columnas faltantes
         if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
         if "Usuario" not in df_i.columns: df_i["Usuario"] = "tulicesar"
         if "Recurrente" not in df_g.columns: df_g["Recurrente"] = False
-        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0)
-        
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
         df_g["Recurrente"] = df_g["Recurrente"].fillna(False).astype(bool)
-        
         return df_g, df_i
     except:
         return pd.DataFrame(columns=columnas_g), pd.DataFrame(columns=columnas_i)
@@ -222,13 +214,13 @@ df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario", "Ítem"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
-# --- CAMBIOS EN CONFIG_C: "MONTO" Y "RECURRENTE" CON CHECK ---
+# --- ACTUALIZACIÓN DE NOMBRES EN EL EDITOR ---
 config_c = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %,d"),
     "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
-    "Recurrente": st.column_config.CheckboxColumn("🔁")
+    "Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente") # NOMBRE CAMBIADO AQUÍ
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
