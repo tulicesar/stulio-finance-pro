@@ -205,19 +205,22 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- LÓGICA DE MOVIMIENTO RECURRENTE (NUEVA) ---
+# --- 🚀 LÓGICA DE RECURRENCIA GLOBAL (CORREGIDA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# Si el mes actual está vacío, buscamos recurrentes del mes anterior
-if df_mes.empty and idx >= 0:
-    df_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
-    recurrentes = df_prev[df_prev["Recurrente"] == True].copy()
-    if not recurrentes.empty:
-        recurrentes["Pagado"] = False  # Empezamos el mes sin pagar
-        recurrentes["Monto"] = 0       # El monto pagado inicia en 0
-        df_mes = recurrentes
-        st.info(f"✨ Se han cargado automáticamente los movimientos recurrentes de {mes_ant}.")
+# 1. Obtener la lista maestra de TODO lo que el usuario ha marcado como Recurrente alguna vez
+df_rec_master = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
+
+# 2. Verificar qué falta en el mes actual
+nombres_actuales = df_mes["Descripción"].tolist() if not df_mes.empty else []
+nuevos_items = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
+
+if not nuevos_items.empty:
+    nuevos_items["Pagado"] = False
+    nuevos_items["Monto"] = 0
+    # No usamos rerun aquí para permitir edición inmediata
+    df_mes = pd.concat([df_mes, nuevos_items], ignore_index=True)
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario", "Ítem"]:
@@ -232,7 +235,7 @@ config_c = {
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# MÉTRICAS Y GRÁFICOS
+# MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
@@ -240,6 +243,7 @@ metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("�
 for i, (lab, val, col) in enumerate(metrics):
     cards[i].markdown(f'<div class="card"><div class="card-label">{lab}</div><div class="card-value" style="color:{col}">{f_c(val)}</div></div>', unsafe_allow_html=True)
 
+# GRÁFICOS
 cg1, cg2 = st.columns([2, 1])
 with cg1:
     fig = go.Figure(go.Scatter(y=[it, fb, bf], mode='lines+markers', line=dict(color='#d4af37', width=4), fill='tozeroy'))
