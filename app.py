@@ -15,7 +15,7 @@ LOGO_APP_H = "LOGO H APP.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# Paleta de Colores Finerio/Premium
+# Colores Premium
 COLOR_MAP = {
     "Hogar": "#FFB347", "Servicios": "#FFB347", "Salud": "#B39EB5", 
     "Transporte": "#77B5FE", "Obligaciones": "#FF6961", "Alimentación": "#FDFD96", 
@@ -27,17 +27,25 @@ st.markdown("""
     header {visibility: hidden;}
     [data-testid="stHeader"] {display: none;}
     .stApp { background: #0e1117; color: #dee2e6; }
+    
+    /* Tarjetas de Métricas */
     .card {
         background-color: #ffffff; border-radius: 15px; padding: 20px;
         box-shadow: 0 10px 25px rgba(0,0,0,0.4); margin-bottom: 15px;
         color: #1a1d21; text-align: center; border-bottom: 5px solid #d4af37;
     }
-    .card-label { font-size: 0.85rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
-    .card-value { font-size: 1.8rem; font-weight: 800; color: #1a1d21; margin: 5px 0; }
+    .card-label { font-size: 0.9rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
+    .card-value { font-size: 2rem; font-weight: 800; color: #1a1d21; margin: 5px 0; }
+    
+    /* Barras de Subtotales por Categoría */
+    .legend-bar-container { margin-top: 10px; }
     .legend-bar {
-        padding: 10px; border-radius: 8px; margin-bottom: 5px; font-weight: bold; 
-        color: #1a1d21; display: flex; justify-content: space-between; align-items: center;
+        padding: 12px 20px; border-radius: 10px; margin-bottom: 8px; 
+        font-size: 1.1rem; font-weight: bold; color: #1a1d21; 
+        display: flex; justify-content: space-between; align-items: center;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
+    
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
     .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
     </style>
@@ -61,21 +69,23 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
         for col in ["Monto", "Valor Referencia"]: df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
-        df_g["Movimiento Recurrente"] = df_g["Movimiento Recurrente"].fillna(False).astype(bool)
         return df_g, df_i
     except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i)
 
 def calcular_metricas(df_g, nom, otr, s_ant):
-    it = float(s_ant) + float(nom) + float(otr)
-    if df_g.empty: return it, 0.0, 0.0, it, 0.0
-    vp = df_g[df_g["Pagado"] == True]["Monto"].sum()
-    vpy = df_g[df_g["Pagado"] == False]["Valor Referencia"].sum()
-    bf = max(0, it - vp - vpy)
-    ahorro_p = (bf / it * 100) if it > 0 else 0
-    return it, vp, vpy, bf, ahorro_p
+    it = float(s_ant) + float(nom) + float(otr) # Ingresos totales
+    if df_g.empty: return it, 0.0, 0.0, it, it, 0.0
+    
+    vp = df_g[df_g["Pagado"] == True]["Monto"].sum() # Lo que ya se pagó
+    vpy = df_g[df_g["Pagado"] == False]["Valor Referencia"].sum() # Lo que falta por pagar
+    
+    fondos_actuales = it - vp # Lo que hay en cuenta ahora
+    saldo_final = it - vp - vpy # Lo que quedará al final del mes
+    ahorro_p = (saldo_final / it * 100) if it > 0 else 0
+    
+    return it, vp, vpy, fondos_actuales, saldo_final, ahorro_p
 
 # --- 3. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
@@ -83,24 +93,13 @@ if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.markdown("<h1 style='text-align: center; color: #d4af37;'>My Finance</h1>", unsafe_allow_html=True)
-        tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
-        usuarios = cargar_usuarios()
-        with tab_log:
-            u_in = st.text_input("Usuario").strip()
-            p_in = st.text_input("Contraseña", type="password").strip()
-            if st.button("Iniciar Sesión", use_container_width=True):
-                if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
-                    st.session_state.autenticado, st.session_state.usuario_id = True, u_in
-                    st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
-                    st.rerun()
-                else: st.error("❌ Datos incorrectos")
-        with tab_reg:
-            rn_user = st.text_input("Nuevo Usuario")
-            rn_pass = st.text_input("Nueva Contraseña", type="password")
-            if st.button("Crear Cuenta"):
-                if rn_user and rn_pass:
-                    usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_user}
-                    guardar_usuarios(usuarios); st.success("✅ Cuenta creada.")
+        u_in = st.text_input("Usuario")
+        p_in = st.text_input("Contraseña", type="password")
+        if st.button("Iniciar Sesión"):
+            usuarios = cargar_usuarios()
+            if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
+                st.session_state.autenticado, st.session_state.usuario_id = True, u_in
+                st.rerun()
     st.stop()
 
 # --- 4. DASHBOARD ---
@@ -111,59 +110,47 @@ periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio",
 
 with st.sidebar:
     if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, width=150)
-    st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
-    mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
-    
-    idx = periodos_list.index(mes_s)
-    mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
-    anio_ant = anio_s if idx > 0 else anio_s - 1
+    mes_s = st.selectbox("Mes", periodos_list, index=datetime.now().month-1)
     
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
     s_in = st.number_input("Saldo Anterior", value=float(d_act_i["SaldoAnterior"].iloc[0] if not d_act_i.empty else 0.0))
     n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
-
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 5. CUERPO PRINCIPAL ---
+# --- HEADER ---
 c_logo_h, c_title = st.columns([1, 4])
 with c_logo_h: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
 
-# Lógica de Datos
+# Datos de tabla
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
-if df_mes.empty:
-    df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
-    if not df_rec.empty: df_mes = df_rec.copy().assign(Pagado=False, Monto=0)
-
 df_v = df_mes.reset_index(drop=True).drop(columns=["Año", "Periodo", "Usuario"], errors='ignore')
-df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f"ed_{mes_s}", column_config={
-    "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
-})
+df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f"ed_{mes_s}")
 
 # MÉTRICAS
-it, vp, vpy, bf, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
+it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4 = st.columns(4)
-m1.markdown(f'<div class="card"><div class="card-label">Ingresos</div><div class="card-value">$ {it:,.0f}</div></div>', unsafe_allow_html=True)
-m2.markdown(f'<div class="card"><div class="card-label">Pagado</div><div class="card-value" style="color:#2ecc71;">$ {vp:,.0f}</div></div>', unsafe_allow_html=True)
-m3.markdown(f'<div class="card"><div class="card-label">Pendiente</div><div class="card-value" style="color:#e74c3c;">$ {vpy:,.0f}</div></div>', unsafe_allow_html=True)
-m4.markdown(f'<div class="card"><div class="card-label">Saldo (Ahorro)</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
+m1.markdown(f'<div class="card"><div class="card-label">💰 Ingresos</div><div class="card-value">$ {it:,.0f}</div></div>', unsafe_allow_html=True)
+m2.markdown(f'<div class="card"><div class="card-label">💵 Fondos Actuales</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
+m3.markdown(f'<div class="card"><div class="card-label">⏳ Pendiente</div><div class="card-value" style="color:#e74c3c;">$ {vpy:,.0f}</div></div>', unsafe_allow_html=True)
+m4.markdown(f'<div class="card"><div class="card-label">🏆 Saldo Final</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 🚀 INFOGRAFIAS (NUEVAS Y GRANDES) ---
+# --- 🚀 INFOGRAFIAS REPOTENCIADAS ---
 st.markdown("### 📊 Análisis Financiero Pro")
-c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.3, 1, 1.1])
+c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.4, 1, 1.2])
 
 with c_graf_dona:
     st.markdown("**Desglose por Categoría**")
     if not df_ed.empty and df_ed["Monto"].sum() > 0:
-        # Gráfico
         fig_pie = px.pie(df_ed, values='Monto', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
         fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
-        # Leyenda en Barras Grandes
+        
+        # LEYENDA EN BARRAS GRANDES Y LEGIBLES
         df_sum = df_ed.groupby("Categoría")["Monto"].sum().reset_index()
         for _, r in df_sum.iterrows():
             st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"], "#eee")}">{r["Categoría"]} <span>$ {r["Monto"]:,.0f}</span></div>', unsafe_allow_html=True)
@@ -178,24 +165,26 @@ with c_graf_ahorro:
     st.plotly_chart(fig_gauge, use_container_width=True)
 
 with c_graf_status:
-    st.markdown("**Círculo de Estado (Ingresos vs Destino)**")
-    # Gráfico que involucra Pagado, Pendiente y Ahorro
+    st.markdown("**Círculo de Estado (Destino del Dinero)**")
+    # Gráfico que muestra lo que ya se gastó, lo que se va a gastar y lo que queda libre
     labels_status = ['Pagado', 'Pendiente', 'Ahorro (Saldo)']
-    values_status = [vp, vpy, bf]
-    colors_status = ['#2ecc71', '#e74c3c', '#d4af37']
+    values_status = [vp, vpy, saldo_fin]
+    colors_status = ['#2ecc71', '#e74c3c', '#d4af37'] # Verde, Rojo, Dorado
     
-    fig_status = go.Figure(data=[go.Pie(labels=labels_status, values=values_status, hole=.6, marker_colors=colors_status)])
-    fig_status.update_layout(showlegend=True, paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=380, margin=dict(t=0, b=0, l=0, r=0))
+    fig_status = go.Figure(data=[go.Pie(labels=labels_status, values=values_status, hole=.65, marker_colors=colors_status, textinfo='percent+label')])
+    fig_status.update_layout(showlegend=True, paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=400, margin=dict(t=0, b=0, l=0, r=0))
     st.plotly_chart(fig_status, use_container_width=True)
 
 # GUARDAR
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    df_n = df_ed.dropna(subset=["Categoría", "Descripción"], how="all").assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
+    df_n = df_ed.assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
+    
     df_i_nuevo = pd.DataFrame({"Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]})
     mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
     df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
+    
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False); df_if.to_excel(w, sheet_name="Ingresos", index=False)
     st.balloons(); st.rerun()
