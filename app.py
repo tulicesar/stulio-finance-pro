@@ -6,7 +6,7 @@ import json
 from io import BytesIO
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN Y ESTILO (RESTAURADO) ---
+# --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="STULIO FINANCE PRO", layout="wide", page_icon="🔮")
 
 LOGO_APP_V = "LOGO APP.png"      
@@ -61,11 +61,7 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        # Limpieza absoluta de la columna Ítem
         if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
-        # Estandarizar nombre de columna de recurrencia
-        if "Recurrente" in df_g.columns: df_g = df_g.rename(columns={"Recurrente": "Movimiento Recurrente"})
-        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
@@ -193,19 +189,30 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE CADENA RECURRENTE (SOLUCIÓN DEFINITIVA) ---
+# --- 🚀 MOTOR DE RECURRENCIA DINÁMICA (REGLA DE LA CADENA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# EXPLICACIÓN: Solo inyectamos si el mes está "virgen" (no tiene registro de ingresos guardados)
-if d_act_i.empty:
-    # Buscamos recurrentes ÚNICAMENTE del mes anterior inmediato
-    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
-    if not df_prev_rec.empty:
-        df_new = df_prev_rec.copy()
-        df_new["Pagado"] = False
-        df_new["Monto"] = 0
-        df_mes = df_new
+# REGLA: Si el mes no tiene gastos registrados, buscamos en la historia el ESTADO MÁS RECIENTE
+if df_mes.empty:
+    # 1. Buscamos todos los gastos del usuario ordenados por fecha de más reciente a más viejo
+    # Creamos un mapeo de meses a números para ordenar correctamente
+    mes_to_num = {m: i+1 for i, m in enumerate(periodos_list)}
+    df_history = df_g_user.copy()
+    if not df_history.empty:
+        df_history['mes_num'] = df_history['Periodo'].map(mes_to_num)
+        df_history = df_history.sort_values(by=['Año', 'mes_num'], ascending=False)
+        
+        # 2. Obtenemos el último registro de cada descripción (su estado actual)
+        df_latest_state = df_history.drop_duplicates(subset=['Descripción'])
+        
+        # 3. Filtramos solo los que en su última aparición tengan el check de Recurrente ACTIVADO
+        df_to_inject = df_latest_state[df_latest_state["Movimiento Recurrente"] == True].copy()
+        
+        if not df_to_inject.empty:
+            df_to_inject["Pagado"] = False
+            df_to_inject["Monto"] = 0
+            df_mes = df_to_inject.drop(columns=['mes_num'])
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario"]:
@@ -218,8 +225,7 @@ config_c = {
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
     "Movimiento Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
-# La clave (key) cambia por mes para forzar el refresco de la tabla
-df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_{mes_s}_{anio_s}")
+df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_v6_{mes_s}")
 
 # MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
@@ -245,11 +251,9 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     df_n = df_ed.dropna(subset=["Categoría", "Descripción"], how="all").assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
-    
     df_i_nuevo = pd.DataFrame({"Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]})
     mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
     df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
-    
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False)
         df_if.to_excel(w, sheet_name="Ingresos", index=False)
