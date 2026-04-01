@@ -1,6 +1,6 @@
-streamlit
 pandas
-plotly
 openpyxl
+xlsxwriter
 reportlab
-st-gsheets-connection
+plotly
+streamlit
