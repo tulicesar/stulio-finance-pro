@@ -167,11 +167,9 @@ with st.sidebar:
     mes_s = st.selectbox("Mes Actual", periodos_list)
     idx = periodos_list.index(mes_s)
     
-    # --- 🚀 LÓGICA DE ARRASTRE AUTOMÁTICO ---
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
     anio_ant = anio_s if idx > 0 else anio_s - 1
     
-    # Calculamos saldo del mes pasado
     i_prev = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
     g_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
     
@@ -183,14 +181,8 @@ with st.sidebar:
 
     st.divider()
     st.subheader("💰 Balance de Ingresos")
+    arrastrar = st.toggle(f"Arrastrar saldo de {mes_ant}", value=hay_datos_previos)
     
-    # Toggle activo por defecto. Se desactiva visualmente si no hay datos.
-    arrastrar = st.toggle(f"Arrastrar saldo de {mes_ant}", value=hay_datos_previos, help="Toma el balance final del mes anterior automáticamente.")
-    
-    if arrastrar and not hay_datos_previos:
-        st.caption(f"⚠️ No hay datos guardados de {mes_ant}.")
-
-    # Si arrastrar está activo, usamos saldo_auto. Si no, buscamos lo guardado o dejamos en 0.
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
     val_s_actual = float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0
     
@@ -212,20 +204,27 @@ with st.sidebar:
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# CUERPO
+# --- HEADER ---
 c_l, c_t = st.columns([1, 4])
 with c_l: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# LÓGICA DE RECURRENCIA
+# --- 🚀 LÓGICA DE RECURRENCIA (SIN REPLICAR 'PAGADO') ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
+
+# Obtenemos la lista de movimientos marcados como recurrentes en cualquier parte del historial
 df_rec_master = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
+
+# Identificamos qué recurrentes NO están en el mes actual
 nombres_actuales = df_mes["Descripción"].tolist() if not df_mes.empty else []
 nuevos_items = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
+
 if not nuevos_items.empty:
-    nuevos_items["Pagado"] = False; nuevos_items["Monto"] = 0
+    # ⚠️ AQUÍ ESTÁ LA CLAVE: Forzamos el reset de Pagado y Monto para el nuevo mes
+    nuevos_items["Pagado"] = False
+    nuevos_items["Monto"] = 0
     df_mes = pd.concat([df_mes, nuevos_items], ignore_index=True)
 
 df_v = df_mes.reset_index(drop=True)
@@ -241,7 +240,7 @@ config_c = {
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# MÉTRICAS
+# MÉTRICAS Y GRÁFICOS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
@@ -249,7 +248,6 @@ metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("�
 for i, (lab, val, col) in enumerate(metrics):
     cards[i].markdown(f'<div class="card"><div class="card-label">{lab}</div><div class="card-value" style="color:{col}">{f_c(val)}</div></div>', unsafe_allow_html=True)
 
-# GRÁFICOS
 cg1, cg2 = st.columns([2, 1])
 with cg1:
     fig = go.Figure(go.Scatter(y=[it, fb, bf], mode='lines+markers', line=dict(color='#d4af37', width=4), fill='tozeroy'))
