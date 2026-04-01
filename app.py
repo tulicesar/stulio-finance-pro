@@ -6,7 +6,7 @@ import json
 from io import BytesIO
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN Y ESTILO ---
+# --- 1. CONFIGURACIÓN Y ESTILO (TU DISEÑO ORIGINAL) ---
 st.set_page_config(page_title="STULIO FINANCE PRO", layout="wide", page_icon="🔮")
 
 LOGO_APP_V = "LOGO APP.png"      
@@ -17,10 +17,10 @@ USER_DB = "usuarios.json"
 # INICIALIZACIÓN DE MEMORIA
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
-if 'u_nombre_completo' not in st.session_state:
-    st.session_state.u_nombre_completo = "Usuario Pro"
 if 'usuario_id' not in st.session_state: 
     st.session_state.usuario_id = ""
+if 'u_nombre_completo' not in st.session_state:
+    st.session_state.u_nombre_completo = "Usuario Pro"
 if 'saldo_manual' not in st.session_state:
     st.session_state.saldo_manual = 0.0
 
@@ -52,8 +52,7 @@ def cargar_usuarios():
         with open(USER_DB, "w") as f: json.dump(db_inicial, f)
         return db_inicial
     with open(USER_DB, "r") as f:
-        try:
-            return json.load(f)
+        try: return json.load(f)
         except: return {}
 
 def guardar_usuarios(db):
@@ -70,10 +69,8 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        
         if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
         if "Usuario" not in df_i.columns: df_i["Usuario"] = "tulicesar"
-        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
@@ -105,7 +102,6 @@ if not st.session_state.autenticado:
         if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, use_container_width=True)
         tab_login, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
         usuarios = cargar_usuarios()
-
         with tab_login:
             u_in = st.text_input("Usuario", key="l_u").strip()
             p_in = st.text_input("Contraseña", type="password", key="l_p").strip()
@@ -116,28 +112,28 @@ if not st.session_state.autenticado:
                     st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
                     st.rerun()
                 else: st.error("❌ Datos incorrectos")
-        
         with tab_reg:
             rn_full = st.text_input("Nombre Completo")
-            rn_user = st.text_input("Nombre de Usuario (Login)")
-            rn_email = st.text_input("Email")
+            rn_user = st.text_input("Usuario (Login)")
             rn_pass = st.text_input("Contraseña", type="password")
             if st.button("Crear Cuenta"):
                 if rn_full and rn_user and rn_pass:
-                    usuarios[rn_user] = {"pass": rn_pass, "email": rn_email, "nombre": rn_full}
+                    usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
                     guardar_usuarios(usuarios)
-                    st.success("✅ Cuenta creada. Ya puedes entrar.")
+                    st.success("✅ ¡Listo! Ya puedes entrar.")
     st.stop()
 
-# --- 5. DASHBOARD FILTRADO ---
-df_g_full, df_i_full = cargar_bd()
-df_g_user = df_g_full[df_g_full["Usuario"] == st.session_state.usuario_id].copy()
-df_i_user = df_i_full[df_i_full["Usuario"] == st.session_state.usuario_id].copy()
+# --- 5. DASHBOARD (LOGOS Y FILTRO MULTIUSUARIO) ---
+df_g_raw, df_i_raw = cargar_bd()
+# Filtro para que el usuario solo vea lo suyo
+df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
+df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
 
 periodos_list = ["Diciembre - Enero", "Enero - Febrero", "Febrero - Marzo", "Marzo - Abril", "Abril - Mayo", "Mayo - Junio", 
                  "Junio - Julio", "Julio - Agosto", "Agosto - Septiembre", "Septiembre - Octubre", "Octubre - Noviembre", "Noviembre - Diciembre"]
 
 with st.sidebar:
+    if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, width=150)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026, 2027], index=1)
     mes_s = st.selectbox("Periodo", periodos_list)
@@ -146,6 +142,7 @@ with st.sidebar:
     mes_ant = periodos_list[idx - 1]; anio_ant = anio_s if idx > 0 else anio_s - 1
 
     st.divider()
+    # BOTÓN DE ARRASTRE (TU LÓGICA ORIGINAL)
     if st.button("🔄 Arrastrar Balance Pasado"):
         i_ant = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
         g_ant = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
@@ -164,38 +161,36 @@ with st.sidebar:
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# CUERPO APP
-st.markdown(f"<h1>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
+# HEADER CON LOGO HORIZONTAL
+c_l, c_t = st.columns([1, 4])
+with c_l: 
+    if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
+with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
+# TABLA DE REGISTRO (CON CATEGORÍA SERVICIOS)
+st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_v = df_mes.reset_index(drop=True)
-for c in ["Año", "Periodo", "Usuario"]:
+for c in ["Año", "Periodo", "Usuario", "Ítem"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
-# --- MODIFICACIÓN: AGREGADA LA CATEGORÍA "Servicios" ---
 config_c = {
-    "Categoría": st.column_config.SelectboxColumn(
-        "Categoría", 
-        options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], 
-        required=True
-    ),
+    "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
     "Monto": st.column_config.NumberColumn("Valor Pagado", format="$ %,d"),
     "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?")
 }
-
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# CÁLCULOS Y MÉTRICAS
+# CÁLCULOS Y TARJETAS (TU DISEÑO ORIGINAL)
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
-
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
 metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("✅ Pagado", vp, "#28a745"), ("⏳ Pendiente", vpy, "#e74c3c"), ("⚖️ Final", bf, "#00D2FF")]
 for i, (lab, val, col) in enumerate(metrics):
     cards[i].markdown(f'<div class="card"><div class="card-label">{lab}</div><div class="card-value" style="color:{col}">{f_c(val)}</div></div>', unsafe_allow_html=True)
 
-# GRÁFICOS
+# GRÁFICOS (TU DISEÑO ORIGINAL)
 cg1, cg2 = st.columns([2, 1])
 with cg1:
     fig = go.Figure(go.Scatter(y=[it, fb, bf], mode='lines+markers', line=dict(color='#d4af37', width=4), fill='tozeroy'))
@@ -206,25 +201,23 @@ with cg2:
     gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=300)
     st.plotly_chart(gauge, use_container_width=True)
 
-# GUARDAR
+# BOTÓN GUARDAR (SIN MEZCLAR USUARIOS)
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     df_n = df_ed.dropna(subset=["Categoría", "Descripción"], how="all").assign(
-        Periodo=mes_s, 
-        Año=anio_s, 
-        Usuario=st.session_state.usuario_id
+        Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id
     )
-    mask_g = (df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == st.session_state.usuario_id)
-    df_gf = pd.concat([df_g_full[~mask_g], df_n], ignore_index=True)
+    # Reconstrucción de la base total sin borrar a otros usuarios
+    mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
+    df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
     
     df_i_nuevo = pd.DataFrame({
         "Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], 
         "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]
     })
-    mask_i = (df_i_full["Periodo"] == mes_s) & (df_i_full["Año"] == anio_s) & (df_i_full["Usuario"] == st.session_state.usuario_id)
-    df_if = pd.concat([df_i_full[~mask_i], df_i_nuevo], ignore_index=True)
+    mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
+    df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
     
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False)
         df_if.to_excel(w, sheet_name="Ingresos", index=False)
-    
     st.balloons(); st.rerun()
