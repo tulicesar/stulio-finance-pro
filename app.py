@@ -18,8 +18,6 @@ if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 if 'usuario_id' not in st.session_state: 
     st.session_state.usuario_id = ""
-if 'u_nombre_completo' not in st.session_state:
-    st.session_state.u_nombre_completo = "Usuario Pro"
 
 st.markdown("""
     <style>
@@ -42,7 +40,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. MOTOR DE USUARIOS (RESTAURADO) ---
+# --- 2. MOTOR DE DATOS ---
 def cargar_usuarios():
     if not os.path.exists(USER_DB):
         db_inicial = {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
@@ -55,7 +53,6 @@ def cargar_usuarios():
 def guardar_usuarios(db):
     with open(USER_DB, "w") as f: json.dump(db, f)
 
-# --- 3. LÓGICA DE NEGOCIO ---
 def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
@@ -64,6 +61,7 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
+        # ELIMINACIÓN DEFINITIVA DE LA COLUMNA ÍTEM
         if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
@@ -83,7 +81,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 4. MOTOR PDF ---
+# --- 3. MOTOR PDF ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -116,7 +114,7 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 5. ACCESO CON REGISTRO (RESTAURADO) ---
+# --- 4. ACCESO ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -124,7 +122,6 @@ if not st.session_state.autenticado:
         if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, use_container_width=True)
         tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
         usuarios = cargar_usuarios()
-        
         with tab_log:
             u_in = st.text_input("Usuario", key="l_u").strip()
             p_in = st.text_input("Contraseña", type="password", key="l_p").strip()
@@ -135,22 +132,18 @@ if not st.session_state.autenticado:
                     st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
                     st.rerun()
                 else: st.error("❌ Datos incorrectos")
-        
         with tab_reg:
             rn_full = st.text_input("Nombre Completo")
             rn_user = st.text_input("Nuevo Usuario")
             rn_pass = st.text_input("Nueva Contraseña", type="password")
             if st.button("Crear Cuenta", use_container_width=True):
-                if rn_user in usuarios:
-                    st.warning("⚠️ El usuario ya existe.")
-                elif rn_user and rn_pass:
+                if rn_user and rn_pass:
                     usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
                     guardar_usuarios(usuarios)
-                    st.success("✅ Cuenta creada. Ya puedes entrar.")
-                else: st.error("❌ Completa los campos.")
+                    st.success("✅ Cuenta creada.")
     st.stop()
 
-# --- 6. DASHBOARD ---
+# --- 5. DASHBOARD ---
 df_g_raw, df_i_raw = cargar_bd()
 df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
@@ -197,18 +190,20 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 REGISTRO ---
+# --- 🚀 LÓGICA DE RECURRENCIA DINÁMICA (EFECTO CADENA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# HERRAMIENTA MANUAL DE RECURRENTES
-with st.expander("🛠️ Herramientas de Carga"):
-    if st.button("📥 Cargar mis Recurrentes"):
-        df_rec = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
-        if not df_rec.empty:
-            df_rec["Pagado"] = False; df_rec["Monto"] = 0
-            df_mes = pd.concat([df_mes, df_rec[~df_rec["Descripción"].isin(df_mes["Descripción"].tolist())]], ignore_index=True)
-            st.success("Movimientos cargados. Dale a Guardar.")
+# Si el mes es totalmente nuevo (no hay ingresos ni gastos guardados)
+if d_act_i.empty and df_mes.empty:
+    # Buscamos recurrentes del mes ANTERIOR INMEDIATO (Efecto Cadena)
+    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Recurrente"] == True)]
+    if not df_prev_rec.empty:
+        df_prev_rec = df_prev_rec.copy()
+        df_prev_rec["Pagado"] = False
+        df_prev_rec["Monto"] = 0
+        df_mes = df_prev_rec
+        st.info(f"✨ Se heredaron los movimientos recurrentes de {mes_ant}.")
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario"]:
@@ -216,12 +211,12 @@ for c in ["Año", "Periodo", "Usuario"]:
 
 config_c = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
-    "Monto": st.column_config.NumberColumn("Monto", format="$ %,d"),
-    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
+    "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
     "Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
-df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_{mes_s}")
+df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_v5_{mes_s}")
 
 # MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
