@@ -61,10 +61,7 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        # Limpiar columnas viejas e indeseadas
         if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
-        if "Recurrente" in df_g.columns: df_g = df_g.rename(columns={"Recurrente": "Movimiento Recurrente"})
-        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
@@ -76,8 +73,6 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
     if df_g.empty: return it, 0.0, 0.0, it, it
     temp = df_g.copy()
-    temp["Monto"] = pd.to_numeric(temp["Monto"], errors='coerce').fillna(0.0)
-    temp["Valor Referencia"] = pd.to_numeric(temp["Valor Referencia"], errors='coerce').fillna(0.0)
     vp = temp[temp["Pagado"] == True]["Monto"].sum()
     fb = it - vp
     vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
@@ -192,20 +187,23 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA DINÁMICA (CORREGIDA) ---
+# --- 🚀 LÓGICA DE RECURRENCIA GLOBAL (SOLUCIÓN DEFINITIVA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# Si el mes actual NO tiene gastos guardados en el Excel para este usuario
+# Si el mes no tiene registros, busca en toda la historia los que tengan el check de recurrente activo
 if df_mes.empty:
-    # Buscamos recurrentes del mes inmediatamente anterior
-    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
-    if not df_prev_rec.empty:
-        df_new = df_prev_rec.copy()
-        df_new["Pagado"] = False
-        df_new["Monto"] = 0
-        df_mes = df_new
-        st.info(f"✨ Se han cargado automáticamente los movimientos recurrentes de {mes_ant}.")
+    # 1. Buscamos todos los movimientos recurrentes del usuario en toda la historia
+    # Ordenamos para quedarnos con la versión más reciente (más cerca del mes actual)
+    df_rec_history = df_g_user[df_g_user["Movimiento Recurrente"] == True].copy()
+    if not df_rec_history.empty:
+        # Nos quedamos con la última configuración de cada descripción (por si cambió la categoría o el valor de ref)
+        df_rec_master = df_rec_history.sort_values(by=["Año"], ascending=False).drop_duplicates(subset=["Descripción"])
+        
+        # Limpiamos para el nuevo mes
+        df_rec_master["Pagado"] = False
+        df_rec_master["Monto"] = 0
+        df_mes = df_rec_master
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario"]:
@@ -243,7 +241,6 @@ with cg2:
 # GUARDAR
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     df_n = df_ed.dropna(subset=["Categoría", "Descripción"], how="all").assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
-    # Reemplazo estricto en la base global
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
     
