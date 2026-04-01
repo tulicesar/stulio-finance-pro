@@ -178,7 +178,7 @@ with st.sidebar:
     val_s_actual = float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0
     
     s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastrar else val_s_actual, disabled=arrastrar)
-    n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
+    n_in = st.number_input("Ingreso Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros Ingresos", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
     
     st.divider()
@@ -195,25 +195,28 @@ with st.sidebar:
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# HEADER
+# --- HEADER ---
 c_l, c_t = st.columns([1, 4])
 with c_l: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA (SIN HEREDAR ESTADO DE PAGO) ---
+# --- 🚀 LÓGICA DE RECURRENCIA (HEREDA REFERENCIA, RESETEA PAGO) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# 1. Buscamos TODOS los movimientos que el usuario marcó como Recurrente en el historial
-df_rec_master = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
+# 1. Buscamos recurrentes. Ordenamos por Año/Mes para que el 'drop_duplicates' se quede con el más reciente
+# (Asumimos que el usuario quiere heredar la referencia más actual que configuró)
+df_rec_master = df_g_user[df_g_user["Recurrente"] == True].copy()
+df_rec_master = df_rec_master.sort_values(by=["Año"], ascending=False).drop_duplicates(subset=["Descripción"])
 
-# 2. Identificamos qué movimientos de la lista maestra NO están en el mes actual
+# 2. Identificamos qué falta en el mes actual
 nombres_actuales = df_mes["Descripción"].tolist() if not df_mes.empty else []
 faltantes = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
 
 if not faltantes.empty:
-    # ⚠️ REINICIO CRUCIAL: El movimiento existe pero el pago empieza de cero cada mes
+    # ✅ HEREDAMOS: Categoría, Descripción, Valor Referencia y Recurrente
+    # ❌ RESETEAMOS: Pagado y Monto (Historia nueva cada mes)
     faltantes["Pagado"] = False
     faltantes["Monto"] = 0
     df_mes = pd.concat([df_mes, faltantes], ignore_index=True)
@@ -231,7 +234,7 @@ config_c = {
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# MÉTRICAS
+# MÉTRICAS Y GRÁFICOS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
