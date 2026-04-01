@@ -6,7 +6,7 @@ import json
 from io import BytesIO
 from datetime import datetime
 
-# --- 1. CONFIGURACIÓN Y ESTILO ---
+# --- 1. CONFIGURACIÓN Y ESTILO (RESTAURADO) ---
 st.set_page_config(page_title="STULIO FINANCE PRO", layout="wide", page_icon="🔮")
 
 LOGO_APP_V = "LOGO APP.png"      
@@ -61,7 +61,11 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
+        # Limpieza absoluta de la columna Ítem
         if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
+        # Estandarizar nombre de columna de recurrencia
+        if "Recurrente" in df_g.columns: df_g = df_g.rename(columns={"Recurrente": "Movimiento Recurrente"})
+        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
@@ -73,6 +77,8 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
     if df_g.empty: return it, 0.0, 0.0, it, it
     temp = df_g.copy()
+    temp["Monto"] = pd.to_numeric(temp["Monto"], errors='coerce').fillna(0.0)
+    temp["Valor Referencia"] = pd.to_numeric(temp["Valor Referencia"], errors='coerce').fillna(0.0)
     vp = temp[temp["Pagado"] == True]["Monto"].sum()
     fb = it - vp
     vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
@@ -187,23 +193,19 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA GLOBAL (SOLUCIÓN DEFINITIVA) ---
+# --- 🚀 LÓGICA DE CADENA RECURRENTE (SOLUCIÓN DEFINITIVA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# Si el mes no tiene registros, busca en toda la historia los que tengan el check de recurrente activo
-if df_mes.empty:
-    # 1. Buscamos todos los movimientos recurrentes del usuario en toda la historia
-    # Ordenamos para quedarnos con la versión más reciente (más cerca del mes actual)
-    df_rec_history = df_g_user[df_g_user["Movimiento Recurrente"] == True].copy()
-    if not df_rec_history.empty:
-        # Nos quedamos con la última configuración de cada descripción (por si cambió la categoría o el valor de ref)
-        df_rec_master = df_rec_history.sort_values(by=["Año"], ascending=False).drop_duplicates(subset=["Descripción"])
-        
-        # Limpiamos para el nuevo mes
-        df_rec_master["Pagado"] = False
-        df_rec_master["Monto"] = 0
-        df_mes = df_rec_master
+# EXPLICACIÓN: Solo inyectamos si el mes está "virgen" (no tiene registro de ingresos guardados)
+if d_act_i.empty:
+    # Buscamos recurrentes ÚNICAMENTE del mes anterior inmediato
+    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
+    if not df_prev_rec.empty:
+        df_new = df_prev_rec.copy()
+        df_new["Pagado"] = False
+        df_new["Monto"] = 0
+        df_mes = df_new
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario"]:
@@ -216,7 +218,7 @@ config_c = {
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
     "Movimiento Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
-# La clave (key) cambia por mes para que el editor se limpie correctamente
+# La clave (key) cambia por mes para forzar el refresco de la tabla
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_{mes_s}_{anio_s}")
 
 # MÉTRICAS
