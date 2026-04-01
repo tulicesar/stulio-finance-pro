@@ -42,7 +42,6 @@ st.markdown("""
 
 # --- 2. MOTOR DE DATOS ---
 def cargar_bd():
-    # Eliminada la columna 'Ítem' de la definición
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
     if not os.path.exists(BASE_FILE):
@@ -50,7 +49,7 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"]) # Limpieza por si existía
+        if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
@@ -102,7 +101,7 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 4. ACCESO ---
+# --- 4. LOGIN ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
@@ -164,21 +163,20 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA DINÁMICA ---
+# --- 🚀 LÓGICA DE RECURRENCIA INTELIGENTE ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# Si el mes no tiene registros, busca todos los marcados como Recurrente en CUALQUIER mes anterior
-if df_mes.empty:
+# REGLA DE ORO: Solo inyectamos si el mes NO EXISTE en la tabla de Ingresos (es virgen)
+if d_act_i.empty and df_mes.empty:
     df_recurrentes_master = df_g_user[df_g_user["Recurrente"] == True].sort_values(by="Año", ascending=False).drop_duplicates(subset=["Descripción"])
     if not df_recurrentes_master.empty:
         df_recurrentes_master["Pagado"] = False
         df_recurrentes_master["Monto"] = 0
         df_mes = df_recurrentes_master.copy()
 
-# Eliminamos columnas técnicas para la visualización (ÍTEM ELIMINADO AQUÍ)
 df_v = df_mes.reset_index(drop=True)
-for c in ["Año", "Periodo", "Usuario", "Ítem"]:
+for c in ["Año", "Periodo", "Usuario"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
 config_c = {
