@@ -14,7 +14,6 @@ LOGO_APP_H = "LOGO H APP.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# INICIALIZACIÓN DE MEMORIA
 if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 if 'usuario_id' not in st.session_state: 
@@ -48,7 +47,7 @@ st.markdown("""
 # --- 2. MOTOR DE USUARIOS ---
 def cargar_usuarios():
     if not os.path.exists(USER_DB):
-        db_inicial = {"tulicesar": {"pass": "Thulli.07", "email": "tulio@ejemplo.com", "nombre": "Tulio Salcedo"}}
+        db_inicial = {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
         with open(USER_DB, "w") as f: json.dump(db_inicial, f)
         return db_inicial
     with open(USER_DB, "r") as f:
@@ -182,10 +181,9 @@ with st.sidebar:
 
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
     val_s = float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else st.session_state.saldo_manual
-
-    s_in = st.number_input("Saldo Anterior", value=val_s)
     n_in = st.number_input("Ingreso Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros Ingresos", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
+    s_in = st.number_input("Saldo Anterior", value=val_s)
     
     st.divider()
     st.subheader("📄 Reportes Semestrales")
@@ -207,24 +205,34 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# TABLA REGISTRO
+# --- LÓGICA DE MOVIMIENTO RECURRENTE (NUEVA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
+
+# Si el mes actual está vacío, buscamos recurrentes del mes anterior
+if df_mes.empty and idx >= 0:
+    df_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
+    recurrentes = df_prev[df_prev["Recurrente"] == True].copy()
+    if not recurrentes.empty:
+        recurrentes["Pagado"] = False  # Empezamos el mes sin pagar
+        recurrentes["Monto"] = 0       # El monto pagado inicia en 0
+        df_mes = recurrentes
+        st.info(f"✨ Se han cargado automáticamente los movimientos recurrentes de {mes_ant}.")
+
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario", "Ítem"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
-# --- ACTUALIZACIÓN DE NOMBRES EN EL EDITOR ---
 config_c = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %,d"),
     "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
-    "Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente") # NOMBRE CAMBIADO AQUÍ
+    "Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# MÉTRICAS
+# MÉTRICAS Y GRÁFICOS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
@@ -232,7 +240,6 @@ metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("�
 for i, (lab, val, col) in enumerate(metrics):
     cards[i].markdown(f'<div class="card"><div class="card-label">{lab}</div><div class="card-value" style="color:{col}">{f_c(val)}</div></div>', unsafe_allow_html=True)
 
-# GRÁFICOS
 cg1, cg2 = st.columns([2, 1])
 with cg1:
     fig = go.Figure(go.Scatter(y=[it, fb, bf], mode='lines+markers', line=dict(color='#d4af37', width=4), fill='tozeroy'))
@@ -250,14 +257,9 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     )
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
-    
-    df_i_nuevo = pd.DataFrame({
-        "Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], 
-        "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]
-    })
+    df_i_nuevo = pd.DataFrame({"Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]})
     mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
     df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
-    
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False)
         df_if.to_excel(w, sheet_name="Ingresos", index=False)
