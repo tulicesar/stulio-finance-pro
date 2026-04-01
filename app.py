@@ -141,15 +141,6 @@ if not st.session_state.autenticado:
                     st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
                     st.rerun()
                 else: st.error("❌ Datos incorrectos")
-        with tab_reg:
-            rn_full = st.text_input("Nombre Completo")
-            rn_user = st.text_input("Usuario (Login)")
-            rn_pass = st.text_input("Contraseña", type="password")
-            if st.button("Crear Cuenta"):
-                if rn_full and rn_user and rn_pass:
-                    usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
-                    guardar_usuarios(usuarios)
-                    st.success("✅ Cuenta creada.")
     st.stop()
 
 # --- 6. DASHBOARD ---
@@ -187,7 +178,7 @@ with st.sidebar:
     val_s_actual = float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0
     
     s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastrar else val_s_actual, disabled=arrastrar)
-    n_in = st.number_input("Ingreso Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
+    n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros Ingresos", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
     
     st.divider()
@@ -204,28 +195,28 @@ with st.sidebar:
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- HEADER ---
+# HEADER
 c_l, c_t = st.columns([1, 4])
 with c_l: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA (SIN REPLICAR 'PAGADO') ---
+# --- 🚀 LÓGICA DE RECURRENCIA (SIN HEREDAR ESTADO DE PAGO) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# Obtenemos la lista de movimientos marcados como recurrentes en cualquier parte del historial
+# 1. Buscamos TODOS los movimientos que el usuario marcó como Recurrente en el historial
 df_rec_master = df_g_user[df_g_user["Recurrente"] == True].drop_duplicates(subset=["Descripción"])
 
-# Identificamos qué recurrentes NO están en el mes actual
+# 2. Identificamos qué movimientos de la lista maestra NO están en el mes actual
 nombres_actuales = df_mes["Descripción"].tolist() if not df_mes.empty else []
-nuevos_items = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
+faltantes = df_rec_master[~df_rec_master["Descripción"].isin(nombres_actuales)].copy()
 
-if not nuevos_items.empty:
-    # ⚠️ AQUÍ ESTÁ LA CLAVE: Forzamos el reset de Pagado y Monto para el nuevo mes
-    nuevos_items["Pagado"] = False
-    nuevos_items["Monto"] = 0
-    df_mes = pd.concat([df_mes, nuevos_items], ignore_index=True)
+if not faltantes.empty:
+    # ⚠️ REINICIO CRUCIAL: El movimiento existe pero el pago empieza de cero cada mes
+    faltantes["Pagado"] = False
+    faltantes["Monto"] = 0
+    df_mes = pd.concat([df_mes, faltantes], ignore_index=True)
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario", "Ítem"]:
@@ -240,7 +231,7 @@ config_c = {
 }
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# MÉTRICAS Y GRÁFICOS
+# MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
