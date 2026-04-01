@@ -21,6 +21,8 @@ if 'usuario_id' not in st.session_state:
 
 st.markdown("""
     <style>
+    header {visibility: hidden;}
+    [data-testid="stHeader"] {display: none;}
     .stApp { background: linear-gradient(135deg, #1a1d21 0%, #111315 100%); color: #dee2e6; }
     .card {
         background-color: #ffffff;
@@ -50,9 +52,6 @@ def cargar_usuarios():
         try: return json.load(f)
         except: return {}
 
-def guardar_usuarios(db):
-    with open(USER_DB, "w") as f: json.dump(db, f)
-
 def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
@@ -80,41 +79,88 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 3. MOTOR PDF MEJORADO ---
+# --- 3. MOTOR PDF CON DETALLE DE MOVIMIENTOS ---
 def generar_pdf_profesional(df_g_full, df_i_full, meses, titulo_reporte, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
+    
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
-    c.setFillColor(colors.white); c.rect(0, 0, 612, 792, fill=1)
-    y = 750
-    c.setFillColor(HexColor("#1a1d21"))
-    c.setFont("Helvetica-Bold", 18); c.drawString(50, y, "STULIO FINANCE")
-    c.setFont("Helvetica-Bold", 14); c.drawRightString(560, y, f"{titulo_reporte} - {anio}")
-    y -= 45
-    c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(1.5); c.line(50, y, 560, y); y -= 40
+    
+    def dibujar_encabezado(canvas_obj, titulo, anio_val):
+        canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
+        canvas_obj.setFillColor(HexColor("#1a1d21"))
+        canvas_obj.setFont("Helvetica-Bold", 18); canvas_obj.drawString(50, 750, "STULIO FINANCE")
+        canvas_obj.setFont("Helvetica-Bold", 14); canvas_obj.drawRightString(560, 750, f"{titulo} - {anio_val}")
+        canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.setLineWidth(1.5); canvas_obj.line(50, 740, 560, 740)
+        return 710
+
+    y = dibujar_encabezado(c, titulo_reporte, anio)
+
     for m in meses:
-        if y < 160: c.showPage(); c.setFillColor(colors.white); c.rect(0,0,612,792,fill=1); y=740
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
+        
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
         nom_m = i_m["Nomina"].sum() if not i_m.empty else 0.0
         otr_m = i_m["Otros"].sum() if not i_m.empty else 0.0
         it_m, vp_m, vpy_m, fb_m, bf_m = calcular_metricas(g_m, nom_m, otr_m, s_ant_m)
+
+        # Verificar espacio para el resumen
+        if y < 200: 
+            c.showPage()
+            y = dibujar_encabezado(c, titulo_reporte, anio)
+
+        # Cuadro Resumen
         c.setStrokeColor(HexColor("#dddddd")); c.setFillColor(HexColor("#f2f2f2"))
         c.roundRect(50, y-85, 510, 95, 10, fill=1, stroke=1)
-        c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
-        c.setFont("Helvetica", 10); c.drawString(70, y-42, f"Ingresos: $ {it_m:,.0f} | Fondos: $ {fb_m:,.0f}")
-        c.drawString(310, y-42, f"Pagado: $ {vp_m:,.0f} | Pendiente: $ {vpy_m:,.0f}")
+        c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 12); c.drawString(70, y-25, f"MES: {m}")
+        c.setFont("Helvetica", 10); c.drawString(70, y-45, f"Ingresos: $ {it_m:,.0f} | Fondos: $ {fb_m:,.0f}")
+        c.drawString(310, y-45, f"Pagado: $ {vp_m:,.0f} | Pendiente: $ {vpy_m:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-75, f"BALANCE FINAL: $ {bf_m:,.0f}")
-        y -= 115
+        
+        y -= 110
+
+        # Detalle de Movimientos (Tabla)
+        if not g_m.empty:
+            c.setFillColor(HexColor("#1a1d21")); c.setFont("Helvetica-Bold", 10)
+            c.drawString(55, y, "Categoría")
+            c.drawString(145, y, "Descripción")
+            c.drawRightString(400, y, "Valor Ref.")
+            c.drawRightString(480, y, "Monto Real")
+            c.drawRightString(550, y, "Estado")
+            y -= 5
+            c.setStrokeColor(HexColor("#eeeeee")); c.setLineWidth(0.5); c.line(50, y, 560, y)
+            y -= 15
+            
+            c.setFont("Helvetica", 9); c.setFillColor(colors.black)
+            for _, row in g_m.iterrows():
+                if y < 60: # Salto de página si se acaba el espacio
+                    c.showPage()
+                    y = dibujar_encabezado(c, titulo_reporte, anio)
+                    c.setFont("Helvetica", 9)
+
+                # Truncar descripción larga
+                desc = (row['Descripción'][:35] + '..') if len(str(row['Descripción'])) > 35 else str(row['Descripción'])
+                
+                c.drawString(55, y, str(row['Categoría']))
+                c.drawString(145, y, desc)
+                c.drawRightString(400, y, f"$ {row['Valor Referencia']:,.0f}")
+                c.drawRightString(480, y, f"$ {row['Monto']:,.0f}")
+                estado = "PAGADO" if row['Pagado'] else "PEND."
+                c.drawRightString(550, y, estado)
+                y -= 15
+        
+        y -= 25 # Espacio entre meses si es semestral
+
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
 # --- 4. ACCESO ---
 if not st.session_state.autenticado:
+    # (Tu bloque de login se mantiene igual que en tu código compartido)
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
@@ -138,7 +184,7 @@ if not st.session_state.autenticado:
             if st.button("Crear Cuenta", use_container_width=True):
                 if rn_user and rn_pass:
                     usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
-                    guardar_usuarios(usuarios)
+                    with open(USER_DB, "w") as f: json.dump(usuarios, f)
                     st.success("✅ Cuenta creada.")
     st.stop()
 
@@ -156,9 +202,9 @@ with st.sidebar:
     mes_s = st.selectbox("Mes Actual", periodos_list)
     idx = periodos_list.index(mes_s)
     
+    # Lógica de saldo anterior
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
     anio_ant = anio_s if idx > 0 else anio_s - 1
-    
     i_prev = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
     g_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
     saldo_auto = 0.0
@@ -175,22 +221,18 @@ with st.sidebar:
 
     st.divider()
     st.subheader("📊 Reportes y Extractos")
-    
-    # NUEVOS BOTONES DE EXTRACTO MENSUAL
     col_ex1, col_ex2 = st.columns(2)
     with col_ex1:
         if st.button(f"📄 PDF {mes_s[:3]}"):
+            # Aquí el PDF ahora incluirá el detalle de movimientos
             pdf_mes = generar_pdf_profesional(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
             st.download_button(f"Extracto_{mes_s}.pdf", pdf_mes, f"Extracto_{mes_s}.pdf")
-    
     with col_ex2:
-        # Generar Excel del mes actual
         df_excel_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df_excel_mes.to_excel(writer, index=False, sheet_name='Movimientos')
-        excel_data = output.getvalue()
-        st.download_button(f"Excel {mes_s[:3]}", excel_data, f"Extracto_{mes_s}.xlsx")
+        st.download_button(f"Excel {mes_s[:3]}", output.getvalue(), f"Extracto_{mes_s}.xlsx")
 
     st.divider()
     if st.button("📥 Semestre 1 (Ene-Jun)"):
@@ -208,7 +250,8 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 MOTOR DE RECURRENCIA DINÁMICA ---
+# --- 🚀 LOGICA DE REGISTRO ---
+# (Se mantiene tu lógica de recurrencia y editor tal cual la tienes)
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
@@ -221,8 +264,7 @@ if df_mes.empty:
         df_latest_state = df_history.drop_duplicates(subset=['Descripción'])
         df_to_inject = df_latest_state[df_latest_state["Movimiento Recurrente"] == True].copy()
         if not df_to_inject.empty:
-            df_to_inject["Pagado"] = False
-            df_to_inject["Monto"] = 0
+            df_to_inject["Pagado"] = False; df_to_inject["Monto"] = 0
             df_mes = df_to_inject.drop(columns=['mes_num'])
 
 df_v = df_mes.reset_index(drop=True)
