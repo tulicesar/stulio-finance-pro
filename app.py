@@ -80,8 +80,8 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     vpy = temp.apply(lambda r: max(0.0, float(r["Valor Referencia"]) - float(r["Monto"])) if r["Pagado"] else max(float(r["Valor Referencia"]), float(r["Monto"])), axis=1).sum()
     return it, vp, vpy, fb, it - (vp + vpy)
 
-# --- 3. MOTOR PDF ---
-def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
+# --- 3. MOTOR PDF MEJORADO ---
+def generar_pdf_profesional(df_g_full, df_i_full, meses, titulo_reporte, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
@@ -92,7 +92,7 @@ def generar_pdf_profesional(df_g_full, df_i_full, meses, sem_nom, anio):
     y = 750
     c.setFillColor(HexColor("#1a1d21"))
     c.setFont("Helvetica-Bold", 18); c.drawString(50, y, "STULIO FINANCE")
-    c.setFont("Helvetica-Bold", 14); c.drawRightString(560, y, f"Balance {sem_nom} - {anio}")
+    c.setFont("Helvetica-Bold", 14); c.drawRightString(560, y, f"{titulo_reporte} - {anio}")
     y -= 45
     c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(1.5); c.line(50, y, 560, y); y -= 40
     for m in meses:
@@ -174,11 +174,30 @@ with st.sidebar:
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
     st.divider()
-    if st.button("📥 Ene-Jun"):
-        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "1er Semestre", anio_s)
+    st.subheader("📊 Reportes y Extractos")
+    
+    # NUEVOS BOTONES DE EXTRACTO MENSUAL
+    col_ex1, col_ex2 = st.columns(2)
+    with col_ex1:
+        if st.button(f"📄 PDF {mes_s[:3]}"):
+            pdf_mes = generar_pdf_profesional(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
+            st.download_button(f"Extracto_{mes_s}.pdf", pdf_mes, f"Extracto_{mes_s}.pdf")
+    
+    with col_ex2:
+        # Generar Excel del mes actual
+        df_excel_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df_excel_mes.to_excel(writer, index=False, sheet_name='Movimientos')
+        excel_data = output.getvalue()
+        st.download_button(f"Excel {mes_s[:3]}", excel_data, f"Extracto_{mes_s}.xlsx")
+
+    st.divider()
+    if st.button("📥 Semestre 1 (Ene-Jun)"):
+        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[0:6], "Balance 1er Semestre", anio_s)
         st.download_button(f"S1_{anio_s}.pdf", pdf, f"S1_{anio_s}.pdf")
-    if st.button("📥 Jul-Dic"):
-        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "2do Semestre", anio_s)
+    if st.button("📥 Semestre 2 (Jul-Dic)"):
+        pdf = generar_pdf_profesional(df_g_user, df_i_user, periodos_list[6:12], "Balance 2do Semestre", anio_s)
         st.download_button(f"S2_{anio_s}.pdf", pdf, f"S2_{anio_s}.pdf")
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
@@ -189,26 +208,18 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 MOTOR DE RECURRENCIA DINÁMICA (REGLA DE LA CADENA) ---
+# --- 🚀 MOTOR DE RECURRENCIA DINÁMICA ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# REGLA: Si el mes no tiene gastos registrados, buscamos en la historia el ESTADO MÁS RECIENTE
 if df_mes.empty:
-    # 1. Buscamos todos los gastos del usuario ordenados por fecha de más reciente a más viejo
-    # Creamos un mapeo de meses a números para ordenar correctamente
     mes_to_num = {m: i+1 for i, m in enumerate(periodos_list)}
     df_history = df_g_user.copy()
     if not df_history.empty:
         df_history['mes_num'] = df_history['Periodo'].map(mes_to_num)
         df_history = df_history.sort_values(by=['Año', 'mes_num'], ascending=False)
-        
-        # 2. Obtenemos el último registro de cada descripción (su estado actual)
         df_latest_state = df_history.drop_duplicates(subset=['Descripción'])
-        
-        # 3. Filtramos solo los que en su última aparición tengan el check de Recurrente ACTIVADO
         df_to_inject = df_latest_state[df_latest_state["Movimiento Recurrente"] == True].copy()
-        
         if not df_to_inject.empty:
             df_to_inject["Pagado"] = False
             df_to_inject["Monto"] = 0
