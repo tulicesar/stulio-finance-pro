@@ -54,19 +54,21 @@ def guardar_usuarios(db):
     with open(USER_DB, "w") as f: json.dump(db, f)
 
 def cargar_bd():
-    col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Recurrente", "Usuario"]
+    col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
     if not os.path.exists(BASE_FILE):
         return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i)
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        # ELIMINACIÓN DEFINITIVA DE LA COLUMNA ÍTEM
+        # Quitar columna Ítem si existe por error
         if "Ítem" in df_g.columns: df_g = df_g.drop(columns=["Ítem"])
+        if "Recurrente" in df_g.columns: df_g = df_g.rename(columns={"Recurrente": "Movimiento Recurrente"})
+        
         for col in ["Monto", "Valor Referencia"]:
             df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
-        df_g["Recurrente"] = df_g["Recurrente"].fillna(False).astype(bool)
+        df_g["Movimiento Recurrente"] = df_g["Movimiento Recurrente"].fillna(False).astype(bool)
         return df_g, df_i
     except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i)
 
@@ -190,20 +192,19 @@ with c_l:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_t: st.markdown(f"<h1 style='margin-top: 15px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- 🚀 LÓGICA DE RECURRENCIA DINÁMICA (EFECTO CADENA) ---
+# --- 🚀 LÓGICA DE RECURRENCIA (REGLA DE LA CADENA) ---
 st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# Si el mes es totalmente nuevo (no hay ingresos ni gastos guardados)
+# Si el mes es nuevo (no se ha guardado nada aún)
 if d_act_i.empty and df_mes.empty:
-    # Buscamos recurrentes del mes ANTERIOR INMEDIATO (Efecto Cadena)
-    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Recurrente"] == True)]
+    # Miramos ÚNICAMENTE al mes anterior para ver qué heredar
+    df_prev_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
     if not df_prev_rec.empty:
-        df_prev_rec = df_prev_rec.copy()
-        df_prev_rec["Pagado"] = False
-        df_prev_rec["Monto"] = 0
-        df_mes = df_prev_rec
-        st.info(f"✨ Se heredaron los movimientos recurrentes de {mes_ant}.")
+        df_new = df_prev_rec.copy()
+        df_new["Pagado"] = False
+        df_new["Monto"] = 0
+        df_mes = df_new
 
 df_v = df_mes.reset_index(drop=True)
 for c in ["Año", "Periodo", "Usuario"]:
@@ -211,12 +212,13 @@ for c in ["Año", "Periodo", "Usuario"]:
 
 config_c = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], required=True),
-    "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
-    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
+    "Monto": st.column_config.NumberColumn("Monto", format="$ %,d"),
+    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?"),
-    "Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
+    "Movimiento Recurrente": st.column_config.CheckboxColumn("Movimiento Recurrente")
 }
-df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_v5_{mes_s}")
+# La clave (key) cambia por mes para que el editor se limpie correctamente
+df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key=f"editor_{mes_s}_{anio_s}")
 
 # MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
@@ -239,12 +241,18 @@ with cg2:
 
 # GUARDAR
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
+    # 1. Filtramos las filas vacías del editor
     df_n = df_ed.dropna(subset=["Categoría", "Descripción"], how="all").assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
+    
+    # 2. Reconstruimos la base de datos de gastos (reemplazando solo el mes actual)
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
+    
+    # 3. Guardamos los ingresos (esto marca el mes como 'trabajado')
     df_i_nuevo = pd.DataFrame({"Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]})
     mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
     df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
+    
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False)
         df_if.to_excel(w, sheet_name="Ingresos", index=False)
