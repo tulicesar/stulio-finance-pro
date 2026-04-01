@@ -19,7 +19,7 @@ if 'autenticado' not in st.session_state:
     st.session_state.autenticado = False
 if 'u_nombre_completo' not in st.session_state:
     st.session_state.u_nombre_completo = "Usuario Pro"
-if 'usuario_id' not in st.session_state: # ID único (ej: tulicesar)
+if 'usuario_id' not in st.session_state: 
     st.session_state.usuario_id = ""
 if 'saldo_manual' not in st.session_state:
     st.session_state.saldo_manual = 0.0
@@ -71,7 +71,6 @@ def cargar_bd():
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
         
-        # Aseguramos que exista la columna Usuario para el filtro
         if "Usuario" not in df_g.columns: df_g["Usuario"] = "tulicesar"
         if "Usuario" not in df_i.columns: df_i["Usuario"] = "tulicesar"
         
@@ -113,7 +112,7 @@ if not st.session_state.autenticado:
             if st.button("Iniciar Sesión", use_container_width=True):
                 if u_in in usuarios and usuarios[u_in]["pass"] == p_in:
                     st.session_state.autenticado = True
-                    st.session_state.usuario_id = u_in  # GUARDAMOS EL ID
+                    st.session_state.usuario_id = u_in
                     st.session_state.u_nombre_completo = usuarios[u_in].get("nombre", u_in)
                     st.rerun()
                 else: st.error("❌ Datos incorrectos")
@@ -130,10 +129,8 @@ if not st.session_state.autenticado:
                     st.success("✅ Cuenta creada. Ya puedes entrar.")
     st.stop()
 
-# --- 5. DASHBOARD FILTRADO POR USUARIO ---
+# --- 5. DASHBOARD FILTRADO ---
 df_g_full, df_i_full = cargar_bd()
-
-# FILTRO: Solo mostramos lo que pertenece al usuario que inició sesión
 df_g_user = df_g_full[df_g_full["Usuario"] == st.session_state.usuario_id].copy()
 df_i_user = df_i_full[df_i_full["Usuario"] == st.session_state.usuario_id].copy()
 
@@ -150,7 +147,6 @@ with st.sidebar:
 
     st.divider()
     if st.button("🔄 Arrastrar Balance Pasado"):
-        # Buscamos en los datos del usuario
         i_ant = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
         g_ant = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
         if not i_ant.empty:
@@ -171,15 +167,18 @@ with st.sidebar:
 # CUERPO APP
 st.markdown(f"<h1>Balance: {mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# Filtramos por mes y año sobre los datos del usuario
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_v = df_mes.reset_index(drop=True)
-# Ocultamos columnas de control en el editor
 for c in ["Año", "Periodo", "Usuario"]:
     if c in df_v.columns: df_v = df_v.drop(columns=[c])
 
+# --- MODIFICACIÓN: AGREGADA LA CATEGORÍA "Servicios" ---
 config_c = {
-    "Categoría": st.column_config.SelectboxColumn("Categoría", options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Otros"], required=True),
+    "Categoría": st.column_config.SelectboxColumn(
+        "Categoría", 
+        options=["Hogar", "Salud", "Transporte", "Impuestos", "Obligaciones", "Servicios", "Otros"], 
+        required=True
+    ),
     "Monto": st.column_config.NumberColumn("Valor Pagado", format="$ %,d"),
     "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,d"),
     "Pagado": st.column_config.CheckboxColumn("¿Pagado?")
@@ -187,10 +186,9 @@ config_c = {
 
 df_ed = st.data_editor(df_v, column_config=config_c, use_container_width=True, hide_index=True, num_rows="dynamic", key="master_ed_v2")
 
-# TIEMPO REAL
+# CÁLCULOS Y MÉTRICAS
 it, vp, vpy, fb, bf = calcular_metricas(df_ed, n_in, o_in, s_in)
 
-# TARJETAS DE MÉTRICAS
 cards = st.columns(5)
 def f_c(v): return f"$ {float(v):,.0f}".replace(",", ".")
 metrics = [("💵 Ingresos", it, "#1a1d21"), ("🏦 Fondos", fb, "#2575fc"), ("✅ Pagado", vp, "#28a745"), ("⏳ Pendiente", vpy, "#e74c3c"), ("⚖️ Final", bf, "#00D2FF")]
@@ -208,20 +206,16 @@ with cg2:
     gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=300)
     st.plotly_chart(gauge, use_container_width=True)
 
-# BOTÓN GUARDAR (SIN BORRAR A OTROS USUARIOS)
+# GUARDAR
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    # 1. Nuevos datos del mes para este usuario
     df_n = df_ed.dropna(subset=["Categoría", "Descripción"], how="all").assign(
         Periodo=mes_s, 
         Año=anio_s, 
         Usuario=st.session_state.usuario_id
     )
-    
-    # 2. Reconstruimos Gastos: Todo lo que NO sea este usuario+mes + los nuevos datos
     mask_g = (df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_full[~mask_g], df_n], ignore_index=True)
     
-    # 3. Reconstruimos Ingresos
     df_i_nuevo = pd.DataFrame({
         "Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], 
         "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]
