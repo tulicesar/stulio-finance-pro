@@ -1,4 +1,4 @@
-import streamlit as st # <-- IMPORTANTE: Debe ser la primera línea
+import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
@@ -10,19 +10,21 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Archivos de imagen
-LOGO_LOGIN = "logoapp 2.jpg"
+# Archivos de imagen y rutas
+LOGO_LOGIN = "logoapp 1.png"
 LOGO_APP_V = "LOGO APP.png"      
 LOGO_APP_H = "LOGO H APP.png"    
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
+# Paleta de Colores Stulio Designs
 COLOR_MAP = {
     "Hogar": "#FFB347", "Servicios": "#FFB347", "Salud": "#B39EB5", 
     "Transporte": "#77B5FE", "Obligaciones": "#FF6961", "Alimentación": "#FDFD96", 
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
+# CSS: Diseño Dark, Eliminación de Header y Tarjetas Premium
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -39,10 +41,11 @@ st.markdown("""
         padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
         font-size: 1rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
-        max-width: 90%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        max-width: 85%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
-    .stButton>button { border-radius: 8px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
+    .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
+    .login-box { max-width: 450px; margin: auto; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid #d4af37; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -108,11 +111,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         c.roundRect(50, y-80, 510, 85, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(70, y-40, f"Ingresos: $ {it_m:,.0f} | Pagados: $ {vp_m:,.0f} | Pendientes: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL: $ {bf_m:,.0f}")
+        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL (AHORRO): $ {bf_m:,.0f}")
         y -= 100
         if not g_m.empty:
             c.setFont("Helvetica-Bold", 8); c.setFillColor(HexColor("#1a1d21"))
-            c.drawString(60, y, "Categoría"); c.drawString(160, y, "Descripción"); c.drawRightString(480, y, "Monto"); c.drawRightString(540, y, "OK")
+            c.drawString(60, y, "Categoría"); c.drawString(160, y, "Descripción"); c.drawRightString(480, y, "Monto"); c.drawRightString(540, y, "Pagado")
             y -= 12; c.setFont("Helvetica", 8); c.setFillColor(colors.black)
             for _, r in g_m.iterrows():
                 if y < 50: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
@@ -123,7 +126,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 4. ACCESO ---
+# --- 4. ACCESO (LOGIN CON LOGOAPP 1.PNG) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
@@ -133,7 +136,7 @@ if not st.session_state.autenticado:
         if os.path.exists(LOGO_LOGIN):
             st.image(LOGO_LOGIN, use_container_width=True)
         else:
-            st.markdown("<h1 style='text-align: center; color: #d4af37;'>My FinanceApp</h1>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align: center; color: #d4af37;'>My Finance</h1>", unsafe_allow_html=True)
         
         tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
         usuarios = cargar_usuarios()
@@ -154,6 +157,7 @@ if not st.session_state.autenticado:
                 if rn_user and rn_pass:
                     usuarios[rn_user] = {"pass": rn_pass, "nombre": rn_full}
                     guardar_usuarios(usuarios); st.success("✅ Cuenta creada.")
+        st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
 # --- 5. DASHBOARD ---
@@ -167,6 +171,7 @@ with st.sidebar:
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
+    
     idx = periodos_list.index(mes_s)
     mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
     anio_ant = anio_s if idx > 0 else anio_s - 1
@@ -193,26 +198,26 @@ with st.sidebar:
             pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
             st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with col_ex2:
-        df_excel_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
+        df_ex = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
         output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_excel_mes.to_excel(writer, index=False, sheet_name='Detalle')
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_ex.to_excel(writer, index=False)
         st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
 
     st.divider()
     st.subheader("📈 Balances Semestrales")
     if st.button("📥 Semestre 1 (Ene-Jun)"):
-        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance 1er Semestre", anio_s)
+        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
         st.download_button("S1.pdf", pdf_s1, "Balance_S1.pdf")
 
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO PRINCIPAL ---
+# --- 6. HEADER ---
 c_logo_h, c_title = st.columns([1, 4])
 with c_logo_h: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
-with c_title: st.markdown(f"<h1>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
+with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
 
+# Lógica de Datos y Recurrencia
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
@@ -223,6 +228,7 @@ df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
 })
 
+# MÉTRICAS (LAS 5 TARJETAS)
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -250,8 +256,7 @@ with c_graf_dona:
 with c_graf_ahorro:
     st.markdown("**Eficiencia de Ahorro**")
     fig_gauge = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = ahorro_p,
+        mode = "gauge+number", value = ahorro_p,
         number = {'suffix': "%", 'font': {'color': '#d4af37'}},
         gauge = {
             'axis': {'range': [0, 100], 'tickcolor': "white"},
@@ -264,8 +269,7 @@ with c_graf_ahorro:
             ],
             'threshold': {
                 'line': {'color': "#d4af37", 'width': 6},
-                'thickness': 0.8,
-                'value': ahorro_p
+                'thickness': 0.85, 'value': ahorro_p
             }
         }
     ))
