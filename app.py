@@ -149,7 +149,7 @@ with st.sidebar:
     n_in = st.number_input("Nómina", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Nomina"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
     o_in = st.number_input("Otros", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Otros"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
 
-    # --- EXTRACTOS Y BALANCES ---
+    # --- EXTRACTOS ---
     st.divider()
     st.subheader("📑 Extractos del Mes")
     ca, cb = st.columns(2)
@@ -163,17 +163,21 @@ with st.sidebar:
         with pd.ExcelWriter(out, engine='xlsxwriter') as wr: df_ex.to_excel(wr, index=False)
         st.download_button(f"📊 Excel", out.getvalue(), f"Excel_{mes_s}.xlsx")
 
+    # --- BALANCES (RESTAURADOS) ---
     st.divider()
-    st.subheader("📈 Balances")
-    if st.button("📥 Semestre 1"):
-        pdf1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "S1", anio_s)
-        st.download_button("Descargar S1", pdf1, "S1.pdf")
+    st.subheader("📈 Balances Semestrales")
+    if st.button("📥 Semestre 1 (Ene-Jun)"):
+        pdf1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
+        st.download_button("Bajar S1", pdf1, "S1.pdf")
+    if st.button("📥 Semestre 2 (Jul-Dic)"):
+        pdf2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "Balance S2", anio_s)
+        st.download_button("Bajar S2", pdf2, "S2.pdf")
     
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CABECERA (LOGO AJUSTADO E IZQUIERDA) ---
-c_logo, c_vacia = st.columns([3, 1]) # Ocupa el 75% del ancho y alineado a la izquierda
+# --- 6. CABECERA (LOGO IZQUIERDA) ---
+c_logo, c_vacia = st.columns([3, 1])
 with c_logo:
     if os.path.exists(LOGO_APP_H): 
         st.image(LOGO_APP_H, use_container_width=True)
