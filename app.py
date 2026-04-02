@@ -10,6 +10,7 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
+# Rutas de archivos (Aseguradas)
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -27,11 +28,19 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* HACER EL TEXTO DE LAS TABLAS MUCHO MÁS GRANDE */
+    /* 1. TAMAÑO DE TEXTO MÁS GRANDE EN LAS TABLAS */
     [data-testid="stDataEditor"] { font-size: 1.4rem !important; }
     [data-testid="stDataEditor"] div { font-size: 1.4rem !important; }
-    [data-testid="stDataEditor"] input { font-size: 1.4rem !important; }
+    [data-testid="stDataEditor"] table { font-size: 1.4rem !important; }
+    [data-testid="stDataEditor"] th { font-size: 1.4rem !important; color: #d4af37 !important; }
+    [data-testid="stDataEditor"] td { font-size: 1.4rem !important; }
     
+    /* 2. ESTILO DE PESTAÑAS DE LOGIN (Para que el Registro sea visible) */
+    .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
+    .stTabs [data-baseweb="tab"] { color: #dee2e6; font-size: 1.2rem; }
+    .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
+
+    /* 3. TARJETAS DE MÉTRICAS */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -65,6 +74,7 @@ def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
     col_oi = ["Año", "Periodo", "Descripción", "Monto", "Usuario"]
+    
     if not os.path.exists(BASE_FILE): 
         return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
     try:
@@ -135,7 +145,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 3. ACCESO ---
+# --- 3. ACCESO RESTAURADO Y VISIBLE ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
@@ -144,21 +154,27 @@ if not st.session_state.autenticado:
         try: st.image(LOGO_LOGIN, use_container_width=True)
         except: st.markdown("<h2 style='text-align: center; color:#d4af37;'>My FinanceApp</h2>", unsafe_allow_html=True)
         
-        tab_in, tab_reg = st.tabs(["🔑 Login", "📝 Registro"])
+        # PESTAÑAS VISIBLES
+        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registrar Nuevo Usuario"])
         db_u = cargar_usuarios()
+        
         with tab_in:
             u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
-            if st.button("Iniciar Sesión", use_container_width=True):
+            if st.button("Ingresar", use_container_width=True):
                 if u in db_u and db_u[u]["pass"] == p:
                     st.session_state.autenticado = True
                     st.session_state.usuario_id = u
                     st.session_state.u_nombre_completo = db_u[u].get("nombre", u)
                     st.rerun()
                 else: st.error("❌ Credenciales incorrectas")
+        
         with tab_reg:
-            rn = st.text_input("Nombre"); ru = st.text_input("ID"); rp = st.text_input("Pass", type="password")
-            if st.button("Crear Cuenta"):
-                db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado con éxito")
+            rn = st.text_input("Nombre Completo"); ru = st.text_input("ID de Usuario Nuevo"); rp = st.text_input("Crear Contraseña", type="password")
+            if st.button("Crear Cuenta", use_container_width=True):
+                if ru in db_u: st.warning("El usuario ya existe.")
+                elif ru and rp:
+                    db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("¡Usuario creado con éxito! Ya puedes iniciar sesión.")
+                else: st.error("Completa todos los campos.")
     st.stop()
 
 # --- 4. PRE-PROCESAMIENTO ---
@@ -173,6 +189,7 @@ periodos = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Ago
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
+    # LOGO SIDEBAR CORREGIDO
     try:
         st.image(LOGO_SIDEBAR, use_container_width=True)
     except:
@@ -193,11 +210,11 @@ with st.sidebar:
     st.divider()
     arr_on = st.toggle(f"Arrastrar de {m_ant}", value=not i_ant.empty)
     
-    # Inputs normales sin formato de texto para evitar el error
-    s_in = st.number_input("Saldo Anterior ($)", value=s_sug if arr_on else 0.0)
-    n_in = st.number_input("Ingresos Fijos (Sueldo) ($)", value=float(df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)]["Nomina"].iloc[0] if not df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)].empty else 0.0))
+    # Inputs limpios sin formateo de string para evitar el error
+    s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else 0.0, step=1000.0)
+    n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)]["Nomina"].iloc[0] if not df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)].empty else 0.0), step=1000.0)
     
-    # Placeholder para recibir el dato en vivo y formatearlo como texto (evita error)
+    # Placeholder que recibirá el valor calculado convertido a texto
     placeholder_otros = st.empty()
 
     st.divider()
@@ -229,28 +246,30 @@ try: st.image(LOGO_APP_H, use_container_width=True)
 except: pass
 st.markdown(f"## {mes_s} {anio_s}")
 
-# CONFIGURACIÓN PARA QUE LAS TABLAS MUESTREN MONEDA
-formato_dinero = st.column_config.NumberColumn(format="$ %,d")
+# CONFIGURACIÓN PARA QUE LAS TABLAS MUESTREN EL $ Y SEPARADOR DE MILES
+config_moneda = st.column_config.NumberColumn("Monto", format="$ %d", step=1000)
 
-st.markdown("### 📝 Registro de Gastos")
+st.markdown("## 📝 Registro de Gastos") # Título más grande
 df_mes_g = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_ed_g = st.data_editor(
     df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), 
     use_container_width=True, 
     num_rows="dynamic",
-    column_config={"Monto": formato_dinero, "Valor Referencia": formato_dinero}
+    column_config={"Monto": config_moneda, "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %d", step=1000)},
+    key=f"g_edit_{mes_s}"
 )
 
-st.markdown("### 💰 Registro Otros Ingresos (Adicionales)")
+st.markdown("## 💰 Registro Otros Ingresos (Adicionales)") # Título más grande
 df_mes_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].copy()
 df_ed_oi = st.data_editor(
     df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), 
     use_container_width=True, 
     num_rows="dynamic",
-    column_config={"Monto": formato_dinero}
+    column_config={"Monto": config_moneda},
+    key=f"oi_edit_{mes_s}"
 )
 
-# Limpiar posibles strings antes de sumar
+# Limpiar las columnas numéricas de las tablas para evitar errores al sumar
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0.0)
 df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0.0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0.0)
@@ -258,10 +277,12 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0.0
 # CÁLCULO EN TIEMPO REAL
 otros_total_vivo = float(df_ed_oi["Monto"].sum())
 
-# Actualizamos el sidebar con un TEXT_INPUT de solo lectura formateado (esto elimina el error de formato)
-texto_otros_formateado = f"$ {otros_total_vivo:,.0f}".replace(",", ".")
-placeholder_otros.text_input("Otros (Calculado)", value=texto_otros_formateado, disabled=True)
+# Solución Definitiva al Error: En lugar de un number_input problemático, 
+# usamos un text_input inhabilitado donde nosotros controlamos el string a mano.
+texto_otros = f"$ {otros_total_vivo:,.0f}".replace(",", ".")
+placeholder_otros.text_input("Otros (Calculado Automáticamente)", value=texto_otros, disabled=True)
 
+# Recalcular métricas
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, otros_total_vivo, s_in)
 
 st.divider()
@@ -273,7 +294,7 @@ m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><di
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
 # --- 7. ANÁLISIS ---
-st.markdown("### 📊 Análisis")
+st.markdown("### 📊 Análisis de Distribución")
 c1, c2, c3 = st.columns([1.5, 1, 1.2])
 
 with c1:
