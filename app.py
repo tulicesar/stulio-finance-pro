@@ -12,8 +12,8 @@ st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", 
 
 # Nombres de archivos - VERIFICA QUE ESTÉN ASÍ EN GITHUB
 LOGO_LOGIN = "logoapp 1.png"
-LOGO_SIDEBAR = "logoapp 2.jpg" 
-LOGO_APP_H = "LOGOapp horizontal.png" # <--- CAMBIO REALIZADO AQUÍ
+LOGO_SIDEBAR = "logoapp 2.png" # <--- CAMBIO REALIZADO AQUÍ
+LOGO_APP_H = "LOGOapp horizontal.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
