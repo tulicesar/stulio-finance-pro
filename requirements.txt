@@ -1,6 +1,7 @@
+streamlit
 pandas
+plotly
 openpyxl
 xlsxwriter
 reportlab
-plotly
-streamlit
+pytz
