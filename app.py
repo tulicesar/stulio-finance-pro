@@ -10,7 +10,6 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Rutas de archivos (Aseguradas)
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -28,19 +27,19 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* 1. TAMAÑO DE TEXTO MÁS GRANDE EN LAS TABLAS */
+    /* TAMAÑO DE TEXTO MÁS GRANDE EN LAS TABLAS */
     [data-testid="stDataEditor"] { font-size: 1.4rem !important; }
     [data-testid="stDataEditor"] div { font-size: 1.4rem !important; }
     [data-testid="stDataEditor"] table { font-size: 1.4rem !important; }
     [data-testid="stDataEditor"] th { font-size: 1.4rem !important; color: #d4af37 !important; }
     [data-testid="stDataEditor"] td { font-size: 1.4rem !important; }
     
-    /* 2. ESTILO DE PESTAÑAS DE LOGIN (Para que el Registro sea visible) */
+    /* ESTILO DE PESTAÑAS DE LOGIN */
     .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
     .stTabs [data-baseweb="tab"] { color: #dee2e6; font-size: 1.2rem; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
 
-    /* 3. TARJETAS DE MÉTRICAS */
+    /* TARJETAS DE MÉTRICAS */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -145,7 +144,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 3. ACCESO RESTAURADO Y VISIBLE ---
+# --- 3. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
@@ -154,7 +153,6 @@ if not st.session_state.autenticado:
         try: st.image(LOGO_LOGIN, use_container_width=True)
         except: st.markdown("<h2 style='text-align: center; color:#d4af37;'>My FinanceApp</h2>", unsafe_allow_html=True)
         
-        # PESTAÑAS VISIBLES
         tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registrar Nuevo Usuario"])
         db_u = cargar_usuarios()
         
@@ -189,7 +187,6 @@ periodos = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Ago
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # LOGO SIDEBAR CORREGIDO
     try:
         st.image(LOGO_SIDEBAR, use_container_width=True)
     except:
@@ -210,11 +207,10 @@ with st.sidebar:
     st.divider()
     arr_on = st.toggle(f"Arrastrar de {m_ant}", value=not i_ant.empty)
     
-    # Inputs limpios sin formateo de string para evitar el error
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else 0.0, step=1000.0)
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)]["Nomina"].iloc[0] if not df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)].empty else 0.0), step=1000.0)
     
-    # Placeholder que recibirá el valor calculado convertido a texto
+    # Placeholder para Otros Ingresos (se llena más abajo con el cálculo en vivo)
     placeholder_otros = st.empty()
 
     st.divider()
@@ -246,10 +242,10 @@ try: st.image(LOGO_APP_H, use_container_width=True)
 except: pass
 st.markdown(f"## {mes_s} {anio_s}")
 
-# CONFIGURACIÓN PARA QUE LAS TABLAS MUESTREN EL $ Y SEPARADOR DE MILES
+# FORMATO DE MONEDA PARA LAS TABLAS EDITABLES
 config_moneda = st.column_config.NumberColumn("Monto", format="$ %d", step=1000)
 
-st.markdown("## 📝 Registro de Gastos") # Título más grande
+st.markdown("## 📝 Registro de Gastos")
 df_mes_g = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_ed_g = st.data_editor(
     df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), 
@@ -259,7 +255,7 @@ df_ed_g = st.data_editor(
     key=f"g_edit_{mes_s}"
 )
 
-st.markdown("## 💰 Registro Otros Ingresos (Adicionales)") # Título más grande
+st.markdown("## 💰 Registro Otros Ingresos (Adicionales)")
 df_mes_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].copy()
 df_ed_oi = st.data_editor(
     df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), 
@@ -269,20 +265,19 @@ df_ed_oi = st.data_editor(
     key=f"oi_edit_{mes_s}"
 )
 
-# Limpiar las columnas numéricas de las tablas para evitar errores al sumar
+# Limpiar las columnas antes de sumar (evita que Streamlit colapse si dejas celdas vacías)
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0.0)
 df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0.0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0.0)
 
-# CÁLCULO EN TIEMPO REAL
+# Sumar tabla de Otros Ingresos en tiempo real
 otros_total_vivo = float(df_ed_oi["Monto"].sum())
 
-# Solución Definitiva al Error: En lugar de un number_input problemático, 
-# usamos un text_input inhabilitado donde nosotros controlamos el string a mano.
+# Enviar cálculo formateado al Sidebar
 texto_otros = f"$ {otros_total_vivo:,.0f}".replace(",", ".")
 placeholder_otros.text_input("Otros (Calculado Automáticamente)", value=texto_otros, disabled=True)
 
-# Recalcular métricas
+# Calcular el resto de las métricas
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, otros_total_vivo, s_in)
 
 st.divider()
@@ -321,12 +316,22 @@ with c3:
     st.plotly_chart(pie, use_container_width=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    df_g_final = pd.concat([df_g_raw[~((df_g_raw["Periodo"]==mes_s)&(df_g_raw["Año"]==anio_s)&(df_g_raw["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    df_oi_final = pd.concat([df_oi_raw[~((df_oi_raw["Periodo"]==mes_s)&(df_oi_raw["Año"]==anio_s)&(df_oi_raw["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
+    # Limpiamos filas completamente vacías para no ensuciar el Excel
+    df_ed_g_clean = df_ed_g.dropna(how='all', subset=["Categoría", "Descripción", "Monto"])
+    df_ed_oi_clean = df_ed_oi.dropna(how='all', subset=["Descripción", "Monto"])
+
+    df_g_final = pd.concat([df_g_raw[~((df_g_raw["Periodo"]==mes_s)&(df_g_raw["Año"]==anio_s)&(df_g_raw["Usuario"]==u_id))], df_ed_g_clean.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
+    df_oi_final = pd.concat([df_oi_raw[~((df_oi_raw["Periodo"]==mes_s)&(df_oi_raw["Año"]==anio_s)&(df_oi_raw["Usuario"]==u_id))], df_ed_oi_clean.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
     df_i_final = pd.concat([df_i_raw[~((df_i_raw["Periodo"]==mes_s)&(df_i_raw["Año"]==anio_s)&(df_i_raw["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otros_total_vivo, "Usuario":u_id}])], ignore_index=True)
     
     with pd.ExcelWriter(BASE_FILE) as w:
         df_g_final.to_excel(w, sheet_name="Gastos", index=False)
         df_i_final.to_excel(w, sheet_name="Ingresos", index=False)
         df_oi_final.to_excel(w, sheet_name="OtrosIngresos", index=False)
-    st.balloons(); st.rerun()
+    
+    # LA SOLUCIÓN AL BUG VISUAL: Borramos la caché de las tablas para obligarlas a recargar la información que acabamos de guardar en Excel
+    if f"g_edit_{mes_s}" in st.session_state: del st.session_state[f"g_edit_{mes_s}"]
+    if f"oi_edit_{mes_s}" in st.session_state: del st.session_state[f"oi_edit_{mes_s}"]
+    
+    st.balloons()
+    st.rerun()
