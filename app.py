@@ -78,7 +78,6 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-# --- 3. MÓDULO DE REPORTES ---
 def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -86,7 +85,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.colors import HexColor
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
-    
     def head(canvas_obj, t, a):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21"))
@@ -94,14 +92,12 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 750, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
         return 710
-
     y = head(c, titulo, anio)
     for m in meses:
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
         it_m, vp_m, vpy_m, _, bf_m, _ = calcular_metricas(g_m, i_m["Nomina"].sum() if not i_m.empty else 0, i_m["Otros"].sum() if not i_m.empty else 0, s_ant_m)
-        
         if y < 220: c.showPage(); y = head(c, titulo, anio)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(70, y-40, f"Ingresos: $ {it_m:,.0f} | Pagado: $ {vp_m:,.0f} | Saldo: $ {bf_m:,.0f}")
@@ -150,15 +146,14 @@ with st.sidebar:
     n_in = st.number_input("Nómina", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Nomina"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
     o_in = st.number_input("Otros", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Otros"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
 
-    # --- EXTRACTOS Y BALANCES ---
     st.divider()
     st.subheader("📑 Extractos del Mes")
-    col_a, col_b = st.columns(2)
-    with col_a:
+    c_a, c_b = st.columns(2)
+    with c_a:
         if st.button(f"📄 PDF {mes_s[:3]}"):
             pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], f"Extracto {mes_s}", anio_s)
             st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
-    with col_b:
+    with c_b:
         df_ex = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
         df_ex = df_ex.drop(columns=["Usuario", "Año"], errors='ignore')
         output = BytesIO()
@@ -169,17 +164,19 @@ with st.sidebar:
     st.subheader("📈 Balances Semestrales")
     if st.button("📥 Semestre 1 (Ene-Jun)"):
         pdf1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "S1", anio_s)
-        st.download_button("S1.pdf", pdf1, "Balance_S1.pdf")
+        st.download_button("Descargar S1", pdf1, "Balance_S1.pdf")
     if st.button("📥 Semestre 2 (Jul-Dic)"):
         pdf2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "S2", anio_s)
-        st.download_button("S2.pdf", pdf2, "Balance_S2.pdf")
+        st.download_button("Descargar S2", pdf2, "Balance_S2.pdf")
     
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CABECERA ---
-if os.path.exists(LOGO_APP_H): 
-    st.image(LOGO_APP_H, use_container_width=True)
+# --- 6. CABECERA (LOGO AJUSTADO AL 50% CENTRADO) ---
+c_sp1, c_logo, c_sp2 = st.columns([0.5, 2, 0.5]) # Logo en el centro, tamaño moderado
+with c_logo:
+    if os.path.exists(LOGO_APP_H): 
+        st.image(LOGO_APP_H, use_container_width=True)
 
 st.markdown(f"<h1 style='text-align: center; margin-top: -10px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
