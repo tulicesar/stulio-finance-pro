@@ -42,7 +42,10 @@ st.markdown("""
     }
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
     .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
-    h2, h3 { color: #d4af37 !important; font-weight: bold !important; }
+    /* Estilo Premium para Títulos de Tablas y Sidebar */
+    [data-testid="stMarkdownContainer"] h3, [data-testid="stSidebarMarkdownContainer"] h3 { 
+        color: #d4af37 !important; font-weight: bold !important; border-bottom: 1px solid #d4af3733; padding-bottom: 5px; margin-bottom: 15px;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -85,7 +88,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF ---
+# --- 3. REPORTE PDF DETALLADO CON FECHA ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -98,6 +101,8 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
+        # FECHA DE GENERACIÓN
+        canvas_obj.setFont("Helvetica-Oblique", 8); canvas_obj.setFillColor(colors.grey)
         fecha_gen = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}"); return 710
     y = head(c, titulo, anio)
@@ -129,7 +134,7 @@ if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro de Nuevo Usuario"])
+        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro"])
         db_u = cargar_usuarios()
         with tab_in:
             u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
@@ -144,7 +149,7 @@ if not st.session_state.autenticado:
                 db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado con éxito")
     st.stop()
 
-# --- 5. LÓGICA SIDEBAR ---
+# --- 5. SIDEBAR ---
 u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd()
 
@@ -155,7 +160,6 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx>0 else "Diciembre"; a_ant = anio_s if idx>0 else anio_s-1
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     st.divider()
@@ -163,7 +167,7 @@ with st.sidebar:
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
     placeholder_otros = st.empty()
 
-    # TÍTULO SOLICITADO: Extracto del Mes
+    # TÍTULO CORREGIDO: Extracto del Mes
     st.divider(); st.subheader("📑 Extracto del Mes")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
@@ -177,6 +181,7 @@ with st.sidebar:
             df_oi_full[(df_oi_full["Periodo"]==mes_s)&(df_oi_full["Usuario"]==u_id)].to_excel(writer, sheet_name='OtrosIngresos', index=False)
         st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
 
+    # BOTONES DE SEMESTRE CORREGIDOS
     st.subheader("⚖️ Balances Proyectados")
     if st.button("📥 Semestre 1 (Ene-Jun)"):
         pdf1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "Proyección S1", anio_s, u_id)
@@ -194,15 +199,15 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 config_moneda = st.column_config.NumberColumn("Monto", format="$ %d")
 
 # TÍTULOS RESTAURADOS
-st.markdown("### 📝 Movimiento de Gastos")
+st.markdown("### [Icono-Gasto-Wallet] 📝 Movimiento de Gastos")
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_moneda}, key="g_ed")
 
-st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
+st.markdown("### [Icono-Ingreso-Cornucopia] 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
-# Cálculos Automáticos
+# Cálculos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
@@ -218,8 +223,8 @@ c3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 c4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
 c5.markdown(f'<div class="card"><div class="card-label">AHORRO PROYECTADO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 7. INFOGRAFÍAS RESTAURADAS ---
-st.markdown("### 📊 Análisis de Distribución")
+# --- 7. INFOGRAFÍAS (RESTAURADAS Y CORREGIDAS) ---
+st.markdown("### [Icono-Distribucion-Balanza] 📊 Análisis de Distribución")
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
 with inf1:
@@ -233,27 +238,58 @@ with inf1:
         for _, r in res.iterrows():
             st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"],"#eee")}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
 
+# VELOCÍMETRO BLINDADO (Aguja sale del centro del número)
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
-    # VELOCÍMETRO ESTILO IMAGEN (BLANCO Y DORADO)
-    fig2 = go.Figure(go.Indicator(
-        mode="gauge+number", value=ahorro_p,
-        number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
+    import math
+    valor_clamp = max(0, min(ahorro_p, 100))
+    angulo = (1 - valor_clamp / 100) * math.pi
+    r_needle = 0.28
+    
+    # Coordenadas del centro del número (pivot de la aguja)
+    x_pivot, y_pivot = 0.5, 0.4
+    
+    # Punta de la aguja
+    x_tip = x_pivot + r_needle * math.cos(angulo)
+    y_tip = y_pivot + r_needle * math.sin(angulo)
+    
+    fig2 = go.Figure()
+    
+    # 1. Base del indicador (invisible bar, invisible number/gauge text para control total)
+    fig2.add_trace(go.Indicator(
+        mode="gauge",
+        value=valor_clamp,
         gauge={
             'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#888", 'tickvals': [0, 20, 40, 60, 80, 100]},
-            'bar': {'color': "#d4af37", 'thickness': 0.6},
+            'bar': {'color': "rgba(0,0,0,0)"}, # Barra invisible
             'bgcolor': "white",
             'borderwidth': 1, 'bordercolor': "#ccc",
-            'steps': [
-                {'range': [0, ahorro_p], 'color': '#d4af37'},
-                {'range': [ahorro_p, 100], 'color': '#f2f2f2'}
-            ],
-            'threshold': {'line': {'color': "grey", 'width': 3}, 'thickness': 0.8, 'value': ahorro_p}
+            'steps': [{'range': [0, 100], 'color': '#f2f2f2'}],
         }
     ))
-    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
+    
+    # 2. Número porcentual como anotación central (Dorado, Premium)
+    fig2.add_annotation(text=f"{valor_clamp:.0f}<span style='color:grey; font-size:24px;'>%</span>",
+                      x=x_pivot, y=y_pivot, showarrow=False,
+                      font=dict(color="#d4af37", size=60, weight="bold"),
+                      align="center")
+    
+    # 3. AGUJA DE STULIO (Metal dorado), pivotando desde el centro del número
+    fig2.add_shape(type="line", x0=x_pivot, y0=y_pivot, x1=x_tip, y1=y_tip,
+                 line=dict(color="#d4af37", width=4))
+    
+    # 4. Pivot Dot (Gold) - punto central
+    fig2.add_shape(type="circle", x0=x_pivot-0.015, y0=y_pivot-0.015, x1=x_pivot+0.015, y1=y_pivot+0.015,
+                 fillcolor="#d4af37", line_color="#d4af37")
+
+    # 5. Etiqueta inferior
+    fig2.add_annotation(text="Ahorro Proyectado", x=x_pivot, y=0.15, showarrow=False,
+                      font=dict(color="#888", size=14, weight="bold"),
+                      align="center")
+
+    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=300,
+                      margin=dict(t=60,b=20,l=30,r=30))
     st.plotly_chart(fig2, use_container_width=True)
-    st.markdown("<p style='text-align:center; font-weight:bold; color:#888; margin-top:-30px;'>Ahorro Proyectado</p>", unsafe_allow_html=True)
 
 with inf3:
     st.markdown("#### Estado Real del Dinero")
@@ -264,11 +300,11 @@ with inf3:
         <div style='font-size:0.9rem; font-weight:bold;'>
         <span style='color:#2ecc71;'>● Pagado: $ {vp:,.0f}</span><br>
         <span style='color:#e74c3c;'>● Pendiente: $ {vpy:,.0f}</span><br>
-        <span style='color:#d4af37;'>● Ahorro Proyectado: $ {bf:,.0f}</span>
+        <span style='color:#d4af37;'>● Ahorro: $ {bf:,.0f}</span>
         </div>
     """, unsafe_allow_html=True)
 
-if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
+if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     df_g_final = pd.concat([df_g_full[~((df_g_full["Periodo"]==mes_s)&(df_g_full["Año"]==anio_s)&(df_g_full["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
     df_oi_final = pd.concat([df_oi_full[~((df_oi_full["Periodo"]==mes_s)&(df_oi_full["Año"]==anio_s)&(df_oi_full["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
     df_i_final = pd.concat([df_i_full[~((df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otr_vivos, "Usuario":u_id}])], ignore_index=True)
