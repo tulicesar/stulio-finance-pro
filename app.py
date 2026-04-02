@@ -10,7 +10,7 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Rutas de archivos CORREGIDAS
+# Rutas de archivos (Corregido a logoapp 2.png)
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -169,7 +169,7 @@ periodos = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Ago
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # 1. LOGO FORZADO (.png)
+    # 1. LOGO FORZADO A .PNG
     try:
         st.image(LOGO_SIDEBAR, use_container_width=True)
     except:
@@ -233,6 +233,11 @@ df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción",
 st.markdown("### 💰 Registro Otros Ingresos (Adicionales)")
 df_mes_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
+
+# SOLUCIÓN CRÍTICA: FORZAR CONVERSIÓN A NÚMEROS ANTES DE SUMAR
+df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0.0)
+df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0.0)
+df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0.0)
 
 # CÁLCULO EN TIEMPO REAL PARA EL SIDEBAR
 otros_total_vivo = float(df_ed_oi["Monto"].sum())
