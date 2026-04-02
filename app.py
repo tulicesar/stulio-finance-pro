@@ -19,12 +19,21 @@ LOGO_APP_H = "LOGOapp horizontal.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-LISTA_CATEGORIAS = ["Hogar", "Servicios", "Salud", "Transporte", "Obligaciones", "Alimentación", "Impuestos", "Otros"]
+# LISTA DE CATEGORÍAS ACTUALIZADA (CON OBLIGACIONES FINANCIERAS)
+LISTA_CATEGORIAS = [
+    "Hogar", "Servicios", "Salud", "Transporte", "Alimentación", 
+    "Educación", "Cuidado Personal", "Entretenimiento", "Suscripciones", 
+    "Seguros", "Mascotas", "Inversiones", "Impuestos", "Regalos", 
+    "Obligaciones Finacieras", "Otros"
+]
 
+# MAPA DE COLORES PERSONALIZADO
 COLOR_MAP = {
-    "Hogar": "#FFB347", "Servicios": "#FFB347", "Salud": "#B39EB5", 
-    "Transporte": "#77B5FE", "Obligaciones": "#FF6961", "Alimentación": "#FDFD96", 
-    "Otros": "#77DD77", "Impuestos": "#84b6f4"
+    "Hogar": "#FFB347", "Servicios": "#AEC6CF", "Salud": "#B39EB5", 
+    "Transporte": "#77B5FE", "Alimentación": "#FDFD96", "Educación": "#77DD77",
+    "Cuidado Personal": "#FFB7C5", "Entretenimiento": "#FF6961", "Suscripciones": "#CFCFCF",
+    "Seguros": "#84b6f4", "Mascotas": "#FFD1DC", "Inversiones": "#B2E2F2",
+    "Impuestos": "#DEA5A4", "Regalos": "#F49AC2", "Obligaciones Finacieras": "#999999", "Otros": "#96DED1"
 }
 
 st.markdown("""
@@ -54,7 +63,6 @@ st.markdown("""
 
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
 def format_moneda(valor):
-    """Convierte un número a formato string: $ 1.000.000"""
     try:
         n = int(float(valor))
         return f"$ {n:,.0f}".replace(",", ".")
@@ -62,7 +70,6 @@ def format_moneda(valor):
         return "$ 0"
 
 def parse_moneda(texto):
-    """Limpia el string formateado para obtener el número puro"""
     if not texto: return 0.0
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
@@ -84,7 +91,6 @@ def sanitize(df):
     if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
     if "Periodo" in df.columns: df["Periodo"] = df["Periodo"].astype(str).str.strip()
     if "Usuario" in df.columns: df["Usuario"] = df["Usuario"].astype(str).str.strip()
-    # ACTIVACIÓN DE CHECKS: Aseguramos que las columnas de check sean booleanas
     if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
     if "Movimiento Recurrente" in df.columns: df["Movimiento Recurrente"] = df["Movimiento Recurrente"].astype(bool)
     return df
@@ -97,8 +103,7 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        try: df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
-        except: df_oi = pd.DataFrame(columns=col_oi)
+        df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
         return sanitize(df_g), sanitize(df_i), sanitize(df_oi)
     except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
 
@@ -106,6 +111,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
     vp = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
     if not df_g.empty:
+        # Si Pagado es False, suma Monto. Si Monto es 0, usa Valor Referencia.
         vpy = df_g[df_g["Pagado"] == False].apply(lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1).sum()
     else: vpy = 0
     bf = it - vp - vpy
@@ -222,11 +228,13 @@ with st.sidebar:
     idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"; a_ant = anio_s if idx > 0 else anio_s-1
     i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
     g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant) & (df_g_full["Usuario"] == u_id)]
-    oi_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
     
     s_sug = 0.0
     if not i_ant.empty:
-        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
+        # Recuperamos ingresos variables del mes anterior para el cálculo del sugerido
+        oi_m_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
+        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_m_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
+    
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=False)
     
     val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
@@ -277,7 +285,6 @@ if df_mes_g.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
                 df_mes_g["Pagado"] = False 
 
-# CONFIGURACIÓN DE TABLAS (CORREGIDO: Ambos checks activados explícitamente)
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
