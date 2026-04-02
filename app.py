@@ -30,7 +30,6 @@ st.markdown("""
     <style>
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
-    /* TABLAS XL GIGANTES */
     [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -56,7 +55,9 @@ st.markdown("""
 def cargar_usuarios():
     if os.path.exists(USER_DB):
         with open(USER_DB, "r") as f:
-            try: return json.load(f)
+            try: 
+                data = json.load(f)
+                if isinstance(data, dict): return data
             except: pass
     return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
 
@@ -97,7 +98,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
-    db_u = cargar_usuarios(); nombre_usuario = db_u.get(u_id, {}).get("nombre", u_id)
+    db_u = cargar_usuarios()
+    # Acceso seguro al nombre del usuario
+    info_u = db_u.get(u_id, {})
+    nombre_usuario = info_u.get("nombre", u_id) if isinstance(info_u, dict) else u_id
+    
     buf = BytesIO(); c = canvas.Canvas(buf, pagesize=letter)
     total_periodo_nomina, total_periodo_otros, total_periodo_gastos = 0, 0, 0
 
@@ -175,16 +180,38 @@ if not st.session_state.autenticado:
             u = st.text_input("Usuario", key="login_u")
             p = st.text_input("Pass", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
-                if u in db_u and db_u[u]["pass"] == p:
-                    st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, db_u[u].get("nombre", u)
-                    st.rerun()
-                else: st.error("❌ Credenciales incorrectas")
+                # FIX: Verificación robusta del usuario
+                if u in db_u:
+                    u_data = db_u[u]
+                    # Manejo de usuarios antiguos (donde u_data era solo la contraseña string)
+                    password_correcta = False
+                    if isinstance(u_data, dict):
+                        password_correcta = (u_data.get("pass") == p)
+                        nombre_final = u_data.get("nombre", u)
+                    else:
+                        password_correcta = (u_data == p)
+                        nombre_final = u
+
+                    if password_correcta:
+                        st.session_state.autenticado = True
+                        st.session_state.usuario_id = u
+                        st.session_state.u_nombre_completo = nombre_final
+                        st.rerun()
+                    else:
+                        st.error("❌ Contraseña incorrecta")
+                else:
+                    st.error("❌ Usuario no encontrado")
         with t_reg:
             rn = st.text_input("Nombre", key="reg_n")
             ru = st.text_input("ID Usuario", key="reg_u")
             rp = st.text_input("Pass", type="password", key="reg_p")
             if st.button("Crear Cuenta"):
-                db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado")
+                if ru in db_u:
+                    st.warning("⚠️ El usuario ya existe")
+                else:
+                    db_u[ru] = {"pass": rp, "nombre": rn}
+                    guardar_usuarios(db_u)
+                    st.success("✅ Cuenta creada con éxito")
     st.stop()
 
 # --- 5. LÓGICA SIDEBAR ---
@@ -207,10 +234,7 @@ with st.sidebar:
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant.empty)
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
-    
-    # ACTUALIZADO: Nuevo nombre para Ingreso Fijo
     n_in = st.number_input("Ingreso Fijo (Sueldo o Nomina)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
-    
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
@@ -235,7 +259,6 @@ with st.sidebar:
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
-# CARGA INTELIGENTE (MEMORIA DE RECURRENCIA)
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
 if df_mes_g.empty:
@@ -271,7 +294,6 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# ETIQUETAS KPI DINÁMICAS
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
 st.divider(); c_kpi = st.columns(5)
