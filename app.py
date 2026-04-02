@@ -6,6 +6,7 @@ import os
 import json
 from io import BytesIO
 from datetime import datetime
+import pytz  # Nueva librería para el uso horario
 
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
@@ -92,14 +93,25 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
     buf = BytesIO(); c = canvas.Canvas(buf, pagesize=letter)
+    
     def head(canvas_obj, t, a):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 16); canvas_obj.drawString(50, 765, "My FinanceApp")
         canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
-        fecha_gen = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}"); return 710
+        
+        # --- AJUSTE DE HORA Y TAMAÑO DE TEXTO ---
+        # Definimos la zona horaria (ej: America/Bogota para Colombia)
+        tz = pytz.timezone('America/Bogota') 
+        fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
+        
+        canvas_obj.setFont("Helvetica", 7) # Texto más pequeño (antes era el default)
+        canvas_obj.setFillColor(colors.grey) # Un color gris suave para que sea sutil
+        canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
+        # ----------------------------------------
+        return 710
+
     y = head(c, titulo, anio)
     for m in meses:
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == u_id)]
@@ -114,7 +126,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
-        c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
+        c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.drawString(60, y, f"Saldo Ant: $ {s_ant:,.0f} | Nómina: $ {nom:,.0f} | Extras: $ {otr_sum:,.0f}"); y -= 30
         c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
         for _, row in g_m.iterrows():
@@ -123,6 +135,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         y -= 20
     c.showPage(); c.save(); buf.seek(0); return buf
 
+# (El resto de tu código de ACCESO y LÓGICA DE APP se mantiene igual...)
 # --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
@@ -155,7 +168,6 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    # --- ARRASTRE DE SALDO AUTOMÁTICO (RESTAURADO) ---
     idx = meses_lista.index(mes_s)
     m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"
     a_ant = anio_s if idx > 0 else anio_s-1
@@ -178,7 +190,6 @@ with st.sidebar:
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
     placeholder_otros = st.empty()
 
-    # TÍTULO: Extracto del Mes
     st.divider(); st.subheader("📑 Extracto del Mes")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
@@ -216,7 +227,6 @@ st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
-# Cálculos Automáticos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
@@ -249,7 +259,6 @@ with inf1:
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
-    # VELOCÍMETRO ESTILO IMAGEN (BLANCO Y DORADO)
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number", value=ahorro_p,
         number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
@@ -282,8 +291,6 @@ with inf3:
         </div>
     """, unsafe_allow_html=True)
 
-# --- REUBICACIÓN DEL BOTÓN ---
-# Añadimos exactamente dos espacios moderados
 st.markdown("<br><br>", unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
