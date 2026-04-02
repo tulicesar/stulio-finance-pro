@@ -13,7 +13,7 @@ st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", 
 # Nombres de archivos - VERIFICA QUE ESTÉN ASÍ EN GITHUB
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
-LOGO_APP_H = "LOGOapp horizontal.png" # <--- CAMBIO REALIZADO AQUÍ
+LOGO_APP_H = "LOGOapp horizontal.png" 
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
@@ -23,18 +23,11 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# CSS REPARADO: Fuerza la visibilidad de la flecha del sidebar y estilo general
+# CSS: Estilos generales y personalización de tabla
 st.markdown("""
     <style>
-    /* Forzar visibilidad del botón para abrir sidebar (Flecha) */
-    [data-testid="stSidebarNavSeparator"] { display: none; }
-    button[kind="headerNoSpacing"] {
-        display: flex !important;
-        visibility: visible !important;
-        color: #d4af37 !important;
-    }
-    
-    /* Ocultar header pero permitir interactividad */
+    /* Forzar visibilidad del botón para abrir sidebar */
+    button[kind="headerNoSpacing"] { display: flex !important; visibility: visible !important; color: #d4af37 !important; }
     header { background-color: rgba(0,0,0,0) !important; }
     [data-testid="stHeader"] { background: none !important; }
 
@@ -42,10 +35,10 @@ st.markdown("""
     
     /* Aumentar texto del Registro de Movimientos (Tabla) */
     [data-testid="stDataEditor"] div {
-        font-size: 1.1rem !important;
+        font-size: 1.15rem !important;
     }
     
-    /* Tarjetas */
+    /* Tarjetas de métricas */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -54,7 +47,6 @@ st.markdown("""
     .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
     .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; margin: 3px 0; }
     
-    /* Barras de leyenda */
     .legend-bar {
         padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
         font-size: 1rem; font-weight: bold; color: #1a1d21; 
@@ -102,7 +94,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-# --- 3. MÓDULO DE REPORTES REPARADO ---
+# --- 3. MÓDULO DE REPORTES ---
 def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -125,15 +117,13 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
         it_m, vp_m, vpy_m, _, bf_m, _ = calcular_metricas(g_m, i_m["Nomina"].sum() if not i_m.empty else 0, i_m["Otros"].sum() if not i_m.empty else 0, s_ant_m)
-        
         if y < 220: c.showPage(); y = head(c, titulo, anio)
         c.setStrokeColor(colors.lightgrey); c.setFillColor(HexColor("#f8f8f8"))
         c.roundRect(50, y-80, 510, 85, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(70, y-40, f"Ingresos: $ {it_m:,.0f} | Pagados: $ {vp_m:,.0f} | Pendientes: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL (AHORRO): $ {bf_m:,.0f}")
+        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL: $ {bf_m:,.0f}")
         y -= 100
-        
         if not g_m.empty:
             c.setFont("Helvetica-Bold", 8); c.setFillColor(HexColor("#1a1d21"))
             c.drawString(60, y, "Categoría"); c.drawString(160, y, "Descripción"); c.drawRightString(480, y, "Monto"); c.drawRightString(540, y, "Pagado")
@@ -213,41 +203,38 @@ with st.sidebar:
     n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
-    # --- NUEVOS MÓDULOS DE REPORTES RESTAURADOS ---
     st.divider()
-    st.subheader("📑 Extractos del Mes")
+    st.subheader("📑 Reportes")
     col_ex1, col_ex2 = st.columns(2)
     with col_ex1:
         if st.button(f"📄 PDF {mes_s[:3]}"):
             pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
             st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with col_ex2:
-        df_excel_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
+        df_ex_export = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
         output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df_excel_mes.to_excel(writer, index=False, sheet_name='Detalle')
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_ex_export.to_excel(writer, index=False)
         st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
 
     st.divider()
     st.subheader("📈 Balances Semestrales")
     if st.button("📥 Semestre 1 (Ene-Jun)"):
-        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance 1er Semestre", anio_s)
+        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
         st.download_button("S1.pdf", pdf_s1, "Balance_S1.pdf")
     if st.button("📥 Semestre 2 (Jul-Dic)"):
-        pdf_s2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "Balance 2do Semestre", anio_s)
+        pdf_s2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "Balance S2", anio_s)
         st.download_button("S2.pdf", pdf_s2, "Balance_S2.pdf")
 
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO PRINCIPAL ---
-c_logo_h, c_title = st.columns([1, 4])
-with c_logo_h: 
-    # Logo Horizontal Gigante Aumentado
-    if os.path.exists(LOGO_APP_H): 
-        # use_container_width=True y proporción de columna 1 lo hacen gigante
-        st.image(LOGO_APP_H, use_container_width=True)
-with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
+# --- 6. CUERPO PRINCIPAL (LOGO FULL WIDTH) ---
+if os.path.exists(LOGO_APP_H): 
+    # Al no usar columnas aquí, abarca todo el ancho disponible
+    st.image(LOGO_APP_H, use_container_width=True)
+
+# Título de Mes centrado y profesional
+st.markdown(f"<h1 style='text-align: center; margin-top: -20px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
 # Lógica de Datos y Recurrencia
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
@@ -255,14 +242,14 @@ if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
     if not df_rec.empty: df_mes = df_rec.copy().assign(Pagado=False, Monto=0)
 
-# REGISTRO DE MOVIMIENTOS CON TEXTO AUMENTADO
+# REGISTRO DE MOVIMIENTOS
 st.markdown("### 📝 Registro de Movimientos")
 df_v = df_mes.reset_index(drop=True).drop(columns=["Año", "Periodo", "Usuario"], errors='ignore')
 df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f"ed_{mes_s}", column_config={
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
 })
 
-# MÉTRICAS (LAS 5 TARJETAS COMPLETAS RESTAURADAS)
+# MÉTRICAS
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -277,25 +264,21 @@ st.markdown("### 📊 Análisis de Gastos")
 c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
 with c_graf_dona:
-    st.markdown("**Desglose Presupuestado (Monto + Pendiente)**")
+    st.markdown("**Desglose Presupuestado**")
     df_ed['Total_Cat'] = df_ed.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not df_ed.empty and df_ed["Total_Cat"].sum() > 0:
         fig_pie = px.pie(df_ed, values='Total_Cat', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
         fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
-        
         df_sum = df_ed.groupby("Categoría")["Total_Cat"].sum().reset_index()
         for _, r in df_sum.iterrows():
             st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"], "#eee")}">{r["Categoría"]} <span>$ {r["Total_Cat"]:,.0f}</span></div>', unsafe_allow_html=True)
-    else: st.info("ℹ️ Sin datos.")
 
 with c_graf_ahorro:
-    st.markdown("**Eficiencia (Velocímetro Pro)**")
-    # Gráfico de velocímetro con AGUJA (threshold)
+    st.markdown("**Eficiencia de Ahorro**")
     fig_gauge = go.Figure(go.Indicator(
-        mode = "gauge+number",
-        value = ahorro_p,
-        number = {'suffix': "%", 'font':{'color':'#d4af37'}},
+        mode = "gauge+number", value = ahorro_p,
+        number = {'suffix': "%", 'font': {'color': '#d4af37'}},
         gauge = {
             'axis': {'range': [0, 100], 'tickcolor': "white"},
             'bar': {'color': "white", 'thickness': 0.25},
@@ -323,7 +306,6 @@ with c_graf_status:
     fig_status.update_layout(showlegend=True, paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=380, margin=dict(t=0, b=0, l=0, r=0))
     st.plotly_chart(fig_status, use_container_width=True)
 
-# GUARDAR
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     df_n = df_ed.assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
