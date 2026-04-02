@@ -10,7 +10,6 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Rutas de archivos
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.jpg" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -63,19 +62,14 @@ def cargar_bd():
     
     if not os.path.exists(BASE_FILE): 
         return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
-    
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        try:
-            df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
-        except:
-            df_oi = pd.DataFrame(columns=col_oi)
-        
+        try: df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
+        except: df_oi = pd.DataFrame(columns=col_oi)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
         return df_g, df_i, df_oi
-    except:
-        return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
+    except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
 
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
@@ -87,37 +81,35 @@ def calcular_metricas(df_g, nom, otr, s_ant):
 
 # --- 3. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
-
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        tab_in, tab_reg = st.tabs(["🔑 Login", "📝 Registro"])
-        db_u = cargar_usuarios()
-        with tab_in:
-            u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
-            if st.button("Iniciar Sesión", use_container_width=True):
-                if u in db_u and db_u[u]["pass"] == p:
-                    st.session_state.autenticado, st.session_state.usuario_id = True, u
-                    st.session_state.u_nombre_completo = db_u[u].get("nombre", u); st.rerun()
-        with tab_reg:
-            rn, ru, rp = st.text_input("Nombre"), st.text_input("ID"), st.text_input("Pass", type="password")
-            if st.button("Crear Cuenta"):
-                db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado")
+        u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
+        if st.button("Entrar", use_container_width=True):
+            db_u = cargar_usuarios()
+            if u in db_u and db_u[u]["pass"] == p:
+                st.session_state.autenticado, st.session_state.usuario_id = True, u
+                st.session_state.u_nombre_completo = db_u[u].get("nombre", u); st.rerun()
     st.stop()
 
-# --- 4. DASHBOARD ---
+# --- 4. PRE-PROCESAMIENTO DE DATOS ---
 df_g_raw, df_i_raw, df_oi_raw = cargar_bd()
 u_id = st.session_state.usuario_id
+
+# Filtros iniciales por usuario
 df_g_user = df_g_raw[df_g_raw["Usuario"] == u_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == u_id].copy()
 df_oi_user = df_oi_raw[df_oi_raw["Usuario"] == u_id].copy()
 
 periodos = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
+# --- 5. SIDEBAR ---
 with st.sidebar:
-    # 1. LOGO SIDEBAR RESTAURADO
-    if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
+    # LOGO SIDEBAR (Corregido: Primera posición)
+    if os.path.exists(LOGO_SIDEBAR):
+        st.image(LOGO_SIDEBAR, use_container_width=True)
+    
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos, index=datetime.now().month-1)
@@ -136,38 +128,50 @@ with st.sidebar:
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else 0.0)
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Nomina"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
     
-    # 2. SUMA EXCLUSIVA DEL MES PARA "OTROS"
-    oi_mes_db = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)]
-    otros_calc = oi_mes_db["Monto"].sum()
-    st.number_input("Otros (Calculado)", value=float(otros_calc), disabled=True)
+    # CÁLCULO DE OTROS (Sincronizado con la tabla de abajo)
+    # Se usa el estado del editor si existe, sino la base de datos
+    if f"oi_edit_{mes_s}" in st.session_state:
+        # Extraer montos de la tabla editable en tiempo real
+        oi_data = st.session_state[f"oi_edit_{mes_s}"]
+        otros_total = sum(row.get("Monto", 0) for row in oi_data.get("edited_rows", {}).values()) + \
+                      sum(row.get("Monto", 0) for row in oi_data.get("added_rows", []))
+        # Sumar los que ya estaban y no se tocaron
+        df_base_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)]
+        # Lógica simplificada: El editor sobreescribe. Para ver cambios inmediatos usamos una suma directa del DF que el editor actualiza
+    else:
+        otros_total = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)]["Monto"].sum()
 
-    # 3. REPORTES RESTAURADOS
+    st.number_input("Otros (Calculado)", value=float(otros_total), disabled=True)
+
+    # REPORTES Y BALANCES
     st.divider(); st.subheader("📑 Extracto Mensual")
-    c_pdf, c_xls = st.columns(2)
-    with c_pdf: st.button("📄 PDF")
-    with c_xls:
-        out = BytesIO()
-        df_g_user[df_g_user["Periodo"]==mes_s].to_excel(out, index=False)
-        st.download_button("📊 Excel", out.getvalue(), f"Extracto_{mes_s}.xlsx")
+    col_pdf, col_xls = st.columns(2)
+    with col_pdf: st.button("📄 PDF")
+    with col_xls:
+        # BOTÓN EXCEL HABILITADO
+        buf_xls = BytesIO()
+        with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
+            df_g_user[df_g_user["Periodo"]==mes_s].to_excel(writer, index=False, sheet_name="Gastos")
+        st.download_button("📊 Excel", buf_xls.getvalue(), f"Extracto_{mes_s}.xlsx")
     
     st.subheader("⚖️ Balances Semestrales")
     st.button("📥 Semestre 1"); st.button("📥 Semestre 2")
 
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 5. CUERPO ---
+# --- 6. CUERPO ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## {mes_s} {anio_s}")
 
 st.markdown("### 📝 Registro de Gastos")
-df_ed_g = st.data_editor(df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
+df_ed_g = st.data_editor(df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key=f"g_edit_{mes_s}")
 
 st.markdown("### 💰 Registro Otros Ingresos (Adicionales)")
-# Editor de otros ingresos del mes
-df_ed_oi = st.data_editor(df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key="oi_edit")
+df_ed_oi = st.data_editor(df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key=f"oi_edit_{mes_s}")
 
-# Recalcular métricas con los datos en vivo del editor
-it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, df_ed_oi["Monto"].sum(), s_in)
+# Recalcular métricas finales con datos vivos de las tablas
+otros_vivos = df_ed_oi["Monto"].sum()
+it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, otros_vivos, s_in)
 
 st.divider()
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -177,7 +181,7 @@ m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 6. ANÁLISIS ---
+# --- 7. ANÁLISIS ---
 st.markdown("### 📊 Análisis de Gastos")
 c1, c2, c3 = st.columns([1.5, 1, 1.2])
 with c1:
@@ -204,12 +208,12 @@ with c3:
     st.plotly_chart(pie, use_container_width=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    # Limpiar y concatenar gastos
+    # Guardar Gastos
     df_g_final = pd.concat([df_g_raw[~((df_g_raw["Periodo"]==mes_s)&(df_g_raw["Año"]==anio_s)&(df_g_raw["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    # Limpiar y concatenar otros ingresos
+    # Guardar Otros Ingresos
     df_oi_final = pd.concat([df_oi_raw[~((df_oi_raw["Periodo"]==mes_s)&(df_oi_raw["Año"]==anio_s)&(df_oi_raw["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    # Guardar ingresos base
-    df_i_final = pd.concat([df_i_raw[~((df_i_raw["Periodo"]==mes_s)&(df_i_raw["Año"]==anio_s)&(df_i_raw["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":df_ed_oi["Monto"].sum(), "Usuario":u_id}])], ignore_index=True)
+    # Guardar Ingresos Base (Se guarda el otros_vivos calculado)
+    df_i_final = pd.concat([df_i_raw[~((df_i_raw["Periodo"]==mes_s)&(df_i_raw["Año"]==anio_s)&(df_i_raw["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otros_vivos, "Usuario":u_id}])], ignore_index=True)
     
     with pd.ExcelWriter(BASE_FILE) as w:
         df_g_final.to_excel(w, sheet_name="Gastos", index=False)
