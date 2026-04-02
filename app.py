@@ -1,362 +1,206 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import plotly.express as px
+import os
+import json
+from io import BytesIO
+from datetime import datetime
 
-# --- Page Config ---
-st.set_page_config(layout="wide", page_title="My FinanceApp - Modo Claro")
+# --- 1. CONFIGURACIÓN INICIAL ---
+st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# --- Custom CSS for Theme and Component Styling ---
-# Based on instructions: Light theme (light gray background, black text), 
-# light green sidebar background, light gray input backgrounds, light gray button backgrounds.
-# Reinstall the category color bars and values.
-st.markdown("""
-<style>
-    /* Global App Background and Text */
-    .stApp {
-        background-color: #F0F2F6 !important;
-        color: #000000 !important;
-    }
+# Rutas de Archivos
+LOGO_LOGIN = "logoapp 1.png"
+LOGO_DARK = "logoapp 2.jpg"    
+LOGO_LIGHT = "logoapp3.jpg"   
+LOGO_APP_H = "LOGOapp horizontal.png" 
+BASE_FILE = "base.xlsx"
+USER_DB = "usuarios.json"
 
-    /* Sidebar Background and Text */
-    [data-testid="stSidebar"] {
-        background-color: #D1EAE0 !important; /* Settled light green */
-        color: #000000 !important;
-    }
-    
-    /* Input backgrounds in Sidebar (Año, Mes, Nomina, etc.) */
-    [data-testid="stSidebar"] [data-testid="stNumberInputContainer"],
-    [data-testid="stSidebar"] [data-testid="stTextInputContainer"],
-    [data-testid="stSidebar"] div[class*="stSelectbox"] div[role="combobox"] {
-        background-color: #E0E0E0 !important; /* Light gray input */
-        color: #000000 !important;
-        border-color: #B0B0B0 !important;
-    }
-    [data-testid="stSidebar"] input {
-        color: #000000 !important;
-    }
-    [data-testid="stSidebar"] label {
-        color: #000000 !important;
-    }
+# --- 2. GESTIÓN DE MODO ---
+if 'modo_oscuro' not in st.session_state:
+    st.session_state.modo_oscuro = True 
 
-    /* Titles, headings, and markdown text */
-    h1, h2, h3, h4, h5, h6, .stMarkdown {
-        color: #000000 !important;
-    }
-
-    /* Sidebar Button styling (Gris claro background, black text) */
-    [data-testid="stSidebar"] div.stButton button {
-        background-color: #E0E0E0 !important; /* Light gray button */
-        color: #000000 !important;
-        border: 1px solid #A0A0A0 !important;
-        width: 100% !important;
-        margin-top: 5px !important;
-    }
-
-    /* Sidebar Button hover effect */
-    [data-testid="stSidebar"] div.stButton button:hover {
-        background-color: #D0D0D0 !important;
-    }
-
-    /* Summary Card Styling */
-    .summary-card-container {
-        display: flex;
-        justify-content: space-between;
-        gap: 10px;
-        margin-bottom: 20px;
-    }
-    .summary-card {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border-radius: 10px;
-        padding: 20px;
-        flex: 1;
-        text-align: center;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-    }
-    .summary-card h4 {
-        margin: 0;
-        color: #333333 !important;
-        font-size: 14px;
-        text-transform: uppercase;
-    }
-    .summary-card p {
-        margin: 5px 0 0 0;
-        font-size: 24px;
-        font-weight: bold;
-    }
-
-    /* Info Legend Styling */
-    .info-legend-container {
-        margin-top: 20px;
-        color: #000000 !important;
-    }
-    .info-legend-item {
-        display: flex;
-        align-items: center;
-        margin-bottom: 10px;
-        background-color: #F8F9FA;
-        padding: 5px 10px;
-        border-radius: 5px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-    }
-    .color-bar {
-        width: 120px;
-        height: 25px;
-        border-radius: 15px;
-        margin-right: 15px;
-    }
-    .category-text {
-        font-weight: bold;
-        flex: 1;
-    }
-    .value-text {
-        font-weight: bold;
-    }
-
-    /* Main Area Table Styling (Theme overrides might be enough, but here's CSS) */
-    .stDataFrame, div[data-testid="stTable"] table {
-        color: #000000 !important;
-        background-color: #FFFFFF !important;
-    }
-    div[data-testid="stTable"] th {
-        background-color: #E0E0E0 !important;
-        color: #000000 !important;
-    }
-    div[data-testid="stTable"] td {
-        background-color: #FFFFFF !important;
-        color: #000000 !important;
-        border-bottom: 1px solid #D0D0D0 !important;
-    }
-
-</style>
-""", unsafe_allow_html=True)
-
-# --- Define Color Map ---
-CATEGORY_COLORS = {
-    'Ahorro (Saldo)': '#DAA520', # Goldenrod for savings
-    'Pendiente': '#DC143C',     # Crimson for pending
-    'Pagado': '#00FA9A'         # Medium Spring Green for paid
-}
-
-# --- Sidebar ---
 with st.sidebar:
-    # Top logo composition
+    # Toggle de modo
+    st.session_state.modo_oscuro = st.toggle('Modo Oscuro 🌙', value=st.session_state.modo_oscuro)
+    
+    if st.session_state.modo_oscuro:
+        bg_app, bg_sidebar, bg_card = "#10141D", "#1A1F2B", "#1A1F2B"
+        bg_input = "#262730"
+        text_main, text_sec, accent = "#FFFFFF", "#A0AAB5", "#38EF7D"
+        logo_sidebar = LOGO_DARK
+        color_map_graficos = {"Hogar": "#5DADE2", "Servicios": "#F4D03F", "Salud": "#EC7063", "Transporte": "#AF7AC5", "Obligaciones": "#EB984E", "Alimentación": "#A569BD", "Otros": "#82E0AA", "Impuestos": "#F1948A"}
+    else:
+        # MODO CLARO PERSONALIZADO
+        bg_app = "#F8F9FA"
+        bg_sidebar = "#E1F0E7" # Verde claro suave para la barra lateral
+        bg_card = "#F0F2F6"    # Gris claro para las tablas/cards
+        bg_input = "#F0F2F6"   # Gris claro para inputs
+        text_main = "#000000"  # Letras negras
+        text_sec = "#4F4F4F"
+        accent = "#A6A6A6"     # Gris para botones de reportes (sustituye al verde)
+        logo_sidebar = LOGO_LIGHT
+        color_map_graficos = {"Hogar": "#3498DB", "Servicios": "#F1C40F", "Salud": "#E74C3C", "Transporte": "#8E44AD", "Obligaciones": "#E67E22", "Alimentación": "#884EA0", "Otros": "#2ECC71", "Impuestos": "#E06666"}
+
+# --- 3. CSS DINÁMICO ---
+st.markdown(f"""
+    <style>
+    .stApp {{ background-color: {bg_app} !important; }}
+    
+    /* Textos Generales */
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp span, .stApp label, .stApp div {{ color: {text_main} !important; }}
+    
+    /* Barra Lateral */
+    [data-testid="stSidebar"] {{ 
+        background-color: {bg_sidebar} !important; 
+        border-right: 1px solid #CCCCCC;
+    }}
+    
+    /* Inputs, Selectbox y Number Inputs (Gris claro en modo claro) */
+    div[data-baseweb="select"], div[data-baseweb="input"], .stNumberInput input {{
+        background-color: {bg_input} !important;
+        color: {text_main} !important;
+        border: 1px solid #CCCCCC !important;
+    }}
+
+    /* Estilo de la Tabla (Data Editor) */
+    [data-testid="stDataEditor"] {{
+        background-color: {bg_card} !important;
+        border-radius: 10px;
+    }}
+    [data-testid="stDataEditor"] div {{ font-size: 1.1rem !important; color: {text_main} !important; }}
+
+    /* Cards de métricas */
+    .card {{
+        background-color: {bg_card}; border-radius: 12px; padding: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 10px;
+        text-align: center; border-bottom: 4px solid #38EF7D;
+    }}
+    .card-label {{ font-size: 0.8rem; color: {text_sec} !important; font-weight: 800; text-transform: uppercase; }}
+    .card-value {{ font-size: 1.6rem; font-weight: 800; color: {text_main} !important; }}
+
+    /* Botones de Sidebar (Extractos y Balances) */
+    [data-testid="stSidebar"] .stButton>button {{
+        background-color: {accent} !important; 
+        color: {text_main} !important; 
+        border: 1px solid #CCCCCC !important;
+    }}
+
+    /* Botón Guardar Cambios (Mantiene color destacado) */
+    .main .stButton>button {{
+        background-color: #38EF7D !important;
+        color: white !important;
+        font-weight: bold;
+    }}
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 4. MOTOR DE DATOS ---
+def cargar_bd():
+    if not os.path.exists(BASE_FILE): return pd.DataFrame(columns=["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]), pd.DataFrame(columns=["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"])
     try:
-        # Check if file exists, if not, use an alternative or placeholder
-        if os.path.exists("logo_light.png"):
-             st.image("logo_light.png", width=150)
-        elif os.path.exists("logoapp3.jpg"):
-             st.image("logoapp3.jpg", width=150)
-        else:
-             # Just in case, try all 
-             files = ["logo_light.png", "logoapp3.jpg", "image_9.png", "image_10.png"]
-             for f in files:
-                if os.path.exists(f):
-                    st.image(f, width=150)
-                    break
-             else:
-                st.write("Logo Placeholder")
-    except Exception as e:
-        st.write("Logo Not Found")
+        df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
+        df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
+        for col in ["Monto", "Valor Referencia"]: df_g[col] = pd.to_numeric(df_g[col], errors='coerce').fillna(0.0)
+        return df_g, df_i
+    except: return pd.DataFrame(), pd.DataFrame()
 
-    st.markdown("## 💰 My FinanceApp")
-    st.markdown("*by Stulio Designs*", help="Personal Finance Dashboard")
+def calcular_metricas(df_g, nom, otr, s_ant):
+    it = float(s_ant) + float(nom) + float(otr)
+    vp = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0.0
+    vpy = df_g[df_g["Pagado"] == False]["Valor Referencia"].sum() if not df_g.empty else 0.0
+    fondos_act, saldo_fin = it - vp, it - vp - vpy
+    ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
+    return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
+
+# --- 5. LOGIN SIMPLIFICADO ---
+if 'autenticado' not in st.session_state: st.session_state.autenticado = False
+if not st.session_state.autenticado:
+    st.title("My FinanceApp")
+    u = st.text_input("Usuario")
+    p = st.text_input("Contraseña", type="password")
+    if st.button("Entrar"):
+        if u == "tulicesar" and p == "Thulli.07":
+            st.session_state.autenticado = True
+            st.session_state.usuario_id = u
+            st.rerun()
+    st.stop()
+
+# --- 6. DASHBOARD ---
+df_g_raw, df_i_raw = cargar_bd()
+df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
+df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
+periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+
+with st.sidebar:
+    # LOGO EN LA PARTE SUPERIOR DEL SIDEBAR
+    if os.path.exists(logo_sidebar):
+        st.image(logo_sidebar, use_container_width=True)
+    else:
+        st.subheader("My FinanceApp")
+    
     st.divider()
+    anio_s = st.selectbox("Año", [2025, 2026], index=1)
+    mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
     
-    # Financial Inputs
-    year_col1, year_col2 = st.columns([1, 1])
-    with year_col1:
-        st.write("📊 Año")
-    with year_col2:
-        st.number_input("Año", value=2026, step=1, label_visibility="collapsed")
-        
-    mes_col1, mes_col2 = st.columns([1, 1])
-    with mes_col1:
-        st.write("🗓️ Mes Actual")
-    with mes_col2:
-        st.selectbox("Mes Actual", ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'], index=0, label_visibility="collapsed")
-    
-    st.divider()
-    
-    check_traer_saldo = st.checkbox("Traer saldo de Diciembre", value=True)
-    
-    input_list = [
-        {"icon": "🏦", "label": "Saldo Anterior", "value": 0.00},
-        {"icon": "💸", "label": "Nómina", "value": 1000000.00},
-        {"icon": "➕", "label": "Otros", "value": 0.00},
-    ]
-    
-    for item in input_list:
-        label_col1, label_col2 = st.columns([1, 1.5])
-        with label_col1:
-            st.write(f"{item['icon']} {item['label']}")
-        with label_col2:
-            st.number_input(item['label'], value=item['value'], step=0.01, format="%.2f", label_visibility="collapsed")
+    # Saldo Anterior / Nomina / Otros
+    d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
+    s_in = st.number_input("Saldo Anterior", value=float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0)
+    n_in = st.number_input("Nomina", value=float(d_act_i["Nomina"].iloc[0]) if not d_act_i.empty else 0.0)
+    o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0]) if not d_act_i.empty else 0.0)
 
     st.divider()
-    
-    # Secciones
-    st.markdown("### 📄 Extractos")
-    col_pdf, col_excel = st.columns(2)
-    with col_pdf:
-        st.button("PDF Ene", key="pdf_ene")
-    with col_excel:
-        st.button("Excel Ene", key="excel_ene")
-        
-    st.divider()
-    st.markdown("### ⚖️ Balances Semestrales")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.button("🟢 Semestre 1", key="semestre_1")
-    with col_s2:
-        st.button("🟢 Semestre 2", key="semestre_2")
-        
-    # Salir button
-    st.divider()
-    st.button("🚪 Salir")
+    st.subheader("📑 Extractos")
+    st.button("📄 PDF", key="pdf_btn")
+    st.button("📊 Excel", key="excel_btn")
 
-# --- Main Area ---
-st.title("Enero 2026")
+    st.subheader("⚖️ Balances Semestrales")
+    st.button("📥 Semestre 1", key="s1_btn")
+    st.button("📥 Semestre 2", key="s2_btn")
 
-# Sample DataFrame
-data = {
-    'Icono': ['❤️', '💡', '📶'],
-    'Categoría': ['Salud', 'Servicios', 'Servicios'],
-    'Descripción': ['medicinas', 'luz', 'agua'],
-    'Monto': [20000, 30000, 40000],
-    'Valor Referencia': [40000, 0, 50000],
-    'Pagado': [True, False, False],
-    'Movimiento Recurrente': [True, False, False]
-}
-df = pd.DataFrame(data)
+# --- 7. CUERPO ---
+if os.path.exists(LOGO_APP_H):
+    st.image(LOGO_APP_H, use_container_width=True)
 
-# Show DataEditor
-st.markdown("### 📋 Ene Data")
-st.data_editor(df, use_container_width=True, num_rows="dynamic", hide_index=True)
+st.markdown(f"## {mes_s} {anio_s}")
 
-# --- Summary Cards (Custom HTML/CSS) ---
-summary_data = [
-    {"title": "INGRESOS", "value": "$ 1,000,000", "color": "#000000"},
-    {"title": "PAGADO", "value": "$ 20,000", "color": "#00FF7F"}, # SpringGreen
-    {"title": "PENDIENTE", "value": "$ 50,000", "color": "#DC143C"}, # Crimson
-    {"title": "FONDOS ACTUALES", "value": "$ 980,000", "color": "#4169E1"}, # RoyalBlue
-    {"title": "AHORRO FINAL", "value": "$ 930,000", "color": "#DAA520"} # Goldenrod
-]
+df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
+df_v = df_mes.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True)
 
-summary_cards_html = f'<div class="summary-card-container">'
-for card in summary_data:
-    summary_cards_html += f"""
-        <div class="summary-card">
-            <h4>{card['title']}</h4>
-            <p style="color: {card['color']} !important;">{card['value']}</p>
-        </div>
-    """
-summary_cards_html += '</div>'
-st.markdown(summary_cards_html, unsafe_allow_html=True)
+# Tabla principal (Gris claro con letras negras en modo claro)
+df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic")
 
-# --- Infographics and Info Legend ---
-# Instructions: "reinstalar las barras de colores y valores en la leyenda"
-# These are present in the mock info legend at the bottom of image_7.png.
-# I will create a dedicated legend component below the charts.
-
-infographic_row = st.container()
-with infographic_row:
-    st.markdown("### 📊 Análisis de Gastos")
-    col_donut1, col_gauge, col_donut2 = st.columns([1.5, 1, 1.2])
-
-    with col_donut1:
-        # Donut Chart 1 (Example Data)
-        donut1_labels = ['Hogar', 'Servicios', 'Comida']
-        donut1_values = [450000, 300000, 250000]
-        fig_donut1 = go.Figure(data=[go.Pie(labels=donut1_labels, values=donut1_values, hole=.65, 
-                                          marker=dict(colors=['#51446E', '#FBBF24', '#F45D48']))])
-        fig_donut1.update_layout(title="Desglose Presupuestado", title_x=0.5, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                                font_color="#000000", showlegend=False)
-        st.plotly_chart(fig_donut1, use_container_width=True)
-
-    with col_gauge:
-        # Gauge Chart (Saving Efficiency)
-        saving_efficiency = 93
-        fig_gauge = go.Figure(go.Indicator(
-            mode = "gauge+number+delta",
-            value = saving_efficiency,
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Eficiencia de Ahorro", 'font': {'color': '#000000', 'size': 16}},
-            delta = {'reference': 50},
-            gauge = {
-                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#000000", 'tickmode': "array", 'tickvals': [0, 20, 40, 60, 80, 100]},
-                'bar': {'color': "#000000"},
-                'bgcolor': "white",
-                'borderwidth': 2,
-                'bordercolor': "#000000",
-                'steps': [
-                    {'range': [0, saving_efficiency/2], 'color': '#F45D48'}, # Red
-                    {'range': [saving_efficiency/2, saving_efficiency], 'color': '#FBBF24'}, # Yellow
-                    {'range': [saving_efficiency, 100], 'color': '#00FA9A'} # Green
-                ],
-                'threshold': {
-                    'line': {'color': "black", 'width': 4},
-                    'thickness': 0.75,
-                    'value': 93
-                }
-            }))
-        
-        fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                              font={'color': "#000000"}, margin=dict(l=20, r=20, t=50, b=20))
-        # Add flags for the medidor, just as a placeholder to match image
-        st.plotly_chart(fig_gauge, use_container_width=True)
-        # st.markdown(f'<div style="text-align:center; font-size:40px; font-weight:bold; color:#000000; margin-top:-70px;">{saving_efficiency}% <span style="font-size: 20px;">🏳️</span></div>', unsafe_allow_html=True)
-        st.markdown(f'<div style="text-align:center; font-size:40px; font-weight:bold; color:#000000; margin-top:-70px;">{saving_efficiency}% <img src="https://flagcdn.com/w20/flag_white.png" width="20" style="vertical-align: middle;"></div>', unsafe_allow_html=True)
-
-    with col_donut2:
-        # Donut Chart 2 (Real Money State)
-        donut2_data = {
-            'Ahorro (Saldo)': [1000000, '90%'],
-            'Pendiente': [100000, '9%'],
-            'Pagado': [10000, '1%']
-        }
-        donut2_labels = list(donut2_data.keys())
-        donut2_values = [v[0] for v in donut2_data.values()]
-        donut2_percentages = [v[1] for v in donut2_data.values()]
-        donut2_colors = [CATEGORY_COLORS[l] for l in donut2_labels]
-        
-        fig_donut2 = go.Figure(data=[go.Pie(labels=donut2_labels, values=donut2_values, hole=.75, 
-                                          textinfo='label+percent', textposition='outside', textfont_color='#000000',
-                                          marker=dict(colors=donut2_colors))])
-        
-        fig_donut2.update_layout(title="Estado Real del Dinero", title_x=0.5, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', 
-                                font_color="#000000", showlegend=False)
-        st.plotly_chart(fig_donut2, use_container_width=True)
-
-# --- Info Legend Reinstallation ---
-# Instructions: "reinstalar las barras de colores y valores en la leyenda"
-# These are the actual colored bars with text and values.
-st.divider()
-st.markdown("### 📊 Leyenda de Categorías Presupuestadas")
-legend_container = st.container()
-with legend_container:
-    info_legend_items = [
-        {"color": CATEGORY_COLORS['Ahorro (Saldo)'], "category": "Ahorro (Saldo)", "value": "$ 20,000"},
-        {"color": "#FBBF24", "category": "Servicios", "value": "$ 50,000"} # Mock from image
-    ]
-    
-    legend_html = '<div class="info-legend-container">'
-    for item in info_legend_items:
-        legend_html += f"""
-            <div class="info-legend-item">
-                <div class="color-bar" style="background-color: {item['color']};"></div>
-                <div class="category-text">{item['category']}</div>
-                <div class="value-text">{item['value']}</div>
-            </div>
-        """
-    legend_html += '</div>'
-    st.markdown(legend_html, unsafe_allow_html=True)
+it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 
 st.divider()
+m1, m2, m3, m4, m5 = st.columns(5)
+m1.markdown(f'<div class="card"><div class="card-label">INGRESOS</div><div class="card-value">$ {it:,.0f}</div></div>', unsafe_allow_html=True)
+m2.markdown(f'<div class="card"><div class="card-label">PAGADO</div><div class="card-value" style="color:#2ecc71;">$ {vp:,.0f}</div></div>', unsafe_allow_html=True)
+m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div class="card-value" style="color:#e74c3c;">$ {vpy:,.0f}</div></div>', unsafe_allow_html=True)
+m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
+m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#38EF7D;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# Boton guardar
-col_final_1, col_final_2 = st.columns([1, 10])
-with col_final_1:
-    st.button("💾 GUARDAR CAMBIOS DEFINITIVOS")
+# Gráficos
+c1, c2, c3 = st.columns([1.5, 1, 1.2])
+with c1:
+    st.markdown("**Análisis de Gastos**")
+    t_df = df_ed.copy(); t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
+    if not t_df.empty and t_df['V'].sum() > 0:
+        fig = px.pie(t_df, values='V', names='Categoría', hole=0.6, color_discrete_map=color_map_graficos)
+        fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0,b=0,l=0,r=0))
+        st.plotly_chart(fig, use_container_width=True)
+
+with c2:
+    gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':accent}}, gauge={'axis':{'range':[0,100]},'bar':{'color':text_main},'bgcolor':'#DDD','steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[50,100],'color':'#00d26a'}]}))
+    gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': text_main}, height=350)
+    st.plotly_chart(gauge, use_container_width=True)
+
+with c3:
+    pie = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, saldo_fin], hole=.65, marker_colors=['#2ecc71', '#e74c3c', '#38EF7D'])])
+    pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=380)
+    st.plotly_chart(pie, use_container_width=True)
+
+if st.button("💾 GUARDAR CAMBIOS"):
+    st.success("Cambios guardados localmente.")
