@@ -30,6 +30,7 @@ st.markdown("""
     <style>
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
+    /* TABLAS XL GIGANTES */
     [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -171,14 +172,17 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         db_u = cargar_usuarios()
         with t_in:
-            u, p = st.text_input("Usuario", key="login_u"), st.text_input("Pass", type="password", key="login_p")
+            u = st.text_input("Usuario", key="login_u")
+            p = st.text_input("Pass", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u and db_u[u]["pass"] == p:
                     st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, db_u[u].get("nombre", u)
                     st.rerun()
                 else: st.error("❌ Credenciales incorrectas")
         with t_reg:
-            rn, ru, rp = st.text_input("Nombre", key="reg_n"), st.text_input("ID Usuario", key="reg_u"), st.text_input("Pass", type="password", key="reg_p")
+            rn = st.text_input("Nombre", key="reg_n")
+            ru = st.text_input("ID Usuario", key="reg_u")
+            rp = st.text_input("Pass", type="password", key="reg_p")
             if st.button("Crear Cuenta"):
                 db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado")
     st.stop()
@@ -203,7 +207,10 @@ with st.sidebar:
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant.empty)
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
-    n_in = st.number_input("Sueldo Fijo", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    
+    # ACTUALIZADO: Nuevo nombre para Ingreso Fijo
+    n_in = st.number_input("Ingreso Fijo (Sueldo o Nomina)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
@@ -228,6 +235,7 @@ with st.sidebar:
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
+# CARGA INTELIGENTE (MEMORIA DE RECURRENCIA)
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
 if df_mes_g.empty:
@@ -263,16 +271,15 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# --- AJUSTES DE ETIQUETAS KPI ACTUALIZADOS ---
+# ETIQUETAS KPI DINÁMICAS
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
-# Dashboard KPI
 st.divider(); c_kpi = st.columns(5)
 tarj = [
     ("INGRESOS", it, "black"), 
     ("OBLIG. PAGADAS", vp, "green"), 
     ("OBLIG. PENDIENTES", vpy, "red"), 
-    ("DINERO DISPONIBLE", fact, "blue"), # Fecha eliminada aquí
+    ("DINERO DISPONIBLE", fact, "blue"), 
     (label_ahorro, bf, "#d4af37")
 ]
 for i, (l, v, c) in enumerate(tarj): c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
