@@ -6,7 +6,6 @@ import os
 import json
 from io import BytesIO
 from datetime import datetime
-import math
 
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
@@ -23,19 +22,19 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# --- ESTILOS CSS (INCLUYE TEXTO GRANDE PARA TABLAS) ---
 st.markdown("""
     <style>
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* TEXTO DE LAS TABLAS GRANDE PARA CELULAR */
+    /* --- AJUSTE PARA CELULAR: TEXTO DE TABLAS MÁS GRANDE --- */
     [data-testid="stDataEditor"] div {
-        font-size: 1.3rem !important; 
+        font-size: 1.8rem !important; /* Texto de las celdas muy grande */
     }
-    canvas {
-        zoom: 1.15; /* Aumenta el tamaño visual del editor de datos */
+    [data-testid="stDataEditor"] th div {
+        font-size: 1.2rem !important; /* Títulos de columnas legibles */
     }
+    /* ------------------------------------------------------ */
 
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -139,7 +138,7 @@ if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro"])
+        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro de Nuevo Usuario"])
         db_u = cargar_usuarios()
         with tab_in:
             u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
@@ -165,7 +164,6 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    # --- ARRASTRE DE SALDO ---
     idx = meses_lista.index(mes_s)
     m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"
     a_ant = anio_s if idx > 0 else anio_s-1
@@ -175,15 +173,16 @@ with st.sidebar:
     
     s_sug = 0.0
     if not i_ant_row.empty:
-        _, _, _, _, bf_ant, _ = calcular_metricas(g_ant_df, i_ant_row["Nomina"].sum(), oi_ant_df["Monto"].sum(), i_ant_row["SaldoAnterior"].iloc[0])
-        s_sug = float(bf_ant)
+        _, _, _, _, bf_a, _ = calcular_metricas(g_ant_df, i_ant_row["Nomina"].sum(), oi_ant_df["Monto"].sum(), i_ant_row["SaldoAnterior"].iloc[0])
+        s_sug = float(bf_a)
 
     st.divider()
-    arr_on = st.toggle(f"Arrastrar de {m_ant}", value=not i_ant_row.empty)
+    arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant_row.empty)
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
-    n_in = st.number_input("Ingresos Fijos", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    placeholder_otros = st.empty()
 
     st.divider(); st.subheader("📑 Extracto del Mes")
     c_pdf, c_xls = st.columns(2)
@@ -199,12 +198,12 @@ with st.sidebar:
         st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
 
     st.subheader("⚖️ Balances Proyectados")
-    if st.button("📥 Semestre 1"):
-        p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "S1", anio_s, u_id)
-        st.download_button("Bajar S1.pdf", p1, "S1.pdf")
-    if st.button("📥 Semestre 2"):
-        p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "S2", anio_s, u_id)
-        st.download_button("Bajar S2.pdf", p2, "S2.pdf")
+    if st.button("📥 Semestre 1 (Ene-Jun)"):
+        pdf1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "Proyección S1", anio_s, u_id)
+        st.download_button("Bajar S1.pdf", pdf1, "S1_Proyectado.pdf")
+    if st.button("📥 Semestre 2 (Jul-Dic)"):
+        pdf2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "Proyección S2", anio_s, u_id)
+        st.download_button("Bajar S2.pdf", pdf2, "S2_Proyectado.pdf")
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
@@ -218,14 +217,16 @@ st.markdown("### 📝 Movimiento de Gastos")
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_moneda}, key="g_ed")
 
-st.markdown("### 💰 Otros Ingresos Adicionales")
+st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
-# Cálculos
+# Cálculos Automáticos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
+placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_vivos:,.0f}", disabled=True)
+
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_vivos, s_in)
 
 st.divider()
@@ -233,8 +234,8 @@ c1, c2, c3, c4, c5 = st.columns(5)
 c1.markdown(f'<div class="card"><div class="card-label">INGRESOS</div><div class="card-value">$ {it:,.0f}</div></div>', unsafe_allow_html=True)
 c2.markdown(f'<div class="card"><div class="card-label">PAGADO</div><div class="card-value" style="color:green;">$ {vp:,.0f}</div></div>', unsafe_allow_html=True)
 c3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div class="card-value" style="color:red;">$ {vpy:,.0f}</div></div>', unsafe_allow_html=True)
-c4.markdown(f'<div class="card"><div class="card-label">FONDOS</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
-c5.markdown(f'<div class="card"><div class="card-label">AHORRO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
+c4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
+c5.markdown(f'<div class="card"><div class="card-label">AHORRO PROYECTADO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
 
 # --- 7. INFOGRAFÍAS ---
 st.markdown("### 📊 Análisis de Distribución")
@@ -247,28 +248,45 @@ with inf1:
         fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color='Categoría', color_discrete_map=COLOR_MAP)
         fig1.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
         st.plotly_chart(fig1, use_container_width=True)
+        res = t_df.groupby("Categoría")['V'].sum().reset_index()
+        for _, r in res.iterrows():
+            st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"],"#eee")}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
-    val_cl = max(0, min(ahorro_p, 100))
-    phi = math.radians(180 - (val_cl / 100 * 180))
-    x_p, y_p = 0.5, 0.42
-    x_t, y_t = x_p + 0.32 * math.cos(phi), y_p + 0.32 * math.sin(phi)
-    fig2 = go.Figure()
-    fig2.add_trace(go.Indicator(mode="gauge", value=val_cl, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "rgba(0,0,0,0)"}, 'bgcolor': "white", 'steps': [{'range': [0, 100], 'color': '#f8f9fa'}]}))
-    fig2.add_annotation(text=f"{val_cl:.0f}%", x=x_p, y=y_p-0.05, showarrow=False, font=dict(color="#d4af37", size=55, weight="bold"))
-    fig2.add_shape(type="line", x0=x_p, y0=y_p, x1=x_t, y1=y_t, line=dict(color="#d4af37", width=5))
-    fig2.add_shape(type="circle", x0=x_p-0.02, y0=y_p-0.02, x1=x_p+0.02, y1=y_p+0.02, fillcolor="#d4af37", line_color="#d4af37")
-    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=50,b=20,l=25,r=25))
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number", value=ahorro_p,
+        number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
+        gauge={
+            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#888", 'tickvals': [0, 20, 40, 60, 80, 100]},
+            'bar': {'color': "#d4af37", 'thickness': 0.6},
+            'bgcolor': "white",
+            'borderwidth': 1, 'bordercolor': "#ccc",
+            'steps': [
+                {'range': [0, ahorro_p], 'color': '#d4af37'},
+                {'range': [ahorro_p, 100], 'color': '#f2f2f2'}
+            ],
+            'threshold': {'line': {'color': "grey", 'width': 3}, 'thickness': 0.8, 'value': ahorro_p}
+        }
+    ))
+    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
     st.plotly_chart(fig2, use_container_width=True)
+    st.markdown("<p style='text-align:center; font-weight:bold; color:#888; margin-top:-30px;'>Ahorro Proyectado</p>", unsafe_allow_html=True)
 
 with inf3:
     st.markdown("#### Estado Real del Dinero")
     fig3 = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, bf], hole=.7, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='none')])
     fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")])
     st.plotly_chart(fig3, use_container_width=True)
+    st.markdown(f"""
+        <div style='font-size:0.9rem; font-weight:bold;'>
+        <span style='color:#2ecc71;'>● Pagado: $ {vp:,.0f}</span><br>
+        <span style='color:#e74c3c;'>● Pendiente: $ {vpy:,.0f}</span><br>
+        <span style='color:#d4af37;'>● Ahorro Proyectado: $ {bf:,.0f}</span>
+        </div>
+    """, unsafe_allow_html=True)
 
-# ESPACIO FINAL
+# --- ESPACIO PARA EL BOTÓN ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
