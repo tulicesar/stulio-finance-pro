@@ -27,11 +27,11 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* --- CAMBIO SOLICITADO: TEXTO DE TABLAS GIGANTE --- */
-    [data-testid="stDataEditor"] { 
+    /* --- AJUSTE: TEXTO DE TABLAS GIGANTE --- */
+    [data-testid="stDataEditor"] div {
         font-size: 2.0rem !important; 
     }
-    /* -------------------------------------------------- */
+    /* --------------------------------------- */
 
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -91,7 +91,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF ---
+# --- 3. REPORTE PDF (CORREGIDO EL COLOR DORADO) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -120,6 +120,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
+        
+        # --- RESET COLOR A NEGRO PARA EL RESTO DEL PDF ---
+        c.setFillColor(colors.black)
+        # -------------------------------------------------
+        
         c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.drawString(60, y, f"Saldo Ant: $ {s_ant:,.0f} | Nómina: $ {nom:,.0f} | Extras: $ {otr_sum:,.0f}"); y -= 30
         c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
@@ -164,7 +169,6 @@ with st.sidebar:
     idx = meses_lista.index(mes_s)
     m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"
     a_ant = anio_s if idx > 0 else anio_s-1
-    
     i_ant_row = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
     g_ant_df = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant) & (df_g_full["Usuario"] == u_id)]
     oi_ant_df = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
@@ -176,7 +180,6 @@ with st.sidebar:
 
     st.divider()
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant_row.empty)
-    
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
@@ -220,7 +223,6 @@ st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
-# Cálculos Automáticos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
