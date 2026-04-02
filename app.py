@@ -133,52 +133,52 @@ with st.sidebar:
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
     
+    # --- LOGICA DE ARRASTRE DE SALDO ---
     idx = periodos_list.index(mes_s); mes_ant = periodos_list[idx-1] if idx>0 else periodos_list[11]; anio_ant = anio_s if idx>0 else anio_s-1
     i_pas = df_i_user[(df_i_user["Periodo"]==mes_ant) & (df_i_user["Año"]==anio_ant)]
     g_pas = df_g_user[(df_g_user["Periodo"]==mes_ant) & (df_g_user["Año"]==anio_ant)]
+    
     saldo_auto = 0.0
     if not i_pas.empty:
         *_, bf_p, _ = calcular_metricas(g_pas, i_pas["Nomina"].sum(), i_pas["Otros"].sum(), i_pas["SaldoAnterior"].iloc[0])
         saldo_auto = float(bf_p)
 
     st.divider()
-    s_in = st.number_input("Saldo Anterior", value=saldo_auto)
+    arrastre_on = st.toggle(f"Arrastrar saldo de {mes_ant}", value=not i_pas.empty)
+    s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastre_on else (float(df_i_user[df_i_user["Periodo"]==mes_s]["SaldoAnterior"].iloc[0]) if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
     n_in = st.number_input("Nómina", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Nomina"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
     o_in = st.number_input("Otros", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Otros"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
 
+    # --- EXTRACTOS Y BALANCES ---
     st.divider()
     st.subheader("📑 Extractos del Mes")
-    c_a, c_b = st.columns(2)
-    with c_a:
-        if st.button(f"📄 PDF {mes_s[:3]}"):
+    ca, cb = st.columns(2)
+    with ca:
+        if st.button(f"📄 PDF"):
             pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], f"Extracto {mes_s}", anio_s)
             st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
-    with c_b:
+    with cb:
         df_ex = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
-        df_ex = df_ex.drop(columns=["Usuario", "Año"], errors='ignore')
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_ex.to_excel(writer, index=False)
-        st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
+        out = BytesIO()
+        with pd.ExcelWriter(out, engine='xlsxwriter') as wr: df_ex.to_excel(wr, index=False)
+        st.download_button(f"📊 Excel", out.getvalue(), f"Excel_{mes_s}.xlsx")
 
     st.divider()
-    st.subheader("📈 Balances Semestrales")
-    if st.button("📥 Semestre 1 (Ene-Jun)"):
+    st.subheader("📈 Balances")
+    if st.button("📥 Semestre 1"):
         pdf1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "S1", anio_s)
-        st.download_button("Descargar S1", pdf1, "Balance_S1.pdf")
-    if st.button("📥 Semestre 2 (Jul-Dic)"):
-        pdf2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "S2", anio_s)
-        st.download_button("Descargar S2", pdf2, "Balance_S2.pdf")
+        st.download_button("Descargar S1", pdf1, "S1.pdf")
     
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CABECERA (LOGO AJUSTADO AL 50% CENTRADO) ---
-c_sp1, c_logo, c_sp2 = st.columns([0.5, 2, 0.5]) # Logo en el centro, tamaño moderado
+# --- 6. CABECERA (LOGO AJUSTADO E IZQUIERDA) ---
+c_logo, c_vacia = st.columns([3, 1]) # Ocupa el 75% del ancho y alineado a la izquierda
 with c_logo:
     if os.path.exists(LOGO_APP_H): 
         st.image(LOGO_APP_H, use_container_width=True)
 
-st.markdown(f"<h1 style='text-align: center; margin-top: -10px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='text-align: left; margin-top: -10px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
 # --- REGISTRO ---
 st.markdown("### 📝 Registro de Movimientos")
@@ -210,9 +210,6 @@ with c1:
         fig = px.pie(t_df, values='V', names='Categoría', hole=0.6, color_discrete_map=COLOR_MAP)
         fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0,b=0,l=0,r=0))
         st.plotly_chart(fig, use_container_width=True)
-        res = t_df.groupby("Categoría")['V'].sum().reset_index()
-        for _, r in res.iterrows():
-            st.markdown(f'<div style="background:{COLOR_MAP.get(r["Categoría"],"#eee")}; padding:8px; border-radius:5px; margin-bottom:4px; color:black; font-weight:bold; display:flex; justify-content:space-between;">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
 
 with c2:
     st.markdown("**Eficiencia de Ahorro**")
