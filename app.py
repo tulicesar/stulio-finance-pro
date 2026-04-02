@@ -10,21 +10,19 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Archivos de imagen y rutas
+# Nombres de archivos (Asegúrate de que coincidan exactamente en GitHub)
 LOGO_LOGIN = "logoapp 1.png"
-LOGO_APP_V = "LOGO APP.png"      
+LOGO_SIDEBAR = "logoapp 2.jpg" 
 LOGO_APP_H = "LOGO H APP.png"    
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# Paleta de Colores Stulio Designs
 COLOR_MAP = {
     "Hogar": "#FFB347", "Servicios": "#FFB347", "Salud": "#B39EB5", 
     "Transporte": "#77B5FE", "Obligaciones": "#FF6961", "Alimentación": "#FDFD96", 
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# CSS: Diseño Dark, Eliminación de Header y Tarjetas Premium
 st.markdown("""
     <style>
     header {visibility: hidden;}
@@ -41,10 +39,10 @@ st.markdown("""
         padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
         font-size: 1rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
-        max-width: 85%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        max-width: 90%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
-    .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
+    .stButton>button { border-radius: 8px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
     .login-box { max-width: 450px; margin: auto; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid #d4af37; }
     </style>
     """, unsafe_allow_html=True)
@@ -111,7 +109,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         c.roundRect(50, y-80, 510, 85, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(70, y-40, f"Ingresos: $ {it_m:,.0f} | Pagados: $ {vp_m:,.0f} | Pendientes: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL (AHORRO): $ {bf_m:,.0f}")
+        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL: $ {bf_m:,.0f}")
         y -= 100
         if not g_m.empty:
             c.setFont("Helvetica-Bold", 8); c.setFillColor(HexColor("#1a1d21"))
@@ -126,7 +124,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
-# --- 4. ACCESO (LOGIN CON LOGOAPP 1.PNG) ---
+# --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 
 if not st.session_state.autenticado:
@@ -136,7 +134,7 @@ if not st.session_state.autenticado:
         if os.path.exists(LOGO_LOGIN):
             st.image(LOGO_LOGIN, use_container_width=True)
         else:
-            st.markdown("<h1 style='text-align: center; color: #d4af37;'>My Finance</h1>", unsafe_allow_html=True)
+            st.markdown("<h1 style='text-align: center; color: #d4af37;'>My FinanceApp</h1>", unsafe_allow_html=True)
         
         tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
         usuarios = cargar_usuarios()
@@ -167,7 +165,10 @@ df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
 periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 with st.sidebar:
-    if os.path.exists(LOGO_APP_V): st.image(LOGO_APP_V, width=150)
+    # NUEVO LOGO EN LA PARTE SUPERIOR DE LA BARRA LATERAL
+    if os.path.exists(LOGO_SIDEBAR):
+        st.image(LOGO_SIDEBAR, use_container_width=True)
+    
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
@@ -211,13 +212,12 @@ with st.sidebar:
 
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. HEADER ---
+# --- 6. CUERPO PRINCIPAL ---
 c_logo_h, c_title = st.columns([1, 4])
 with c_logo_h: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
 
-# Lógica de Datos y Recurrencia
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
@@ -228,7 +228,6 @@ df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
 })
 
-# MÉTRICAS (LAS 5 TARJETAS)
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4, m5 = st.columns(5)
