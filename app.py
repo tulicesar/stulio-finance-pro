@@ -12,93 +12,117 @@ st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", 
 
 # Rutas de Archivos
 LOGO_LOGIN = "logoapp 1.png"
-LOGO_DARK = "logoapp 2.jpg"    # Modo Oscuro
-LOGO_LIGHT = "logoapp3.jpg"   # Modo Claro
+LOGO_DARK = "logoapp 2.jpg"    
+LOGO_LIGHT = "logoapp3.jpg"   
 LOGO_APP_H = "LOGOapp horizontal.png" 
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# --- 2. GESTIÓN DE ESTADO Y MODO (CLARO/OSCURO) ---
+# --- 2. GESTIÓN DE ESTADO Y MODO ---
 if 'modo_oscuro' not in st.session_state:
-    st.session_state.modo_oscuro = True  # Por defecto oscuro
+    st.session_state.modo_oscuro = True 
 
 with st.sidebar:
-    # Selector de tema basado en logos adjuntos
     st.session_state.modo_oscuro = st.toggle('Modo Oscuro 🌙', value=st.session_state.modo_oscuro)
     
-    # Definición dinámica de colores según el logo
     if st.session_state.modo_oscuro:
-        # Paleta logoapp 2.jpg (Oscuro)
+        # Paleta OSCURA (logoapp 2.jpg)
         bg_app = "#10141D"
         bg_sidebar = "#1A1F2B"
         bg_card = "#1A1F2B"
-        text_main = "#FFFFFF"
+        text_main = "#FFFFFF" # Texto Blanco
         text_sec = "#A0AAB5"
-        accent = "#38EF7D"  # Verde flecha
+        accent = "#38EF7D"  
         logo_sidebar = LOGO_DARK
-        color_map_graficos = {
-            "Hogar": "#5DADE2", "Servicios": "#F4D03F", "Salud": "#EC7063", 
-            "Transporte": "#AF7AC5", "Obligaciones": "#EB984E", "Alimentación": "#A569BD", 
-            "Otros": "#82E0AA", "Impuestos": "#F1948A"
-        }
+        color_map_graficos = {"Hogar": "#5DADE2", "Servicios": "#F4D03F", "Salud": "#EC7063", "Transporte": "#AF7AC5", "Obligaciones": "#EB984E", "Alimentación": "#A569BD", "Otros": "#82E0AA", "Impuestos": "#F1948A"}
     else:
-        # Paleta logoapp3.jpg (Claro)
+        # Paleta CLARA (logoapp3.jpg)
         bg_app = "#F8F9FA"
         bg_sidebar = "#FFFFFF"
         bg_card = "#FFFFFF"
-        text_main = "#10141D"
+        text_main = "#10141D" # Texto Negro/Azul Oscuro
         text_sec = "#5D6D7E"
-        accent = "#11998E"  # Verde profundo
+        accent = "#11998E"  
         logo_sidebar = LOGO_LIGHT
-        color_map_graficos = {
-            "Hogar": "#3498DB", "Servicios": "#F1C40F", "Salud": "#E74C3C", 
-            "Transporte": "#8E44AD", "Obligaciones": "#E67E22", "Alimentación": "#884EA0", 
-            "Otros": "#2ECC71", "Impuestos": "#E06666"
-        }
+        color_map_graficos = {"Hogar": "#3498DB", "Servicios": "#F1C40F", "Salud": "#E74C3C", "Transporte": "#8E44AD", "Obligaciones": "#E67E22", "Alimentación": "#884EA0", "Otros": "#2ECC71", "Impuestos": "#E06666"}
 
-# --- 3. INYECCIÓN DE CSS (CORREGIDO SYNTAX ERROR) ---
+# --- 3. INYECCIÓN DE CSS DINÁMICO ---
 st.markdown(f"""
     <style>
-    /* Usamos doble llave {{ }} para que Python no crea que son variables */
-    button[kind="headerNoSpacing"] {{ display: flex !important; visibility: visible !important; color: {accent} !important; }}
-    header {{ background-color: rgba(0,0,0,0) !important; }}
-    [data-testid="stHeader"] {{ background: none !important; }}
-
-    .stApp {{ background-color: {bg_app} !important; color: {text_main} !important; }}
-    
-    section[data-testid="stSidebar"] {{ 
-        background-color: {bg_sidebar} !important; 
-        border-right: 1px solid {accent}44;
+    /* Forzar colores en toda la aplicación */
+    .stApp {{
+        background-color: {bg_app} !important;
     }}
 
-    /* Texto de Tabla */
-    [data-testid="stDataEditor"] div {{ font-size: 1.2rem !important; color: {text_main}; }}
-    
-    /* Tarjetas Premium */
-    .card {{
-        background-color: {bg_card}; border-radius: 12px; padding: 15px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.2); margin-bottom: 10px;
-        text-align: center; border-bottom: 4px solid {accent};
+    /* Cambiar color de TODOS los textos, títulos y etiquetas */
+    .stApp h1, .stApp h2, .stApp h3, .stApp p, .stApp span, .stApp label, .stApp div {{
         color: {text_main} !important;
     }}
-    .card-label {{ font-size: 0.8rem; color: {text_sec}; font-weight: 800; text-transform: uppercase; }}
-    .card-value {{ font-size: 1.6rem; font-weight: 800; margin: 3px 0; }}
-    
-    .legend-bar {{
-        padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
-        font-size: 1rem; font-weight: bold; color: #1a1d21; 
-        display: flex; justify-content: space-between; align-items: center;
-        max-width: 95%; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+
+    /* Ajuste específico para la barra lateral */
+    [data-testid="stSidebar"] {{
+        background-color: {bg_sidebar} !important;
+        border-right: 1px solid {accent}44;
     }}
     
-    .stButton>button {{ 
-        border-radius: 10px; font-weight: bold; width: 100%; 
-        background-color: {accent}; color: white; border: none; 
+    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {{
+        color: {text_main} !important;
+    }}
+
+    /* Tarjetas de métricas */
+    .card {{
+        background-color: {bg_card}; 
+        border-radius: 12px; 
+        padding: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+        margin-bottom: 10px;
+        text-align: center; 
+        border-bottom: 4px solid {accent};
+    }}
+    
+    .card-label {{ 
+        font-size: 0.8rem; 
+        color: {text_sec} !important; 
+        font-weight: 800; 
+        text-transform: uppercase; 
+    }}
+    
+    .card-value {{ 
+        font-size: 1.6rem; 
+        font-weight: 800; 
+        color: {text_main} !important; 
+        margin: 3px 0; 
+    }}
+
+    /* Estilo para las leyendas de colores de las categorías */
+    .legend-bar {{
+        padding: 10px 15px; 
+        border-radius: 8px; 
+        margin-bottom: 6px; 
+        font-size: 1rem; 
+        font-weight: bold; 
+        color: #1a1d21 !important; /* Texto negro para que resalte sobre el color de la barra */
+        display: flex; 
+        justify-content: space-between; 
+        align-items: center;
+        max-width: 95%;
+    }}
+
+    /* Botones */
+    .stButton>button {{
+        background-color: {accent} !important;
+        color: white !important;
+        border: none;
+    }}
+
+    /* Input Fields */
+    .stNumberInput input, .stSelectbox div {{
+        color: {text_main} !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 4. MOTOR DE DATOS ---
+# --- 4. FUNCIONES DE DATOS ---
 def cargar_usuarios():
     if os.path.exists(USER_DB):
         with open(USER_DB, "r") as f:
@@ -130,22 +154,6 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
-    from reportlab.lib.pagesizes import letter
-    from reportlab.pdfgen import canvas
-    from reportlab.lib import colors
-    buf = BytesIO()
-    c = canvas.Canvas(buf, pagesize=letter)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, 750, f"Reporte: {titulo} - {anio}")
-    y = 720
-    for m in meses:
-        c.setFont("Helvetica-Bold", 12)
-        c.drawString(50, y, f"Mes: {m}")
-        y -= 20
-    c.save(); buf.seek(0)
-    return buf
-
 # --- 5. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
@@ -162,7 +170,7 @@ if not st.session_state.autenticado:
                 st.rerun()
     st.stop()
 
-# --- 6. SIDEBAR Y LOGICA ---
+# --- 6. DASHBOARD ---
 df_g_raw, df_i_raw = cargar_bd()
 df_g_user = df_g_raw[df_g_raw["Usuario"] == st.session_state.usuario_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
@@ -174,7 +182,6 @@ with st.sidebar:
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
     
-    # ARRASTRE DE SALDO
     idx = periodos_list.index(mes_s); mes_ant = periodos_list[idx-1] if idx>0 else periodos_list[11]; anio_ant = anio_s if idx>0 else anio_s-1
     i_pas = df_i_user[(df_i_user["Periodo"]==mes_ant) & (df_i_user["Año"]==anio_ant)]
     g_pas = df_g_user[(df_g_user["Periodo"]==mes_ant) & (df_g_user["Año"]==anio_ant)]
@@ -189,36 +196,15 @@ with st.sidebar:
     n_in = st.number_input("Nómina", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Nomina"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
     o_in = st.number_input("Otros", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Otros"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
 
-    st.divider()
-    st.subheader("📑 Reportes")
-    ca, cb = st.columns(2)
-    with ca:
-        if st.button("📄 PDF"):
-            pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto", anio_s)
-            st.download_button("Bajar PDF", pdf, f"Reporte_{mes_s}.pdf")
-    with cb:
-        df_ex = df_g_user[df_g_user["Periodo"] == mes_s].copy()
-        out = BytesIO()
-        with pd.ExcelWriter(out, engine='xlsxwriter') as wr: df_ex.to_excel(wr, index=False)
-        st.download_button("📊 Excel", out.getvalue(), f"Excel_{mes_s}.xlsx")
+    if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-    st.subheader("📈 Balances Semestrales")
-    if st.button("📥 Semestre 1"):
-        pdf1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "S1", anio_s)
-        st.download_button("S1.pdf", pdf1, "Balance_S1.pdf")
-    if st.button("📥 Semestre 2"):
-        pdf2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "S2", anio_s)
-        st.download_button("S2.pdf", pdf2, "Balance_S2.pdf")
-
-# --- 7. CUERPO PRINCIPAL ---
-c_logo, _ = st.columns([3, 1])
-with c_logo:
-    if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
-st.markdown(f"<h1 style='text-align: left; margin-top: -10px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
+# --- 7. CUERPO ---
+if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
+st.markdown(f"<h1>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 df_v = df_mes.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True)
-df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f"ed_{mes_s}")
+df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic")
 
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
@@ -229,11 +215,11 @@ m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:{accent};">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- INFOGRAFIAS ---
-st.markdown("### 📊 Análisis de Gastos")
+# --- GRÁFICOS ---
+st.markdown("### 📊 Análisis")
 c1, c2, c3 = st.columns([1.5, 1, 1.2])
 with c1:
-    st.markdown("**Desglose Presupuestado**")
+    st.markdown("**Desglose**")
     t_df = df_ed.copy(); t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not t_df.empty and t_df['V'].sum() > 0:
         fig = px.pie(t_df, values='V', names='Categoría', color='Categoría', hole=0.6, color_discrete_map=color_map_graficos)
@@ -244,13 +230,13 @@ with c1:
             st.markdown(f'<div class="legend-bar" style="background:{color_map_graficos.get(r["Categoría"],"#eee")}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
 
 with c2:
-    st.markdown("**Eficiencia de Ahorro**")
-    gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':accent}}, gauge={'axis':{'range':[0,100]},'bar':{'color':text_main},'bgcolor':bg_card,'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[20,50],'color':'#ffa500'},{'range':[50,100],'color':'#00d26a'}],'threshold':{'line':{'color':accent,'width':6},'thickness':0.85,'value':ahorro_p}}))
+    st.markdown("**Eficiencia**")
+    gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':accent}}, gauge={'axis':{'range':[0,100], 'tickcolor': text_main},'bar':{'color':text_main},'bgcolor':bg_card,'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[20,50],'color':'#ffa500'},{'range':[50,100],'color':'#00d26a'}],'threshold':{'line':{'color':accent,'width':6},'thickness':0.85,'value':ahorro_p}}))
     gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', font={'color': text_main}, height=350, margin=dict(t=50,b=0,l=0,r=0))
     st.plotly_chart(gauge, use_container_width=True)
 
 with c3:
-    st.markdown("**Estado Real**")
+    st.markdown("**Estado**")
     pie = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, saldo_fin], hole=.65, marker_colors=['#2ecc71', '#e74c3c', accent], textinfo='percent+label')])
     pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=380, margin=dict(t=0,b=0,l=0,r=0))
     st.plotly_chart(pie, use_container_width=True)
