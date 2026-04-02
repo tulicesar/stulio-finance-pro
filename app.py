@@ -87,14 +87,13 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF (ACTUALIZADO CON NOMBRE DE USUARIO) ---
+# --- 3. REPORTE PDF (RESUMEN CON FONDO GRIS) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
     
-    # Obtener nombre real del usuario para el encabezado
     db_u = cargar_usuarios()
     nombre_usuario = db_u.get(u_id, {}).get("nombre", u_id)
     
@@ -108,15 +107,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 16); canvas_obj.drawString(50, 765, "My FinanceApp")
         canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
-        
-        # AGREGADO: Nombre del Usuario en el encabezado
         canvas_obj.setFont("Helvetica-BoldOblique", 9); canvas_obj.setFillColor(HexColor("#d4af37"))
         canvas_obj.drawString(50, 735, f"Usuario: {user_name}")
-        
         canvas_obj.setFillColor(HexColor("#1a1d21"))
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 725, 560, 725)
-        
         tz = pytz.timezone('America/Bogota') 
         fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
         canvas_obj.setFont("Helvetica", 7); canvas_obj.setFillColor(colors.grey); canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
@@ -170,8 +165,14 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     if len(meses) > 1:
         if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         y -= 20
-        c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(2); c.rect(50, y-100, 510, 110, fill=0)
-        c.setFillColor(HexColor("#1a1d21")); c.setFont("Helvetica-Bold", 12); c.drawString(70, y-5, "RESUMEN GENERAL DEL PERIODO")
+        # --- AJUSTE SOLICITADO: FONDO GRIS CLARO PARA EL RESUMEN ---
+        c.setFillColor(HexColor("#f8f9fa")) # Fondo gris claro
+        c.setStrokeColor(HexColor("#d4af37")) 
+        c.setLineWidth(2)
+        c.rect(50, y-100, 510, 110, fill=1, stroke=1) # fill=1 activa el fondo
+        
+        c.setFillColor(HexColor("#1a1d21"))
+        c.setFont("Helvetica-Bold", 12); c.drawString(70, y-5, "RESUMEN GENERAL DEL PERIODO")
         ing_totales_periodo = total_periodo_nomina + total_periodo_otros
         saldo_final_periodo = ing_totales_periodo - total_periodo_gastos
         c.setFont("Helvetica", 10); c.setFillColor(colors.black)
