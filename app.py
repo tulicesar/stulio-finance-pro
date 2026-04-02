@@ -6,6 +6,7 @@ import os
 import json
 from io import BytesIO
 from datetime import datetime
+import math
 
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
@@ -155,7 +156,6 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx>0 else "Diciembre"; a_ant = anio_s if idx>0 else anio_s-1
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     st.divider()
@@ -190,13 +190,13 @@ with st.sidebar:
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
-config_moneda = st.column_config.NumberColumn("Monto", format="$ % d")
+config_moneda = st.column_config.NumberColumn("Monto", format="$ %d")
 
-st.markdown("### 📝 Movimiento de Gastos")
+st.markdown("### Movimiento de Gastos")
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_moneda}, key="g_ed")
 
-st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
+st.markdown("### Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
@@ -215,8 +215,8 @@ c3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 c4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
 c5.markdown(f'<div class="card"><div class="card-label">AHORRO PROYECTADO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 7. INFOGRAFÍAS ---
-st.markdown("### 📊 Análisis de Distribución")
+# --- 7. INFOGRAFÍAS (ARREGLADAS) ---
+st.markdown("### Análisis de Distribución")
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
 with inf1:
@@ -232,24 +232,41 @@ with inf1:
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
-    fig2 = go.Figure(go.Indicator(
-        mode="gauge+number", value=ahorro_p,
-        number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
+    # CÁLCULO DE LA AGUJA (NUEVO MOTOR)
+    val_clamped = max(0, min(ahorro_p, 100))
+    # Ángulo para velocímetro: 0% es 180 grados (izquierda), 100% es 0 grados (derecha)
+    theta = 180 - (val_clamped / 100 * 180)
+    rad = math.radians(theta)
+    
+    # Coordenadas de la aguja saliendo desde el centro del círculo (0.5, 0.4)
+    x_pivot, y_pivot = 0.5, 0.45
+    x_punta = x_pivot + 0.35 * math.cos(rad)
+    y_punta = y_pivot + 0.35 * math.sin(rad)
+    
+    fig2 = go.Figure()
+    # Arco de fondo blanco
+    fig2.add_trace(go.Indicator(
+        mode="gauge", value=val_clamped,
         gauge={
             'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#888", 'tickvals': [0, 20, 40, 60, 80, 100]},
-            'bar': {'color': "#d4af37", 'thickness': 0.6},
+            'bar': {'color': "rgba(0,0,0,0)"}, # Barra invisible para usar la aguja
             'bgcolor': "white",
             'borderwidth': 1, 'bordercolor': "#ccc",
-            'steps': [
-                {'range': [0, ahorro_p], 'color': '#d4af37'},
-                {'range': [ahorro_p, 100], 'color': '#f2f2f2'}
-            ],
-            'threshold': {'line': {'color': "grey", 'width': 3}, 'thickness': 0.8, 'value': ahorro_p}
+            'steps': [{'range': [0, 100], 'color': '#f2f2f2'}]
         }
     ))
-    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
+    # Número Porcentual Dorado
+    fig2.add_annotation(text=f"{val_clamped:.0f}%", x=x_pivot, y=y_pivot-0.05, showarrow=False, font=dict(color="#d4af37", size=55, weight="bold"))
+    
+    # LA AGUJA (Shape de línea)
+    fig2.add_shape(type="line", x0=x_pivot, y0=y_pivot, x1=x_punta, y1=y_punta, line=dict(color="#d4af37", width=5))
+    
+    # Círculo central (Pivote)
+    fig2.add_shape(type="circle", x0=x_pivot-0.02, y0=y_pivot-0.02, x1=x_pivot+0.02, y1=y_pivot+0.02, fillcolor="#d4af37", line_color="#d4af37")
+
+    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=50,b=20,l=25,r=25))
     st.plotly_chart(fig2, use_container_width=True)
-    st.markdown("<p style='text-align:center; font-weight:bold; color:#888; margin-top:-30px;'>Ahorro Proyectado</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align:center; font-weight:bold; color:#888; margin-top:-20px;'>Ahorro Proyectado</p>", unsafe_allow_html=True)
 
 with inf3:
     st.markdown("#### Estado Real del Dinero")
@@ -264,8 +281,8 @@ with inf3:
         </div>
     """, unsafe_allow_html=True)
 
-# ESPACIO EXTRA PARA BAJAR EL BOTÓN (AQUÍ ESTÁ EL AJUSTE)
-st.markdown("<br>" * 10, unsafe_allow_html=True)
+# ESPACIO EXTRA PARA BAJAR EL BOTÓN (15 saltos de línea para que quede bien abajo)
+st.markdown("<br>" * 15, unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     df_g_final = pd.concat([df_g_full[~((df_g_full["Periodo"]==mes_s)&(df_g_full["Año"]==anio_s)&(df_g_full["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
