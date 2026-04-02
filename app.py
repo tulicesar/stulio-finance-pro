@@ -179,7 +179,7 @@ with st.sidebar:
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CABECERA (LOGO IZQUIERDA AJUSTADO) ---
+# --- 6. CABECERA ---
 c_logo, c_vacia = st.columns([3, 1])
 with c_logo:
     if os.path.exists(LOGO_APP_H): 
@@ -206,7 +206,7 @@ m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- INFOGRAFIAS (BARRAS RESTAURADAS) ---
+# --- INFOGRAFIAS (SINCRONIZACIÓN DE COLORES) ---
 st.markdown("### 📊 Análisis de Gastos")
 c1, c2, c3 = st.columns([1.5, 1, 1.2])
 
@@ -215,11 +215,13 @@ with c1:
     t_df = df_ed.copy()
     t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not t_df.empty and t_df['V'].sum() > 0:
-        fig = px.pie(t_df, values='V', names='Categoría', hole=0.6, color_discrete_map=COLOR_MAP)
+        # AQUÍ CORREGIMOS EL COLOR_DISCRETE_MAP Y LA COLUMNA DE COLOR
+        fig = px.pie(t_df, values='V', names='Categoría', color='Categoría', 
+                     hole=0.6, color_discrete_map=COLOR_MAP)
         fig.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0,b=0,l=0,r=0))
         st.plotly_chart(fig, use_container_width=True)
         
-        # --- BARRAS DE CATEGORÍA RESTAURADAS ---
+        # Barras de leyenda
         res = t_df.groupby("Categoría")['V'].sum().reset_index()
         for _, r in res.iterrows():
             st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"],"#eee")}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
