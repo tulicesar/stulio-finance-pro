@@ -186,7 +186,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
 
     c.showPage(); c.save(); buf.seek(0); return buf
 
-# --- 4. ACCESO ---
+# --- 4. ACCESO (CORREGIDO CON KEYS ÚNICAS) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -195,14 +195,19 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         db_u = cargar_usuarios()
         with t_in:
-            u, p = st.text_input("Usuario"), st.text_input("Pass", type="password")
+            # Keys añadidas para evitar StreamlitDuplicateElementId
+            u = st.text_input("Usuario", key="login_u")
+            p = st.text_input("Pass", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u and db_u[u]["pass"] == p:
                     st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, db_u[u].get("nombre", u)
                     st.rerun()
-                else: st.error("❌ Error")
+                else: st.error("❌ Credenciales incorrectas")
         with t_reg:
-            rn, ru, rp = st.text_input("Nombre"), st.text_input("ID"), st.text_input("Pass", type="password")
+            # Keys añadidas para evitar StreamlitDuplicateElementId
+            rn = st.text_input("Nombre", key="reg_n")
+            ru = st.text_input("ID Usuario", key="reg_u")
+            rp = st.text_input("Pass", type="password", key="reg_p")
             if st.button("Crear Cuenta"):
                 db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado")
     st.stop()
@@ -311,7 +316,6 @@ with inf3:
     fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")])
     st.plotly_chart(fig3, use_container_width=True)
     
-    # --- AJUSTE SOLICITADO: LEYENDA TIPO BARRA PARA ESTADO REAL ---
     st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Pagado <span>$ {vp:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Pendiente <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#d4af37">Ahorro Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
