@@ -10,7 +10,7 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Nombres de archivos (Asegúrate de que coincidan exactamente en GitHub)
+# Nombres de archivos - REVISA QUE ESTÉN ASÍ EN GITHUB
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.jpg" 
 LOGO_APP_H = "LOGO H APP.png"    
@@ -23,11 +23,19 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
+# CSS CORREGIDO: Oculta el header pero permite ver la flecha del sidebar
 st.markdown("""
     <style>
+    /* Ocultar barra superior pero mantener botón de sidebar */
+    [data-testid="stHeader"] {
+        background: rgba(0,0,0,0);
+        color: rgba(0,0,0,0);
+    }
     header {visibility: hidden;}
-    [data-testid="stHeader"] {display: none;}
+    
     .stApp { background: #0e1117; color: #dee2e6; }
+    
+    /* Tarjetas */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -35,12 +43,15 @@ st.markdown("""
     }
     .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
     .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; margin: 3px 0; }
+    
+    /* Barras de leyenda */
     .legend-bar {
         padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
         font-size: 1rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
         max-width: 90%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
+    
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
     .stButton>button { border-radius: 8px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
     .login-box { max-width: 450px; margin: auto; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid #d4af37; }
@@ -89,7 +100,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.colors import HexColor
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
-    
     def head(canvas_obj, t, a):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21"))
@@ -97,7 +107,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 750, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
         return 710
-
     y = head(c, titulo, anio)
     for m in meses:
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
@@ -165,7 +174,6 @@ df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
 periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 with st.sidebar:
-    # NUEVO LOGO EN LA PARTE SUPERIOR DE LA BARRA LATERAL
     if os.path.exists(LOGO_SIDEBAR):
         st.image(LOGO_SIDEBAR, use_container_width=True)
     
@@ -192,7 +200,7 @@ with st.sidebar:
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
     st.divider()
-    st.subheader("📑 Extractos del Mes")
+    st.subheader("📑 Extractos")
     col_ex1, col_ex2 = st.columns(2)
     with col_ex1:
         if st.button(f"📄 PDF {mes_s[:3]}"):
@@ -205,18 +213,13 @@ with st.sidebar:
         st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
 
     st.divider()
-    st.subheader("📈 Balances Semestrales")
-    if st.button("📥 Semestre 1 (Ene-Jun)"):
-        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
-        st.download_button("S1.pdf", pdf_s1, "Balance_S1.pdf")
-
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
 # --- 6. CUERPO PRINCIPAL ---
 c_logo_h, c_title = st.columns([1, 4])
 with c_logo_h: 
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
-with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
+with c_title: st.markdown(f"<h1>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
@@ -237,7 +240,7 @@ m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 🚀 INFOGRAFIAS (VELOCÍMETRO CON AGUJA) ---
+# --- 🚀 INFOGRAFIAS ---
 st.markdown("### 📊 Análisis de Gastos")
 c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
