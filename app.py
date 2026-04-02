@@ -122,7 +122,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         total_periodo_nomina += nom; total_periodo_otros += otr_sum; total_periodo_gastos += g_mensual_sum
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
         
-        # Etiqueta dinámica para PDF
         label_pdf_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
         if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
@@ -157,7 +156,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFont("Helvetica", 10); c.setFillColor(colors.black); c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
         c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}"); c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
         
-        # Etiqueta dinámica para Resumen PDF
         if saldo_final >= 0: c.setFillColor(colors.darkgreen); label = "SALDO A FAVOR"
         else: c.setFillColor(colors.red); label = "DÉFICIT"
         
@@ -265,16 +263,7 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# --- AJUSTES DE ETIQUETAS KPI SOLICITADOS ---
-tz_local = pytz.timezone('America/Bogota')
-now = datetime.now(tz_local)
-meses_es = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-fecha_hoy_texto = f"{meses_es[now.month-1]} {now.day} de {now.year}"
-
-# 1. Nombre Dinámico para Fondos (Dinero Disponible + Fecha)
-label_dinero = f"DINERO DISPONIBLE<br><span style='font-size:0.55rem; font-weight:normal;'>a {fecha_hoy_texto}</span>"
-
-# 2. Nombre Dinámico para Ahorro (Saldo a Favor / Déficit)
+# --- AJUSTES DE ETIQUETAS KPI ACTUALIZADOS ---
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
 # Dashboard KPI
@@ -283,7 +272,7 @@ tarj = [
     ("INGRESOS", it, "black"), 
     ("OBLIG. PAGADAS", vp, "green"), 
     ("OBLIG. PENDIENTES", vpy, "red"), 
-    (label_dinero, fact, "blue"), 
+    ("DINERO DISPONIBLE", fact, "blue"), # Fecha eliminada aquí
     (label_ahorro, bf, "#d4af37")
 ]
 for i, (l, v, c) in enumerate(tarj): c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
