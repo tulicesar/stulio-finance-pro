@@ -69,7 +69,6 @@ def sanitize(df):
     if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
     if "Periodo" in df.columns: df["Periodo"] = df["Periodo"].astype(str).str.strip()
     if "Usuario" in df.columns: df["Usuario"] = df["Usuario"].astype(str).str.strip()
-    # CORRECCIÓN: Forzamos que Pagado sea booleano para que el check sea editable
     if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
     return df
 
@@ -255,11 +254,11 @@ if df_mes_g.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
                 df_mes_g["Pagado"] = False 
 
-# CONFIGURACIÓN DE TABLAS (CORREGIDO PARA HACER "PAGADO" EDITABLE)
+# CONFIGURACIÓN DE TABLAS (AJUSTADO CON SEPARADORES DE MILES)
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-    "Monto": st.column_config.NumberColumn("Monto", format="$ %d"),
-    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %d"),
+    "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
     "Pagado": st.column_config.CheckboxColumn("Pagado", default=False)
 }
 
@@ -268,7 +267,7 @@ df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción",
 
 st.markdown("### 💰 Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
-df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %d")}, key="oi_ed")
+df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")}, key="oi_ed")
 
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
