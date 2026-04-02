@@ -10,7 +10,6 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Nombres de archivos - VERIFICA QUE ESTÉN ASÍ EN GITHUB
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -23,22 +22,19 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# CSS: Estilos generales y personalización de tabla
 st.markdown("""
     <style>
-    /* Forzar visibilidad del botón para abrir sidebar */
     button[kind="headerNoSpacing"] { display: flex !important; visibility: visible !important; color: #d4af37 !important; }
     header { background-color: rgba(0,0,0,0) !important; }
     [data-testid="stHeader"] { background: none !important; }
-
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* Aumentar texto del Registro de Movimientos (Tabla) */
+    /* TABLA EXPANDIDA Y CÓMODA */
     [data-testid="stDataEditor"] div {
-        font-size: 1.15rem !important;
+        font-size: 1.2rem !important; /* Texto más grande para lectura cómoda */
     }
+    .st-emotion-cache-1vt458p { padding: 1rem; } /* Más espacio interno */
     
-    /* Tarjetas de métricas */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -48,14 +44,14 @@ st.markdown("""
     .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; margin: 3px 0; }
     
     .legend-bar {
-        padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
-        font-size: 1rem; font-weight: bold; color: #1a1d21; 
+        padding: 12px 20px; border-radius: 8px; margin-bottom: 8px; 
+        font-size: 1.1rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
-        max-width: 90%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+        max-width: 95%; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
     }
     
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
-    .stButton>button { border-radius: 8px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
+    .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
     .login-box { max-width: 450px; margin: auto; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 15px; border: 1px solid #d4af37; }
     </style>
     """, unsafe_allow_html=True)
@@ -102,7 +98,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.colors import HexColor
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
-    
     def head(canvas_obj, t, a):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21"))
@@ -110,7 +105,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 750, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
         return 710
-
     y = head(c, titulo, anio)
     for m in meses:
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
@@ -139,16 +133,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
 
 # --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
-
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        if os.path.exists(LOGO_LOGIN):
-            st.image(LOGO_LOGIN, use_container_width=True)
-        else:
-            st.markdown("<h1 style='text-align: center; color: #d4af37;'>My FinanceApp</h1>", unsafe_allow_html=True)
-        
+        if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
         tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
         usuarios = cargar_usuarios()
         with tab_log:
@@ -178,16 +167,11 @@ df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
 periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 with st.sidebar:
-    if os.path.exists(LOGO_SIDEBAR):
-        st.image(LOGO_SIDEBAR, use_container_width=True)
-    
+    if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
-    
-    idx = periodos_list.index(mes_s)
-    mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
-    anio_ant = anio_s if idx > 0 else anio_s - 1
+    idx = periodos_list.index(mes_s); mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]; anio_ant = anio_s if idx > 0 else anio_s - 1
     
     i_prev = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
     g_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
@@ -217,33 +201,22 @@ with st.sidebar:
         st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
 
     st.divider()
-    st.subheader("📈 Balances Semestrales")
-    if st.button("📥 Semestre 1 (Ene-Jun)"):
-        pdf_s1 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[0:6], "Balance S1", anio_s)
-        st.download_button("S1.pdf", pdf_s1, "Balance_S1.pdf")
-    if st.button("📥 Semestre 2 (Jul-Dic)"):
-        pdf_s2 = generar_pdf_reporte(df_g_user, df_i_user, periodos_list[6:12], "Balance S2", anio_s)
-        st.download_button("S2.pdf", pdf_s2, "Balance_S2.pdf")
-
-    st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO PRINCIPAL (LOGO FULL WIDTH) ---
+# --- 6. CABECERA (LOGO FULL) ---
 if os.path.exists(LOGO_APP_H): 
-    # Al no usar columnas aquí, abarca todo el ancho disponible
     st.image(LOGO_APP_H, use_container_width=True)
 
-# Título de Mes centrado y profesional
-st.markdown(f"<h1 style='text-align: center; margin-top: -20px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
+st.markdown(f"<h1 style='text-align: center; margin-top: -10px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# Lógica de Datos y Recurrencia
+# --- REGISTRO DE MOVIMIENTOS ---
+st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
     if not df_rec.empty: df_mes = df_rec.copy().assign(Pagado=False, Monto=0)
 
-# REGISTRO DE MOVIMIENTOS
-st.markdown("### 📝 Registro de Movimientos")
+# FILTRADO DE COLUMNAS REALES (Eliminada Total_Cat)
 df_v = df_mes.reset_index(drop=True).drop(columns=["Año", "Periodo", "Usuario"], errors='ignore')
 df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f"ed_{mes_s}", column_config={
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
@@ -265,44 +238,26 @@ c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
 with c_graf_dona:
     st.markdown("**Desglose Presupuestado**")
-    df_ed['Total_Cat'] = df_ed.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
-    if not df_ed.empty and df_ed["Total_Cat"].sum() > 0:
-        fig_pie = px.pie(df_ed, values='Total_Cat', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
+    # Lógica de cálculo interno sin columna extra en tabla
+    temp_df = df_ed.copy()
+    temp_df['VAL_CALC'] = temp_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
+    if not temp_df.empty and temp_df["VAL_CALC"].sum() > 0:
+        fig_pie = px.pie(temp_df, values='VAL_CALC', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
         fig_pie.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=300, margin=dict(t=0, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
-        df_sum = df_ed.groupby("Categoría")["Total_Cat"].sum().reset_index()
+        df_sum = temp_df.groupby("Categoría")["VAL_CALC"].sum().reset_index()
         for _, r in df_sum.iterrows():
-            st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"], "#eee")}">{r["Categoría"]} <span>$ {r["Total_Cat"]:,.0f}</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"], "#eee")}">{r["Categoría"]} <span>$ {r["VAL_CALC"]:,.0f}</span></div>', unsafe_allow_html=True)
 
 with c_graf_ahorro:
     st.markdown("**Eficiencia de Ahorro**")
-    fig_gauge = go.Figure(go.Indicator(
-        mode = "gauge+number", value = ahorro_p,
-        number = {'suffix': "%", 'font': {'color': '#d4af37'}},
-        gauge = {
-            'axis': {'range': [0, 100], 'tickcolor': "white"},
-            'bar': {'color': "white", 'thickness': 0.25},
-            'bgcolor': "#1f2630",
-            'steps': [
-                {'range': [0, 20], 'color': '#ff4b4b'},
-                {'range': [20, 50], 'color': '#ffa500'},
-                {'range': [50, 100], 'color': '#00d26a'}
-            ],
-            'threshold': {
-                'line': {'color': "#d4af37", 'width': 6},
-                'thickness': 0.85, 'value': ahorro_p
-            }
-        }
-    ))
+    fig_gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':'#d4af37'}}, gauge={'axis':{'range':[0,100],'tickcolor':"white"},'bar':{'color':"white",'thickness':0.25},'bgcolor':"#1f2630",'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[20,50],'color':'#ffa500'},{'range':[50,100],'color':'#00d26a'}],'threshold':{'line':{'color':"#d4af37",'width':6},'thickness':0.85,'value':ahorro_p}}))
     fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(t=50, b=0, l=0, r=0))
     st.plotly_chart(fig_gauge, use_container_width=True)
 
 with c_graf_status:
     st.markdown("**Estado Real del Dinero**")
-    labels_status = ['Pagado', 'Pendiente', 'Ahorro (Saldo)']
-    values_status = [vp, vpy, saldo_fin]
-    colors_status = ['#2ecc71', '#e74c3c', '#d4af37']
-    fig_status = go.Figure(data=[go.Pie(labels=labels_status, values=values_status, hole=.65, marker_colors=colors_status, textinfo='percent+label')])
+    fig_status = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, saldo_fin], hole=.65, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='percent+label')])
     fig_status.update_layout(showlegend=True, paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=380, margin=dict(t=0, b=0, l=0, r=0))
     st.plotly_chart(fig_status, use_container_width=True)
 
