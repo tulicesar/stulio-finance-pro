@@ -86,7 +86,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF (CON CORRECCIONES SOLICITADAS) ---
+# --- 3. REPORTE PDF (ACTUALIZADO CON TOTALES Y TÍTULOS) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -101,12 +101,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
         
-        # Hora y ubicación geográfica (Bogotá por defecto)
         tz = pytz.timezone('America/Bogota') 
         fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
         
         canvas_obj.setFont("Helvetica", 7) 
-        canvas_obj.setFillColor(colors.grey)
+        canvas_obj.setFillColor(colors.grey) 
         canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
         return 710
 
@@ -122,29 +121,30 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         
         if y < 250: c.showPage(); y = head(c, titulo, anio)
         
-        # Tarjeta de resumen
         c.setFillColor(HexColor("#f8f9fa")); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
         
-        # --- SECCIÓN INGRESOS (DETALLADO) ---
+        # --- SECCIÓN INGRESOS ---
         c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.drawString(60, y, f"Saldo Ant: $ {s_ant:,.0f} | Nómina: $ {nom:,.0f}"); y -= 12
         
-        # Mostrar detalle de otros ingresos si existen
+        # Detalle de Otros Ingresos
         if not oi_m.empty:
             for _, row_oi in oi_m.iterrows():
                 if y < 60: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
                 c.drawString(60, y, f"● {row_oi['Descripción']}"); c.drawRightString(480, y, f"$ {row_oi['Monto']:,.0f}"); y -= 10
-        y -= 20
+            
+            # TOTAL INGRESOS ADICIONALES
+            c.setFont("Helvetica-Bold", 8); c.drawRightString(480, y, f"Total Otros Ingresos: $ {otr_sum:,.0f}"); y -= 20
+        else:
+            y -= 10
         
-        # --- SECCIÓN GASTOS (CON TÍTULO DE COLUMNA) ---
+        # --- SECCIÓN GASTOS ---
         c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
-        
         # Títulos de columnas
         c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
-        c.setStrokeColor(colors.lightgrey); c.line(60, y+10, 550, y+10) # Línea sutil bajo títulos
         
         c.setFont("Helvetica", 8)
         for _, row in g_m.iterrows():
