@@ -29,7 +29,7 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* TABLAS XL GIGANTES PARA CELULAR */
+    /* TABLAS XL GIGANTES */
     [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
 
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
@@ -114,8 +114,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == u_id)]
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == u_id)]
         oi_m = df_oi_full[(df_oi_full["Periodo"] == m) & (df_oi_full["Año"] == anio) & (df_oi_full["Usuario"] == u_id)]
-        s_ant = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0
-        nom = i_m["Nomina"].iloc[0] if not i_m.empty else 0
+        s_ant, nom = (i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0), (i_m["Nomina"].iloc[0] if not i_m.empty else 0)
         otr_sum = oi_m["Monto"].sum() if not oi_m.empty else 0
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
         
@@ -125,31 +124,26 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
         
-        # INGRESOS
         c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); y -= 12
         c.setFont("Helvetica", 8); c.drawString(60, y, "Saldo Anterior"); c.drawRightString(480, y, f"$ {s_ant:,.0f}"); y -= 10
-        c.drawString(60, y, "Nómina"); c.drawRightString(480, y, f"$ {nom:,.0f}"); y -= 10
+        c.drawString(60, y, "Nómina"); c.drawRightString(480, y, f"$ {nom:,.0f}"); y -= 5
         
         if not oi_m.empty:
             c.setStrokeColor(colors.lightgrey); c.line(60, y, 480, y); y -= 12
             c.setFont("Helvetica-BoldOblique", 7); c.setFillColor(colors.darkgrey); c.drawString(60, y, "Ingresos Variables"); y -= 10
-            c.setFont("Helvetica", 8); c.setFillColor(colors.black)
             for _, r_oi in oi_m.iterrows():
-                c.drawString(65, y, f"● {r_oi['Descripción']}"); c.drawRightString(480, y, f"$ {r_oi['Monto']:,.0f}"); y -= 10
+                c.setFont("Helvetica", 8); c.setFillColor(colors.black); c.drawString(65, y, f"● {r_oi['Descripción']}"); c.drawRightString(480, y, f"$ {r_oi['Monto']:,.0f}"); y -= 10
             c.setFont("Helvetica-Bold", 8); c.line(60, y+5, 480, y+5); c.drawRightString(480, y-5, f"Total Otros Ingresos: $ {otr_sum:,.0f}"); y -= 25
         else: y -= 15
         
-        # GASTOS
         c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
         c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
-        c.setStrokeColor(colors.lightgrey); c.line(60, y+10, 550, y+10)
         c.setFont("Helvetica", 8)
         for _, row in g_m.iterrows():
             if y < 60: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65]); c.drawRightString(480, y, f"{row['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
         y -= 20
-        
     c.showPage(); c.save(); buf.seek(0); return buf
 
 # --- 4. ACCESO ---
@@ -158,17 +152,17 @@ if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro"])
+        t_in, t_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro"])
         db_u = cargar_usuarios()
-        with tab_in:
+        with t_in:
             u, p = st.text_input("Usuario"), st.text_input("Pass", type="password")
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u and db_u[u]["pass"] == p:
                     st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, db_u[u].get("nombre", u)
                     st.rerun()
-                else: st.error("❌ Error")
-        with tab_reg:
-            rn, ru, rp = st.text_input("Nombre"), st.text_input("ID"), st.text_input("Contraseña", type="password")
+                else: st.error("❌ Credenciales incorrectas")
+        with t_reg:
+            rn, ru, rp = st.text_input("Nombre"), st.text_input("ID"), st.text_input("Pass", type="password")
             if st.button("Crear Cuenta"):
                 db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado")
     st.stop()
@@ -199,16 +193,16 @@ with st.sidebar:
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
     n_in = st.number_input("Sueldo Fijo", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    
+    placeholder_otros = st.empty()
 
-    # --- EXTRACTOS (RESTUARADO EXCEL) ---
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
         if st.button("📄 PDF"):
             pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
-            st.download_button(f"Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
+            st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with c_xls:
-        # LÓGICA DE EXCEL RESTAURADA
         buf_xls = BytesIO()
         with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
             df_g_full[(df_g_full["Periodo"]==mes_s)&(df_g_full["Usuario"]==u_id)].to_excel(writer, sheet_name='Gastos', index=False)
@@ -218,10 +212,10 @@ with st.sidebar:
     st.subheader("⚖️ Proyecciones")
     if st.button("📥 Semestre 1"):
         p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "S1", anio_s, u_id)
-        st.download_button("Bajar S1", p1, "S1.pdf")
+        st.download_button("S1.pdf", p1, "S1.pdf")
     if st.button("📥 Semestre 2"):
         p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "S2", anio_s, u_id)
-        st.download_button("Bajar S2", p2, "S2.pdf")
+        st.download_button("S2.pdf", p2, "S2.pdf")
     
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
@@ -229,27 +223,36 @@ with st.sidebar:
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
+# Configuración de moneda para las tablas
+config_moneda = st.column_config.NumberColumn("Monto", format="$ %d")
+config_ref = st.column_config.NumberColumn("Valor Referencia", format="$ %d")
+
 st.markdown("### 📝 Movimiento de Gastos")
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
-df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key="g_ed")
+# RESTAURADA: Columna 'Movimiento Recurrente' y configuración de moneda
+df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_ref}, key="g_ed")
 
 st.markdown("### 💰 Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
-df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key="oi_ed")
+df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum())
+
+# Actualizar el sidebar con la suma viva
+placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
+
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# Dashboard KPI (5 en fila)
+# Dashboard KPI
 st.divider()
 c_kpi = st.columns(5)
 tarj = [("INGRESOS", it, "black"), ("PAGADO", vp, "green"), ("PENDIENTE", vpy, "red"), ("FONDOS", fact, "blue"), ("AHORRO", bf, "#d4af37")]
 for i, (l, v, c) in enumerate(tarj):
     c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
-# Infografías (3 en fila)
+# Infografías
 st.markdown("### 📊 Análisis de Distribución")
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
