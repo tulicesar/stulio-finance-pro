@@ -220,18 +220,36 @@ with st.sidebar:
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
-# CARGA DE GASTOS CON LÓGICA DE RECURRENCIA
+# --- LÓGICA DE CARGA INTELIGENTE (MEJORADA) ---
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
-# RESTAURACIÓN: Si el mes está vacío, traer recurrentes de meses anteriores
 if df_mes_g.empty:
-    recurrentes = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id) & (df_g_full["Movimiento Recurrente"] == True)]
-    if not recurrentes.empty:
-        df_mes_g = recurrentes.drop_duplicates(subset=["Categoría", "Descripción"]).copy()
-        df_mes_g["Periodo"] = mes_s
-        df_mes_g["Pagado"] = False
+    mes_actual_idx = meses_lista.index(mes_s)
+    # Buscamos registros previos del mismo usuario y año
+    gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
+    
+    if not gastos_previos.empty:
+        meses_map = {m: i for i, m in enumerate(meses_lista)}
+        gastos_previos["mes_idx"] = gastos_previos["Periodo"].map(meses_map)
+        
+        # Filtramos solo lo que pasó ANTES del mes actual
+        gastos_previos = gastos_previos[gastos_previos["mes_idx"] < mes_actual_idx]
+        
+        if not gastos_previos.empty:
+            # Ordenamos por mes descendente para tener lo más reciente arriba
+            gastos_previos = gastos_previos.sort_values(by="mes_idx", ascending=False)
+            
+            # Identificamos la ÚLTIMA decisión tomada para cada combinación de Categoría-Descripción
+            ultimas_decisiones = gastos_previos.drop_duplicates(subset=["Categoría", "Descripción"])
+            
+            # Solo arrastramos si en su ÚLTIMA aparición seguía marcado como recurrente
+            activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
+            
+            if not activos.empty:
+                df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
+                df_mes_g["Pagado"] = False # Siempre empieza sin pagar en el mes nuevo
 
-# RESTAURACIÓN: Configuración de columnas (Moneda + Categorías Desplegables)
+# Configuración de tablas
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %d"),
@@ -250,7 +268,7 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# DASHBOARD
+# Dashboard
 st.divider(); c_kpi = st.columns(5); tarj = [("INGRESOS", it, "black"), ("PAGADO", vp, "green"), ("PENDIENTE", vpy, "red"), ("FONDOS", fact, "blue"), ("AHORRO", bf, "#d4af37")]
 for i, (l, v, c) in enumerate(tarj): c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
