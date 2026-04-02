@@ -19,14 +19,27 @@ LOGO_APP_H = "LOGOapp horizontal.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# CATEGORÍAS EN ORDEN ALFABÉTICO
+# LISTA DE CATEGORÍAS ORGANIZADA ALFABÉTICAMENTE
 LISTA_CATEGORIAS = [
-    "Alimentación", "Cuidado Personal", "Educación", "Entretenimiento", 
-    "Hogar", "Impuestos", "Inversiones", "Mascotas", 
-    "Obligaciones Finacieras", "Otros", "Regalos", "Salud", 
-    "Seguros", "Servicios", "Suscripciones", "Transporte"
+    "Alimentación",
+    "Cuidado Personal",
+    "Educación",
+    "Entretenimiento",
+    "Hogar",
+    "Impuestos",
+    "Inversiones",
+    "Mascotas",
+    "Obligaciones Finacieras",
+    "Otros",
+    "Regalos",
+    "Salud",
+    "Seguros",
+    "Servicios",
+    "Suscripciones",
+    "Transporte"
 ]
 
+# MAPA DE COLORES (Asociado a las categorías)
 COLOR_MAP = {
     "Alimentación": "#FDFD96", "Cuidado Personal": "#FFB7C5", "Educación": "#77DD77",
     "Entretenimiento": "#FF6961", "Hogar": "#FFB347", "Impuestos": "#DEA5A4",
@@ -66,7 +79,8 @@ def format_moneda(valor):
     try:
         n = int(float(valor))
         return f"$ {n:,.0f}".replace(",", ".")
-    except: return "$ 0"
+    except:
+        return "$ 0"
 
 def parse_moneda(texto):
     if not texto: return 0.0
@@ -90,7 +104,6 @@ def sanitize(df):
     if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
     if "Periodo" in df.columns: df["Periodo"] = df["Periodo"].astype(str).str.strip()
     if "Usuario" in df.columns: df["Usuario"] = df["Usuario"].astype(str).str.strip()
-    # Forzar booleanos para que los checks sean interactivos
     if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
     if "Movimiento Recurrente" in df.columns: df["Movimiento Recurrente"] = df["Movimiento Recurrente"].astype(bool)
     return df
@@ -220,7 +233,10 @@ df_g_full, df_i_full, df_oi_full = cargar_bd()
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
-    anio_s = st.selectbox("Año", [2025, 2026], index=1)
+    
+    # --- ACTUALIZACIÓN: AÑO 2027 AGREGADO ---
+    anio_s = st.selectbox("Año", [2025, 2026, 2027], index=1)
+    
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
@@ -270,20 +286,17 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
-# LÓGICA DE RECURRENCIA MEJORADA
+# RECURRENCIA INTELIGENTE
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
     if not gastos_previos.empty:
         meses_map = {m: i for i, m in enumerate(meses_lista)}
         gastos_previos["mes_idx"] = gastos_previos["Periodo"].map(meses_map)
-        # Solo miramos meses anteriores al actual
         anteriores = gastos_previos[gastos_previos["mes_idx"] < mes_actual_idx]
         if not anteriores.empty:
-            # Ordenamos por mes (el más reciente primero) para heredar la ÚLTIMA decisión
             anteriores = anteriores.sort_values(by="mes_idx", ascending=False)
             ultimas_decisiones = anteriores.drop_duplicates(subset=["Categoría", "Descripción"], keep='first')
-            # Solo traemos los que su ÚLTIMA configuración fue 'Recurrente = True'
             activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
