@@ -163,7 +163,6 @@ with st.sidebar:
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
     placeholder_otros = st.empty()
 
-    # TÍTULO SOLICITADO: Extracto del Mes
     st.divider(); st.subheader("📑 Extracto del Mes")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
@@ -193,7 +192,6 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 config_moneda = st.column_config.NumberColumn("Monto", format="$ %d")
 
-# TÍTULOS RESTAURADOS
 st.markdown("### 📝 Movimiento de Gastos")
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_moneda}, key="g_ed")
@@ -202,7 +200,6 @@ st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
-# Cálculos Automáticos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
@@ -218,7 +215,7 @@ c3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 c4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
 c5.markdown(f'<div class="card"><div class="card-label">AHORRO PROYECTADO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 7. INFOGRAFÍAS RESTAURADAS ---
+# --- 7. INFOGRAFÍAS ---
 st.markdown("### 📊 Análisis de Distribución")
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
@@ -235,7 +232,6 @@ with inf1:
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
-    # VELOCÍMETRO ESTILO IMAGEN (BLANCO Y DORADO)
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number", value=ahorro_p,
         number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
@@ -267,6 +263,10 @@ with inf3:
         <span style='color:#d4af37;'>● Ahorro Proyectado: $ {bf:,.0f}</span>
         </div>
     """, unsafe_allow_html=True)
+
+# --- REUBICACIÓN DEL BOTÓN ---
+# Añadimos exactamente dos espacios moderados usando saltos de línea HTML
+st.markdown("<br><br>", unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     df_g_final = pd.concat([df_g_full[~((df_g_full["Periodo"]==mes_s)&(df_g_full["Año"]==anio_s)&(df_g_full["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
