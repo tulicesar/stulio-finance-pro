@@ -10,9 +10,9 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Nombres de archivos - VERIFICA QUE ESTÉN ASÍ EN GITHUB
+# Nombres de archivos en GitHub
 LOGO_LOGIN = "logoapp 1.png"
-LOGO_SIDEBAR = "logoapp 2.png" # <--- CAMBIO REALIZADO AQUÍ
+LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
@@ -23,24 +23,17 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# CSS REPARADO: Fuerza la visibilidad de la flecha del sidebar
+# CSS: Reparación de Sidebar y Estilo de Tarjetas
 st.markdown("""
     <style>
-    /* Forzar visibilidad del botón para abrir sidebar (Flecha) */
-    [data-testid="stSidebarNavSeparator"] { display: none; }
-    button[kind="headerNoSpacing"] {
-        display: flex !important;
-        visibility: visible !important;
-        color: #d4af37 !important;
-    }
-    
-    /* Ocultar header pero permitir interactividad */
+    /* Forzar visibilidad del botón de sidebar */
+    button[kind="headerNoSpacing"] { display: flex !important; visibility: visible !important; color: #d4af37 !important; }
     header { background-color: rgba(0,0,0,0) !important; }
     [data-testid="stHeader"] { background: none !important; }
 
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* Tarjetas */
+    /* Tarjetas de métricas */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -212,22 +205,28 @@ with st.sidebar:
             pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
             st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with col_ex2:
-        df_ex = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
+        df_ex_export = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
         output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_ex.to_excel(writer, index=False)
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_ex_export.to_excel(writer, index=False)
         st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
 
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO PRINCIPAL ---
-c_logo_h, c_title = st.columns([1, 4])
-with c_logo_h: 
-    # Logo Horizontal Actualizado
-    if os.path.exists(LOGO_APP_H): 
-        st.image(LOGO_APP_H, use_container_width=True)
-with c_title: st.markdown(f"<h1>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
+# --- 6. CUERPO PRINCIPAL (Header Ajustado) ---
+# Cambiamos la proporción de columnas para que el logo ocupe casi todo el ancho
+c_logo_expand, c_mes_text = st.columns([12, 2]) # El logo tiene 12 partes de ancho, el texto 2
 
+with c_logo_expand: 
+    if os.path.exists(LOGO_APP_H): 
+        # use_container_width=True hace que ocupe todo el ancho de su columna
+        st.image(LOGO_APP_H, use_container_width=True)
+
+with c_mes_text: 
+    # Título del mes alineado a la derecha para no chocar
+    st.markdown(f"<h2 style='text-align: right;'>{mes_s} {anio_s}</h2>", unsafe_allow_html=True)
+
+# --- TABLA DE DATOS ---
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
@@ -238,6 +237,7 @@ df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
 })
 
+# MÉTRICAS
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4, m5 = st.columns(5)
