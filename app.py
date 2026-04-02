@@ -84,7 +84,9 @@ def sanitize(df):
     if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
     if "Periodo" in df.columns: df["Periodo"] = df["Periodo"].astype(str).str.strip()
     if "Usuario" in df.columns: df["Usuario"] = df["Usuario"].astype(str).str.strip()
+    # ACTIVACIÓN DE CHECKS: Aseguramos que las columnas de check sean booleanas
     if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
+    if "Movimiento Recurrente" in df.columns: df["Movimiento Recurrente"] = df["Movimiento Recurrente"].astype(bool)
     return df
 
 def cargar_bd():
@@ -102,16 +104,10 @@ def cargar_bd():
 
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
-    # Pagadas: Suma de Monto cuando Pagado es True
     vp = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
-    
-    # AJUSTE SOLICITADO: Pendientes suma el valor del Monto (o Valor Ref si Monto es 0) cuando Pagado es False
     if not df_g.empty:
-        # Priorizamos Monto sobre Valor Referencia si está desactivado el check
         vpy = df_g[df_g["Pagado"] == False].apply(lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1).sum()
-    else:
-        vpy = 0
-        
+    else: vpy = 0
     bf = it - vp - vpy
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
@@ -191,8 +187,7 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         db_u = cargar_usuarios()
         with t_in:
-            u = st.text_input("Usuario", key="login_u")
-            p = st.text_input("Pass", type="password", key="login_p")
+            u, p = st.text_input("Usuario", key="login_u"), st.text_input("Pass", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u:
                     u_data = db_u[u]
@@ -223,9 +218,7 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    # Filtro estricto por mes actual
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
-    
     idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"; a_ant = anio_s if idx > 0 else anio_s-1
     i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
     g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant) & (df_g_full["Usuario"] == u_id)]
@@ -234,10 +227,8 @@ with st.sidebar:
     s_sug = 0.0
     if not i_ant.empty:
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
-    
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=False)
     
-    # AJUSTE SOLICITADO: Evitar repetición automática si no hay datos guardados
     val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
     s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
     s_in = parse_moneda(s_txt)
@@ -286,11 +277,13 @@ if df_mes_g.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
                 df_mes_g["Pagado"] = False 
 
+# CONFIGURACIÓN DE TABLAS (CORREGIDO: Ambos checks activados explícitamente)
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
     "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
-    "Pagado": st.column_config.CheckboxColumn("Pagado", default=False)
+    "Pagado": st.column_config.CheckboxColumn("Pagado", default=False),
+    "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=True)
 }
 
 st.markdown("### 📝 Movimiento de Gastos")
