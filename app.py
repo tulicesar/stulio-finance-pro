@@ -78,7 +78,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-# --- 3. MÓDULO DE REPORTES MEJORADO ---
+# --- 3. MÓDULO DE REPORTES ---
 def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -182,7 +182,6 @@ with st.sidebar:
     n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
 
-    # --- NUEVOS MÓDULOS DE REPORTES ---
     st.divider()
     st.subheader("📑 Extractos del Mes")
     col_ex1, col_ex2 = st.columns(2)
@@ -215,7 +214,6 @@ with c_logo_h:
     if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 with c_title: st.markdown(f"<h1>{mes_s} {anio_s} <span style='font-size:0.4em; color:#d4af37;'>| by Stulio Designs</span></h1>", unsafe_allow_html=True)
 
-# Lógica de Datos
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
@@ -226,7 +224,6 @@ df_ed = st.data_editor(df_v, use_container_width=True, num_rows="dynamic", key=f
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=list(COLOR_MAP.keys()), required=True)
 })
 
-# MÉTRICAS (LAS 5 TARJETAS RECUPERADAS)
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed, n_in, o_in, s_in)
 st.markdown("---")
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -236,7 +233,7 @@ m3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:#2575fc;">$ {fondos_act:,.0f}</div></div>', unsafe_allow_html=True)
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 🚀 INFOGRAFIAS ---
+# --- 🚀 INFOGRAFIAS ACTUALIZADAS (CON AGUJA) ---
 st.markdown("### 📊 Análisis de Gastos")
 c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
@@ -254,10 +251,28 @@ with c_graf_dona:
     else: st.info("ℹ️ Sin datos.")
 
 with c_graf_ahorro:
-    st.markdown("**Eficiencia**")
-    fig_gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':'#d4af37'}},
-        gauge={'axis':{'range':[0, 100]}, 'bar':{'color':"#d4af37"}, 'bgcolor':"#1f2630",
-               'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[20,50],'color':'#ffa500'},{'range':[50,100],'color':'#00d26a'}]}))
+    st.markdown("**Eficiencia de Ahorro**")
+    # Gráfico de velocímetro con AGUJA (threshold)
+    fig_gauge = go.Figure(go.Indicator(
+        mode = "gauge+number",
+        value = ahorro_p,
+        number = {'suffix': "%", 'font': {'color': '#d4af37'}},
+        gauge = {
+            'axis': {'range': [0, 100], 'tickcolor': "white"},
+            'bar': {'color': "white", 'thickness': 0.2}, # Barra de progreso sutil
+            'bgcolor': "#1f2630",
+            'steps': [
+                {'range': [0, 20], 'color': '#ff4b4b'},
+                {'range': [20, 50], 'color': '#ffa500'},
+                {'range': [50, 100], 'color': '#00d26a'}
+            ],
+            'threshold': {
+                'line': {'color': "#d4af37", 'width': 5}, # LA AGUJA DORADA
+                'thickness': 0.8,
+                'value': ahorro_p
+            }
+        }
+    ))
     fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(t=50, b=0, l=0, r=0))
     st.plotly_chart(fig_gauge, use_container_width=True)
 
