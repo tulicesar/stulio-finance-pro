@@ -27,6 +27,7 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     [data-testid="stDataEditor"] { font-size: 1.4rem !important; }
+    .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -45,6 +46,16 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. MOTOR DE DATOS ---
+def cargar_usuarios():
+    if os.path.exists(USER_DB):
+        with open(USER_DB, "r") as f:
+            try: return json.load(f)
+            except: pass
+    return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
+
+def guardar_usuarios(db):
+    with open(USER_DB, "w") as f: json.dump(db, f, indent=4)
+
 def sanitize(df):
     if df.empty: return df
     if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
@@ -86,6 +97,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
+        # FECHA DE GENERACIÓN
         canvas_obj.setFont("Helvetica-Oblique", 8); canvas_obj.setFillColor(colors.grey)
         fecha_gen = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}"); return 710
@@ -112,12 +124,34 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         y -= 20
     c.showPage(); c.save(); buf.seek(0); return buf
 
-# --- 4. CARGA Y SIDEBAR ---
-u_id = "tulicesar" # Hardcoded para el ejemplo
+# --- 4. ACCESO ---
+if 'autenticado' not in st.session_state: st.session_state.autenticado = False
+if not st.session_state.autenticado:
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
+        tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registro"])
+        db_u = cargar_usuarios()
+        with tab_in:
+            u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
+            if st.button("Ingresar", use_container_width=True):
+                if u in db_u and db_u[u]["pass"] == p:
+                    st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, db_u[u].get("nombre", u)
+                    st.rerun()
+                else: st.error("❌ Credenciales incorrectas")
+        with tab_reg:
+            rn = st.text_input("Nombre"); ru = st.text_input("ID Usuario"); rp = st.text_input("Pass", type="password")
+            if st.button("Crear Cuenta"):
+                db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado con éxito")
+    st.stop()
+
+# --- 5. SIDEBAR ---
+u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd()
 
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
+    st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
@@ -125,7 +159,18 @@ with st.sidebar:
     idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx>0 else "Diciembre"; a_ant = anio_s if idx>0 else anio_s-1
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
-    s_in = st.number_input("Saldo Anterior", value=float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
+    # Cálculos para arrastre automático
+    i_ant = df_i_full[(df_i_full["Periodo"]==m_ant) & (df_i_full["Año"]==a_ant) & (df_i_full["Usuario"]==u_id)]
+    g_ant = df_g_full[(df_g_full["Periodo"]==m_ant) & (df_g_full["Año"]==a_ant) & (df_g_full["Usuario"]==u_id)]
+    oi_ant = df_oi_full[(df_oi_full["Periodo"]==m_ant) & (df_oi_full["Año"]==a_ant) & (df_oi_full["Usuario"]==u_id)]
+    s_sug = 0.0
+    if not i_ant.empty:
+        _, _, _, _, bf_ant, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
+        s_sug = float(bf_ant)
+
+    st.divider()
+    arr_on = st.toggle(f"Arrastrar de {m_ant}", value=not i_ant.empty)
+    s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
     n_in = st.number_input("Nómina/Sueldo", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
     placeholder_otros = st.empty()
 
@@ -146,8 +191,13 @@ with st.sidebar:
     if st.button("📥 Semestre 1 (Ene-Jun)"):
         pdf1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "Proyección S1", anio_s, u_id)
         st.download_button("Bajar S1.pdf", pdf1, "S1_Proyectado.pdf")
+    if st.button("📥 Semestre 2 (Jul-Dic)"):
+        pdf2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "Proyección S2", anio_s, u_id)
+        st.download_button("Bajar S2.pdf", pdf2, "S2_Proyectado.pdf")
+    
+    if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 5. CUERPO PRINCIPAL ---
+# --- 6. CUERPO PRINCIPAL ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
@@ -158,7 +208,7 @@ df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción",
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
-# CÁLCULOS
+# Cálculos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
@@ -174,7 +224,7 @@ c3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 c4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
 c5.markdown(f'<div class="card"><div class="card-label">AHORRO PROYECTADO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 6. INFOGRAFÍAS (RESTAURADAS) ---
+# --- 7. INFOGRAFÍAS ---
 st.markdown("### 📊 Análisis de Distribución")
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
@@ -220,5 +270,9 @@ with inf3:
     """, unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    # (Lógica de guardado...)
+    df_g_final = pd.concat([df_g_full[~((df_g_full["Periodo"]==mes_s)&(df_g_full["Año"]==anio_s)&(df_g_full["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
+    df_oi_final = pd.concat([df_oi_full[~((df_oi_full["Periodo"]==mes_s)&(df_oi_full["Año"]==anio_s)&(df_oi_full["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
+    df_i_final = pd.concat([df_i_full[~((df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otr_vivos, "Usuario":u_id}])], ignore_index=True)
+    with pd.ExcelWriter(BASE_FILE) as w:
+        df_g_final.to_excel(w, sheet_name="Gastos", index=False); df_i_final.to_excel(w, sheet_name="Ingresos", index=False); df_oi_final.to_excel(w, sheet_name="OtrosIngresos", index=False)
     st.balloons(); st.rerun()
