@@ -45,6 +45,7 @@ st.markdown("""
         font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
     }
+    .conf-visual { font-size: 0.85rem; color: #d4af37; font-weight: bold; margin-top: -15px; margin-bottom: 10px; }
     section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
     .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
     h2, h3 { color: #d4af37 !important; font-weight: bold !important; }
@@ -211,9 +212,16 @@ with st.sidebar:
     if not i_ant.empty:
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant.empty)
+    
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
+    
+    # --- AJUSTE: CONFIRMACIÓN VISUAL DE MILES EN SIDEBAR ---
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
+    st.markdown(f'<p class="conf-visual">Confirmación: $ {s_in:,.0f}</p>', unsafe_allow_html=True)
+    
     n_in = st.number_input("Ingreso Fijo (Sueldo o Nomina)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    st.markdown(f'<p class="conf-visual">Confirmación: $ {n_in:,.0f}</p>', unsafe_allow_html=True)
+    
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
@@ -254,7 +262,6 @@ if df_mes_g.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
                 df_mes_g["Pagado"] = False 
 
-# CONFIGURACIÓN DE TABLAS (AJUSTADO CON SEPARADORES DE MILES)
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
