@@ -10,8 +10,9 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
+# Rutas de archivos CORREGIDAS
 LOGO_LOGIN = "logoapp 1.png"
-LOGO_SIDEBAR = "logoapp 2.jpg" 
+LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
@@ -49,7 +50,7 @@ def cargar_usuarios():
     if os.path.exists(USER_DB):
         with open(USER_DB, "r") as f:
             try: return json.load(f)
-            except: return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
+            except: pass
     return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
 
 def guardar_usuarios(db):
@@ -69,7 +70,8 @@ def cargar_bd():
         except: df_oi = pd.DataFrame(columns=col_oi)
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
         return df_g, df_i, df_oi
-    except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
+    except: 
+        return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
 
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
@@ -79,25 +81,86 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), saldo_fin, ahorro_p
 
+def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib import colors
+    from reportlab.lib.colors import HexColor
+    
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=letter)
+    
+    def head(canvas_obj, t, a):
+        canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
+        canvas_obj.setFillColor(HexColor("#1a1d21"))
+        canvas_obj.setFont("Helvetica-Bold", 16)
+        canvas_obj.drawString(50, 765, "My FinanceApp")
+        canvas_obj.setFont("Helvetica", 10)
+        canvas_obj.drawString(50, 750, "by Stulio Designs")
+        canvas_obj.setFont("Helvetica-Bold", 12)
+        canvas_obj.drawRightString(560, 760, f"{t} - {a}")
+        canvas_obj.setStrokeColor(HexColor("#d4af37"))
+        canvas_obj.line(50, 740, 560, 740)
+        return 710
+
+    y = head(c, titulo, anio)
+    
+    for m in meses:
+        i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
+        g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
+        s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
+        it_m, vp_m, vpy_m, _, bf_m, _ = calcular_metricas(g_m, i_m["Nomina"].sum() if not i_m.empty else 0, i_m["Otros"].sum() if not i_m.empty else 0, s_ant_m)
+        
+        if y < 150: c.showPage(); y = head(c, titulo, anio)
+        c.setFillColor(HexColor("#f0f2f6")); c.rect(50, y-60, 510, 65, fill=1, stroke=0)
+        c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
+        c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it_m:,.0f} | Pagado: $ {vp_m:,.0f} | Pendiente: $ {vpy_m:,.0f}")
+        c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf_m:,.0f}")
+        y -= 85
+        if not g_m.empty:
+            c.setFillColor(HexColor("#1a1d21")); c.setFont("Helvetica-Bold", 8)
+            c.drawString(60, y, "CATEGORÍA"); c.drawString(160, y, "DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO")
+            c.line(50, y-5, 560, y-5); y -= 15
+            c.setFont("Helvetica", 8); c.setFillColor(colors.black)
+            for _, fila in g_m.iterrows():
+                if y < 50: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
+                c.drawString(60, y, str(fila["Categoría"])); c.drawString(160, y, str(fila["Descripción"])[:45]); c.drawRightString(480, y, f"{fila['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if fila["Pagado"] else "NO"); y -= 12
+            y -= 20
+        else:
+            y -= 25
+    c.showPage(); c.save(); buf.seek(0)
+    return buf
+
 # --- 3. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
+
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
-        if st.button("Entrar", use_container_width=True):
-            db_u = cargar_usuarios()
-            if u in db_u and db_u[u]["pass"] == p:
-                st.session_state.autenticado, st.session_state.usuario_id = True, u
-                st.session_state.u_nombre_completo = db_u[u].get("nombre", u); st.rerun()
+        try: st.image(LOGO_LOGIN, use_container_width=True)
+        except: st.markdown("<h2 style='text-align: center; color:#d4af37;'>My FinanceApp</h2>", unsafe_allow_html=True)
+        
+        tab_in, tab_reg = st.tabs(["🔑 Login", "📝 Registro"])
+        db_u = cargar_usuarios()
+        with tab_in:
+            u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
+            if st.button("Iniciar Sesión", use_container_width=True):
+                if u in db_u and db_u[u]["pass"] == p:
+                    st.session_state.autenticado = True
+                    st.session_state.usuario_id = u
+                    st.session_state.u_nombre_completo = db_u[u].get("nombre", u)
+                    st.rerun()
+                else: st.error("❌ Credenciales incorrectas")
+        with tab_reg:
+            rn = st.text_input("Nombre"); ru = st.text_input("ID"); rp = st.text_input("Pass", type="password")
+            if st.button("Crear Cuenta"):
+                db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado con éxito")
     st.stop()
 
-# --- 4. PRE-PROCESAMIENTO DE DATOS ---
+# --- 4. PRE-PROCESAMIENTO ---
 df_g_raw, df_i_raw, df_oi_raw = cargar_bd()
 u_id = st.session_state.usuario_id
 
-# Filtros iniciales por usuario
 df_g_user = df_g_raw[df_g_raw["Usuario"] == u_id].copy()
 df_i_user = df_i_raw[df_i_raw["Usuario"] == u_id].copy()
 df_oi_user = df_oi_raw[df_oi_raw["Usuario"] == u_id].copy()
@@ -106,10 +169,12 @@ periodos = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Ago
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    # LOGO SIDEBAR (Corregido: Primera posición)
-    if os.path.exists(LOGO_SIDEBAR):
+    # 1. LOGO FORZADO (.png)
+    try:
         st.image(LOGO_SIDEBAR, use_container_width=True)
-    
+    except:
+        st.markdown("### 💰 My FinanceApp")
+
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos, index=datetime.now().month-1)
@@ -126,52 +191,56 @@ with st.sidebar:
     st.divider()
     arr_on = st.toggle(f"Arrastrar de {m_ant}", value=not i_ant.empty)
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else 0.0)
-    n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(df_i_user[df_i_user["Periodo"]==mes_s]["Nomina"].iloc[0] if not df_i_user[df_i_user["Periodo"]==mes_s].empty else 0.0))
+    n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)]["Nomina"].iloc[0] if not df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)].empty else 0.0))
     
-    # CÁLCULO DE OTROS (Sincronizado con la tabla de abajo)
-    # Se usa el estado del editor si existe, sino la base de datos
-    if f"oi_edit_{mes_s}" in st.session_state:
-        # Extraer montos de la tabla editable en tiempo real
-        oi_data = st.session_state[f"oi_edit_{mes_s}"]
-        otros_total = sum(row.get("Monto", 0) for row in oi_data.get("edited_rows", {}).values()) + \
-                      sum(row.get("Monto", 0) for row in oi_data.get("added_rows", []))
-        # Sumar los que ya estaban y no se tocaron
-        df_base_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)]
-        # Lógica simplificada: El editor sobreescribe. Para ver cambios inmediatos usamos una suma directa del DF que el editor actualiza
-    else:
-        otros_total = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)]["Monto"].sum()
+    # 2. PLACEHOLDER PARA SUMA EN TIEMPO REAL
+    placeholder_otros = st.empty()
 
-    st.number_input("Otros (Calculado)", value=float(otros_total), disabled=True)
-
-    # REPORTES Y BALANCES
-    st.divider(); st.subheader("📑 Extracto Mensual")
+    st.divider()
+    st.subheader("📑 Extracto Mensual")
     col_pdf, col_xls = st.columns(2)
-    with col_pdf: st.button("📄 PDF")
+    with col_pdf:
+        if st.button("📄 PDF"):
+            pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], f"Extracto {mes_s}", anio_s)
+            st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
+    
+    # 3. BOTÓN DE EXCEL HABILITADO
     with col_xls:
-        # BOTÓN EXCEL HABILITADO
+        df_export = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
         buf_xls = BytesIO()
-        with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
-            df_g_user[df_g_user["Periodo"]==mes_s].to_excel(writer, index=False, sheet_name="Gastos")
-        st.download_button("📊 Excel", buf_xls.getvalue(), f"Extracto_{mes_s}.xlsx")
+        df_export.to_excel(buf_xls, index=False)
+        st.download_button("📊 Excel", buf_xls.getvalue(), file_name=f"Extracto_{mes_s}.xlsx")
     
     st.subheader("⚖️ Balances Semestrales")
-    st.button("📥 Semestre 1"); st.button("📥 Semestre 2")
+    if st.button("📥 Semestre 1 (Ene-Jun)"):
+        pdf1 = generar_pdf_reporte(df_g_user, df_i_user, periodos[0:6], "S1", anio_s)
+        st.download_button("Bajar S1.pdf", pdf1, "S1.pdf")
+    if st.button("📥 Semestre 2 (Jul-Dic)"):
+        pdf2 = generar_pdf_reporte(df_g_user, df_i_user, periodos[6:12], "S2", anio_s)
+        st.download_button("Bajar S2.pdf", pdf2, "S2.pdf")
 
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO ---
-if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
+# --- 6. CUERPO PRINCIPAL ---
+try: st.image(LOGO_APP_H, use_container_width=True)
+except: pass
 st.markdown(f"## {mes_s} {anio_s}")
 
 st.markdown("### 📝 Registro de Gastos")
-df_ed_g = st.data_editor(df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key=f"g_edit_{mes_s}")
+df_mes_g = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
+df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
 
 st.markdown("### 💰 Registro Otros Ingresos (Adicionales)")
-df_ed_oi = st.data_editor(df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", key=f"oi_edit_{mes_s}")
+df_mes_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].copy()
+df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
 
-# Recalcular métricas finales con datos vivos de las tablas
-otros_vivos = df_ed_oi["Monto"].sum()
-it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, otros_vivos, s_in)
+# CÁLCULO EN TIEMPO REAL PARA EL SIDEBAR
+otros_total_vivo = float(df_ed_oi["Monto"].sum())
+# Enviamos el dato al placeholder que está arriba en el sidebar
+placeholder_otros.number_input("Otros (Calculado)", value=otros_total_vivo, disabled=True)
+
+# Recalcular métricas
+it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, otros_total_vivo, s_in)
 
 st.divider()
 m1, m2, m3, m4, m5 = st.columns(5)
@@ -182,8 +251,9 @@ m4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><di
 m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div class="card-value" style="color:#d4af37;">$ {saldo_fin:,.0f}</div></div>', unsafe_allow_html=True)
 
 # --- 7. ANÁLISIS ---
-st.markdown("### 📊 Análisis de Gastos")
+st.markdown("### 📊 Análisis")
 c1, c2, c3 = st.columns([1.5, 1, 1.2])
+
 with c1:
     st.markdown("#### Desglose de Gastos")
     t_df = df_ed_g.copy(); t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
@@ -197,7 +267,7 @@ with c1:
 
 with c2:
     st.markdown("#### Eficiencia de Ahorro")
-    gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':'#d4af37'}}, gauge={'axis':{'range':[0,100]},'bar':{'color':"white"},'bgcolor':"#1f2630",'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[50,100],'color':'#00d26a'}]}))
+    gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':'#d4af37'}}, gauge={'axis':{'range':[0,100]},'bar':{'color':"white"},'bgcolor':"#1f2630",'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[50,100],'color':'#00d26a'}],'threshold':{'line':{'color':"#d4af37",'width':6},'thickness':0.85,'value':ahorro_p}}))
     gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(t=50,b=0,l=0,r=0))
     st.plotly_chart(gauge, use_container_width=True)
 
@@ -208,12 +278,9 @@ with c3:
     st.plotly_chart(pie, use_container_width=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    # Guardar Gastos
     df_g_final = pd.concat([df_g_raw[~((df_g_raw["Periodo"]==mes_s)&(df_g_raw["Año"]==anio_s)&(df_g_raw["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    # Guardar Otros Ingresos
     df_oi_final = pd.concat([df_oi_raw[~((df_oi_raw["Periodo"]==mes_s)&(df_oi_raw["Año"]==anio_s)&(df_oi_raw["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    # Guardar Ingresos Base (Se guarda el otros_vivos calculado)
-    df_i_final = pd.concat([df_i_raw[~((df_i_raw["Periodo"]==mes_s)&(df_i_raw["Año"]==anio_s)&(df_i_raw["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otros_vivos, "Usuario":u_id}])], ignore_index=True)
+    df_i_final = pd.concat([df_i_raw[~((df_i_raw["Periodo"]==mes_s)&(df_i_raw["Año"]==anio_s)&(df_i_raw["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otros_total_vivo, "Usuario":u_id}])], ignore_index=True)
     
     with pd.ExcelWriter(BASE_FILE) as w:
         df_g_final.to_excel(w, sheet_name="Gastos", index=False)
