@@ -10,10 +10,10 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Nombres de archivos - REVISA QUE ESTÉN ASÍ EN GITHUB
+# Nombres de archivos - VERIFICA QUE ESTÉN ASÍ EN GITHUB
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.jpg" 
-LOGO_APP_H = "LOGO H APP.png"    
+LOGO_APP_H = "LOGOapp horizontal.png" # <--- CAMBIO REALIZADO AQUÍ
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
@@ -23,16 +23,21 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# CSS CORREGIDO: Oculta el header pero permite ver la flecha del sidebar
+# CSS REPARADO: Fuerza la visibilidad de la flecha del sidebar
 st.markdown("""
     <style>
-    /* Ocultar barra superior pero mantener botón de sidebar */
-    [data-testid="stHeader"] {
-        background: rgba(0,0,0,0);
-        color: rgba(0,0,0,0);
+    /* Forzar visibilidad del botón para abrir sidebar (Flecha) */
+    [data-testid="stSidebarNavSeparator"] { display: none; }
+    button[kind="headerNoSpacing"] {
+        display: flex !important;
+        visibility: visible !important;
+        color: #d4af37 !important;
     }
-    header {visibility: hidden;}
     
+    /* Ocultar header pero permitir interactividad */
+    header { background-color: rgba(0,0,0,0) !important; }
+    [data-testid="stHeader"] { background: none !important; }
+
     .stApp { background: #0e1117; color: #dee2e6; }
     
     /* Tarjetas */
@@ -218,7 +223,9 @@ with st.sidebar:
 # --- 6. CUERPO PRINCIPAL ---
 c_logo_h, c_title = st.columns([1, 4])
 with c_logo_h: 
-    if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
+    # Logo Horizontal Actualizado
+    if os.path.exists(LOGO_APP_H): 
+        st.image(LOGO_APP_H, use_container_width=True)
 with c_title: st.markdown(f"<h1>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
@@ -245,7 +252,7 @@ st.markdown("### 📊 Análisis de Gastos")
 c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
 
 with c_graf_dona:
-    st.markdown("**Desglose Presupuestado (Monto + Pendiente)**")
+    st.markdown("**Desglose Presupuestado**")
     df_ed['Total_Cat'] = df_ed.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not df_ed.empty and df_ed["Total_Cat"].sum() > 0:
         fig_pie = px.pie(df_ed, values='Total_Cat', names='Categoría', hole=0.6, color='Categoría', color_discrete_map=COLOR_MAP)
