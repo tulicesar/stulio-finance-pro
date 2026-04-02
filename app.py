@@ -102,8 +102,16 @@ def cargar_bd():
 
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
+    # Pagadas: Suma de Monto cuando Pagado es True
     vp = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
-    vpy = df_g[df_g["Pagado"] == False]["Valor Referencia"].sum() if not df_g.empty else 0
+    
+    # AJUSTE SOLICITADO: Pendientes suma el valor del Monto (o Valor Ref si Monto es 0) cuando Pagado es False
+    if not df_g.empty:
+        # Priorizamos Monto sobre Valor Referencia si está desactivado el check
+        vpy = df_g[df_g["Pagado"] == False].apply(lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1).sum()
+    else:
+        vpy = 0
+        
     bf = it - vp - vpy
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
@@ -191,16 +199,12 @@ if not st.session_state.autenticado:
                     password_correcta = (u_data.get("pass") == p) if isinstance(u_data, dict) else (u_data == p)
                     nombre_final = u_data.get("nombre", u) if isinstance(u_data, dict) else u
                     if password_correcta:
-                        st.session_state.autenticado = True
-                        st.session_state.usuario_id = u
-                        st.session_state.u_nombre_completo = nombre_final
+                        st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, nombre_final
                         st.rerun()
                     else: st.error("❌ Contraseña incorrecta")
                 else: st.error("❌ Usuario no encontrado")
         with t_reg:
-            rn = st.text_input("Nombre", key="reg_n")
-            ru = st.text_input("ID Usuario", key="reg_u")
-            rp = st.text_input("Pass", type="password", key="reg_p")
+            rn, ru, rp = st.text_input("Nombre", key="reg_n"), st.text_input("ID Usuario", key="reg_u"), st.text_input("Pass", type="password", key="reg_p")
             if st.button("Crear Cuenta"):
                 if ru in db_u: st.warning("⚠️ El usuario ya existe")
                 else:
@@ -218,25 +222,29 @@ with st.sidebar:
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
+    
+    # Filtro estricto por mes actual
+    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
+    
     idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"; a_ant = anio_s if idx > 0 else anio_s-1
     i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
     g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant) & (df_g_full["Usuario"] == u_id)]
     oi_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
+    
     s_sug = 0.0
     if not i_ant.empty:
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
-    st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant.empty)
     
-    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
+    st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=False)
     
-    # --- LA MAGIA: INPUTS DE TEXTO QUE FORMATEAN CON $ Y PUNTOS ---
-    s_val_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
-    s_input_txt = st.text_input("Saldo Anterior", value=format_moneda(s_val_init), help="Escribe el número y presiona Enter para ver los puntos")
-    s_in = parse_moneda(s_input_txt)
+    # AJUSTE SOLICITADO: Evitar repetición automática si no hay datos guardados
+    val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
+    s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
+    s_in = parse_moneda(s_txt)
     
-    n_val_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
-    n_input_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(n_val_init), help="Escribe el número y presiona Enter para ver los puntos")
-    n_in = parse_moneda(n_input_txt)
+    val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
+    n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
+    n_in = parse_moneda(n_txt)
     
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
