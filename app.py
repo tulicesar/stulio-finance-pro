@@ -10,6 +10,7 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
+# Rutas de archivos exactas
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -34,12 +35,11 @@ st.markdown("""
     [data-testid="stDataEditor"] th { font-size: 1.4rem !important; color: #d4af37 !important; }
     [data-testid="stDataEditor"] td { font-size: 1.4rem !important; }
     
-    /* ESTILO DE PESTAÑAS DE LOGIN */
+    /* PESTAÑAS Y TARJETAS */
     .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
     .stTabs [data-baseweb="tab"] { color: #dee2e6; font-size: 1.2rem; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
 
-    /* TARJETAS DE MÉTRICAS */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -79,9 +79,21 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        try: df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
-        except: df_oi = pd.DataFrame(columns=col_oi)
+        
+        # Bloque de lectura seguro para Otros Ingresos
+        try: 
+            df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
+            for c in col_oi:
+                if c not in df_oi.columns: df_oi[c] = None
+        except: 
+            df_oi = pd.DataFrame(columns=col_oi)
+            
         df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
+        if "Movimiento Recurrente" in df_g.columns:
+            df_g["Movimiento Recurrente"] = df_g["Movimiento Recurrente"].fillna(False).astype(bool)
+        else:
+            df_g["Movimiento Recurrente"] = False
+            
         return df_g, df_i, df_oi
     except: 
         return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
@@ -187,10 +199,8 @@ periodos = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Ago
 
 # --- 5. SIDEBAR ---
 with st.sidebar:
-    try:
-        st.image(LOGO_SIDEBAR, use_container_width=True)
-    except:
-        st.markdown("### 💰 My FinanceApp")
+    try: st.image(LOGO_SIDEBAR, use_container_width=True)
+    except: st.markdown("### 💰 My FinanceApp")
 
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
@@ -210,7 +220,6 @@ with st.sidebar:
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else 0.0, step=1000.0)
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)]["Nomina"].iloc[0] if not df_i_user[(df_i_user["Periodo"]==mes_s) & (df_i_user["Año"]==anio_s)].empty else 0.0), step=1000.0)
     
-    # Placeholder para Otros Ingresos (se llena más abajo con el cálculo en vivo)
     placeholder_otros = st.empty()
 
     st.divider()
@@ -242,11 +251,19 @@ try: st.image(LOGO_APP_H, use_container_width=True)
 except: pass
 st.markdown(f"## {mes_s} {anio_s}")
 
-# FORMATO DE MONEDA PARA LAS TABLAS EDITABLES
 config_moneda = st.column_config.NumberColumn("Monto", format="$ %d", step=1000)
 
 st.markdown("## 📝 Registro de Gastos")
 df_mes_g = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
+
+# MAGIA RESTAURADA: Auto-completar Movimientos Recurrentes del mes pasado
+if df_mes_g.empty:
+    df_rec = df_g_user[(df_g_user["Periodo"] == m_ant) & (df_g_user["Año"] == a_ant) & (df_g_user["Movimiento Recurrente"] == True)]
+    if not df_rec.empty:
+        df_mes_g = df_rec.copy()
+        df_mes_g["Pagado"] = False
+        df_mes_g["Monto"] = 0.0
+
 df_ed_g = st.data_editor(
     df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), 
     use_container_width=True, 
@@ -265,19 +282,15 @@ df_ed_oi = st.data_editor(
     key=f"oi_edit_{mes_s}"
 )
 
-# Limpiar las columnas antes de sumar (evita que Streamlit colapse si dejas celdas vacías)
+# Convertir de forma segura sin borrar filas importantes
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0.0)
 df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0.0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0.0)
 
-# Sumar tabla de Otros Ingresos en tiempo real
 otros_total_vivo = float(df_ed_oi["Monto"].sum())
-
-# Enviar cálculo formateado al Sidebar
 texto_otros = f"$ {otros_total_vivo:,.0f}".replace(",", ".")
 placeholder_otros.text_input("Otros (Calculado Automáticamente)", value=texto_otros, disabled=True)
 
-# Calcular el resto de las métricas
 it, vp, vpy, fondos_act, saldo_fin, ahorro_p = calcular_metricas(df_ed_g, n_in, otros_total_vivo, s_in)
 
 st.divider()
@@ -316,9 +329,9 @@ with c3:
     st.plotly_chart(pie, use_container_width=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    # Limpiamos filas completamente vacías para no ensuciar el Excel
-    df_ed_g_clean = df_ed_g.dropna(how='all', subset=["Categoría", "Descripción", "Monto"])
-    df_ed_oi_clean = df_ed_oi.dropna(how='all', subset=["Descripción", "Monto"])
+    # LIMPIEZA SEGURA DE FILAS VACÍAS
+    df_ed_g_clean = df_ed_g[(df_ed_g["Categoría"].astype(str).str.strip() != "") | (df_ed_g["Descripción"].astype(str).str.strip() != "") | (df_ed_g["Monto"] > 0)]
+    df_ed_oi_clean = df_ed_oi[(df_ed_oi["Descripción"].astype(str).str.strip() != "") | (df_ed_oi["Monto"] > 0)]
 
     df_g_final = pd.concat([df_g_raw[~((df_g_raw["Periodo"]==mes_s)&(df_g_raw["Año"]==anio_s)&(df_g_raw["Usuario"]==u_id))], df_ed_g_clean.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
     df_oi_final = pd.concat([df_oi_raw[~((df_oi_raw["Periodo"]==mes_s)&(df_oi_raw["Año"]==anio_s)&(df_oi_raw["Usuario"]==u_id))], df_ed_oi_clean.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
@@ -329,7 +342,7 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
         df_i_final.to_excel(w, sheet_name="Ingresos", index=False)
         df_oi_final.to_excel(w, sheet_name="OtrosIngresos", index=False)
     
-    # LA SOLUCIÓN AL BUG VISUAL: Borramos la caché de las tablas para obligarlas a recargar la información que acabamos de guardar en Excel
+    # LA SOLUCIÓN AL BUG VISUAL: Borramos la caché de las tablas
     if f"g_edit_{mes_s}" in st.session_state: del st.session_state[f"g_edit_{mes_s}"]
     if f"oi_edit_{mes_s}" in st.session_state: del st.session_state[f"oi_edit_{mes_s}"]
     
