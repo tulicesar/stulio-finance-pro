@@ -36,8 +36,9 @@ st.markdown("""
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
         color: #1a1d21; text-align: center; border-bottom: 4px solid #d4af37;
+        min-height: 100px; display: flex; flex-direction: column; justify-content: center;
     }
-    .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
+    .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; line-height: 1.1; }
     .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; margin: 3px 0; }
     .legend-bar {
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
@@ -120,11 +121,16 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         g_mensual_sum = g_m.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1).sum() if not g_m.empty else 0
         total_periodo_nomina += nom; total_periodo_otros += otr_sum; total_periodo_gastos += g_mensual_sum
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
+        
+        # Etiqueta dinámica para PDF
+        label_pdf_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
+
         if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         c.setFillColor(HexColor("#f8f9fa")); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Oblig. Pagadas: $ {vp:,.0f} | Oblig. Pendientes: $ {vpy:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
+        c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"{label_pdf_ahorro} FINAL: $ {bf:,.0f}"); y -= 80
+        
         c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.drawString(60, y, "Saldo Anterior"); c.drawRightString(480, y, f"$ {s_ant:,.0f}"); y -= 10
         c.drawString(60, y, "Nómina"); c.drawRightString(480, y, f"$ {nom:,.0f}"); y -= 5
@@ -142,6 +148,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             if y < 60: c.showPage(); y = head(c, titulo, anio, nombre_usuario); c.setFont("Helvetica", 8)
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65]); c.drawRightString(480, y, f"{row['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
         y -= 20
+
     if len(meses) > 1:
         if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         y -= 20; c.setFillColor(HexColor("#f8f9fa")); c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(2); c.rect(50, y-100, 510, 110, fill=1, stroke=1)
@@ -149,8 +156,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         ing_totales = total_periodo_nomina + total_periodo_otros; saldo_final = ing_totales - total_periodo_gastos
         c.setFont("Helvetica", 10); c.setFillColor(colors.black); c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
         c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}"); c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
+        
+        # Etiqueta dinámica para Resumen PDF
         if saldo_final >= 0: c.setFillColor(colors.darkgreen); label = "SALDO A FAVOR"
-        else: c.setFillColor(colors.red); label = "SALDO EN CONTRA"
+        else: c.setFillColor(colors.red); label = "DÉFICIT"
+        
         c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"{label}: $ {abs(saldo_final):,.0f}")
     c.showPage(); c.save(); buf.seek(0); return buf
 
@@ -255,10 +265,27 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
+# --- AJUSTES DE ETIQUETAS KPI SOLICITADOS ---
+tz_local = pytz.timezone('America/Bogota')
+now = datetime.now(tz_local)
+meses_es = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+fecha_hoy_texto = f"{meses_es[now.month-1]} {now.day} de {now.year}"
+
+# 1. Nombre Dinámico para Fondos (Dinero Disponible + Fecha)
+label_dinero = f"DINERO DISPONIBLE<br><span style='font-size:0.55rem; font-weight:normal;'>a {fecha_hoy_texto}</span>"
+
+# 2. Nombre Dinámico para Ahorro (Saldo a Favor / Déficit)
+label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
+
 # Dashboard KPI
 st.divider(); c_kpi = st.columns(5)
-# ACTUALIZACIÓN DE NOMBRES EN TARJETAS KPI PARA CONSISTENCIA
-tarj = [("INGRESOS", it, "black"), ("OBLIG. PAGADAS", vp, "green"), ("OBLIG. PENDIENTES", vpy, "red"), ("FONDOS", fact, "blue"), ("AHORRO", bf, "#d4af37")]
+tarj = [
+    ("INGRESOS", it, "black"), 
+    ("OBLIG. PAGADAS", vp, "green"), 
+    ("OBLIG. PENDIENTES", vpy, "red"), 
+    (label_dinero, fact, "blue"), 
+    (label_ahorro, bf, "#d4af37")
+]
 for i, (l, v, c) in enumerate(tarj): c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
 st.markdown("### 📊 Análisis de Distribución"); inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
@@ -276,13 +303,10 @@ with inf2:
     fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25)); st.plotly_chart(fig2, use_container_width=True)
 with inf3:
     st.markdown("#### Estado Real del Dinero")
-    # ACTUALIZACIÓN DE NOMBRES EN GRÁFICA DE DONA
     fig3 = go.Figure(data=[go.Pie(labels=['Obligaciones Pagadas', 'Obligaciones pendientes', 'Ahorro'], values=[vp, vpy, bf], hole=.7, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='percent')]); fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")]); st.plotly_chart(fig3, use_container_width=True)
-    
-    # ACTUALIZACIÓN DE NOMBRES EN BARRAS DE LEYENDA (TIPO DESGLOSE)
     st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="legend-bar" style="background:#d4af37">Ahorro Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="legend-bar" style="background:#d4af37">{label_ahorro} Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
 st.markdown("<br><br>", unsafe_allow_html=True)
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
