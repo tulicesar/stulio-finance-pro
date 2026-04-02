@@ -23,15 +23,18 @@ COLOR_MAP = {
     "Otros": "#77DD77", "Impuestos": "#84b6f4"
 }
 
-# CSS: Reparación de Sidebar y Estilo de Tarjetas
+# CSS: Ajustes de legibilidad y barra lateral
 st.markdown("""
     <style>
-    /* Forzar visibilidad del botón de sidebar */
     button[kind="headerNoSpacing"] { display: flex !important; visibility: visible !important; color: #d4af37 !important; }
     header { background-color: rgba(0,0,0,0) !important; }
     [data-testid="stHeader"] { background: none !important; }
-
     .stApp { background: #0e1117; color: #dee2e6; }
+    
+    /* Aumentar texto del Registro de Movimientos (Tabla) */
+    [data-testid="stDataEditor"] div {
+        font-size: 1.1rem !important;
+    }
     
     /* Tarjetas de métricas */
     .card {
@@ -42,7 +45,6 @@ st.markdown("""
     .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
     .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; margin: 3px 0; }
     
-    /* Barras de leyenda */
     .legend-bar {
         padding: 10px 15px; border-radius: 8px; margin-bottom: 6px; 
         font-size: 1rem; font-weight: bold; color: #1a1d21; 
@@ -116,7 +118,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         c.roundRect(50, y-80, 510, 85, 10, fill=1, stroke=1)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(70, y-20, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(70, y-40, f"Ingresos: $ {it_m:,.0f} | Pagados: $ {vp_m:,.0f} | Pendientes: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL: $ {bf_m:,.0f}")
+        c.setFillColor(HexColor("#d4af37")); c.drawString(70, y-65, f"SALDO FINAL (AHORRO): $ {bf_m:,.0f}")
         y -= 100
         if not g_m.empty:
             c.setFont("Helvetica-Bold", 8); c.setFillColor(HexColor("#1a1d21"))
@@ -133,16 +135,11 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
 
 # --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
-
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         st.markdown('<div class="login-box">', unsafe_allow_html=True)
-        if os.path.exists(LOGO_LOGIN):
-            st.image(LOGO_LOGIN, use_container_width=True)
-        else:
-            st.markdown("<h1 style='text-align: center; color: #d4af37;'>My FinanceApp</h1>", unsafe_allow_html=True)
-        
+        if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
         tab_log, tab_reg = st.tabs(["🔑 Entrar", "📝 Registro"])
         usuarios = cargar_usuarios()
         with tab_log:
@@ -172,61 +169,37 @@ df_i_user = df_i_raw[df_i_raw["Usuario"] == st.session_state.usuario_id].copy()
 periodos_list = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
 
 with st.sidebar:
-    if os.path.exists(LOGO_SIDEBAR):
-        st.image(LOGO_SIDEBAR, use_container_width=True)
-    
+    if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     mes_s = st.selectbox("Mes Actual", periodos_list, index=datetime.now().month-1)
-    
-    idx = periodos_list.index(mes_s)
-    mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]
-    anio_ant = anio_s if idx > 0 else anio_s - 1
-    
+    idx = periodos_list.index(mes_s); mes_ant = periodos_list[idx - 1] if idx > 0 else periodos_list[11]; anio_ant = anio_s if idx > 0 else anio_s - 1
     i_prev = df_i_user[(df_i_user["Periodo"] == mes_ant) & (df_i_user["Año"] == anio_ant)]
     g_prev = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant)]
     saldo_auto = 0.0
     if not i_prev.empty:
         *_, bf_pasado, _ = calcular_metricas(g_prev, i_prev["Nomina"].sum(), i_prev["Otros"].sum(), i_prev["SaldoAnterior"].iloc[0])
         saldo_auto = float(bf_pasado)
-
     st.divider()
     arrastrar = st.toggle(f"Traer saldo de {mes_ant}", value=not i_prev.empty)
     d_act_i = df_i_user[(df_i_user["Periodo"] == mes_s) & (df_i_user["Año"] == anio_s)]
     s_in = st.number_input("Saldo Anterior", value=saldo_auto if arrastrar else (float(d_act_i["SaldoAnterior"].iloc[0]) if not d_act_i.empty else 0.0))
     n_in = st.number_input("Nómina", value=float(d_act_i["Nomina"].iloc[0] if not d_act_i.empty else 0.0))
     o_in = st.number_input("Otros", value=float(d_act_i["Otros"].iloc[0] if not d_act_i.empty else 0.0))
-
-    st.divider()
-    st.subheader("📑 Extractos")
-    col_ex1, col_ex2 = st.columns(2)
-    with col_ex1:
-        if st.button(f"📄 PDF {mes_s[:3]}"):
-            pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], "Extracto Mensual", anio_s)
-            st.download_button("Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
-    with col_ex2:
-        df_ex_export = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)]
-        output = BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer: df_ex_export.to_excel(writer, index=False)
-        st.download_button(f"📊 Excel {mes_s[:3]}", output.getvalue(), f"Excel_{mes_s}.xlsx")
-
     st.divider()
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO PRINCIPAL (Header Ajustado) ---
-# Cambiamos la proporción de columnas para que el logo ocupe casi todo el ancho
-c_logo_expand, c_mes_text = st.columns([12, 2]) # El logo tiene 12 partes de ancho, el texto 2
-
-with c_logo_expand: 
+# --- 6. CABECERA (LOGO REDUCIDO) ---
+c_logo, c_mes = st.columns([9, 5]) # Logo ocupa menos proporción ahora
+with c_logo: 
     if os.path.exists(LOGO_APP_H): 
-        # use_container_width=True hace que ocupe todo el ancho de su columna
-        st.image(LOGO_APP_H, use_container_width=True)
+        st.image(LOGO_APP_H, width=550) # Ancho fijo para reducirlo un ~25% respecto al total previo
 
-with c_mes_text: 
-    # Título del mes alineado a la derecha para no chocar
-    st.markdown(f"<h2 style='text-align: right;'>{mes_s} {anio_s}</h2>", unsafe_allow_html=True)
+with c_mes: 
+    st.markdown(f"<h1 style='text-align: right; margin-top: 20px;'>{mes_s} {anio_s}</h1>", unsafe_allow_html=True)
 
-# --- TABLA DE DATOS ---
+# --- REGISTRO DE MOVIMIENTOS ---
+st.markdown("### 📝 Registro de Movimientos")
 df_mes = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 if df_mes.empty:
     df_rec = df_g_user[(df_g_user["Periodo"] == mes_ant) & (df_g_user["Año"] == anio_ant) & (df_g_user["Movimiento Recurrente"] == True)]
@@ -250,7 +223,6 @@ m5.markdown(f'<div class="card"><div class="card-label">AHORRO FINAL</div><div c
 # --- 🚀 INFOGRAFIAS ---
 st.markdown("### 📊 Análisis de Gastos")
 c_graf_dona, c_graf_ahorro, c_graf_status = st.columns([1.5, 1, 1.2])
-
 with c_graf_dona:
     st.markdown("**Desglose Presupuestado**")
     df_ed['Total_Cat'] = df_ed.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
@@ -264,33 +236,13 @@ with c_graf_dona:
 
 with c_graf_ahorro:
     st.markdown("**Eficiencia de Ahorro**")
-    fig_gauge = go.Figure(go.Indicator(
-        mode = "gauge+number", value = ahorro_p,
-        number = {'suffix': "%", 'font': {'color': '#d4af37'}},
-        gauge = {
-            'axis': {'range': [0, 100], 'tickcolor': "white"},
-            'bar': {'color': "white", 'thickness': 0.25},
-            'bgcolor': "#1f2630",
-            'steps': [
-                {'range': [0, 20], 'color': '#ff4b4b'},
-                {'range': [20, 50], 'color': '#ffa500'},
-                {'range': [50, 100], 'color': '#00d26a'}
-            ],
-            'threshold': {
-                'line': {'color': "#d4af37", 'width': 6},
-                'thickness': 0.85, 'value': ahorro_p
-            }
-        }
-    ))
+    fig_gauge = go.Figure(go.Indicator(mode="gauge+number", value=ahorro_p, number={'suffix': "%", 'font':{'color':'#d4af37'}}, gauge={'axis':{'range':[0,100],'tickcolor':"white"},'bar':{'color':"white",'thickness':0.25},'bgcolor':"#1f2630",'steps':[{'range':[0,20],'color':'#ff4b4b'},{'range':[20,50],'color':'#ffa500'},{'range':[50,100],'color':'#00d26a'}],'threshold':{'line':{'color':"#d4af37",'width':6},'thickness':0.85,'value':ahorro_p}}))
     fig_gauge.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=350, margin=dict(t=50, b=0, l=0, r=0))
     st.plotly_chart(fig_gauge, use_container_width=True)
 
 with c_graf_status:
     st.markdown("**Estado Real del Dinero**")
-    labels_status = ['Pagado', 'Pendiente', 'Ahorro (Saldo)']
-    values_status = [vp, vpy, saldo_fin]
-    colors_status = ['#2ecc71', '#e74c3c', '#d4af37']
-    fig_status = go.Figure(data=[go.Pie(labels=labels_status, values=values_status, hole=.65, marker_colors=colors_status, textinfo='percent+label')])
+    fig_status = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, saldo_fin], hole=.65, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='percent+label')])
     fig_status.update_layout(showlegend=True, paper_bgcolor='rgba(0,0,0,0)', font_color="white", height=380, margin=dict(t=0, b=0, l=0, r=0))
     st.plotly_chart(fig_status, use_container_width=True)
 
@@ -298,9 +250,7 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
     df_n = df_ed.assign(Periodo=mes_s, Año=anio_s, Usuario=st.session_state.usuario_id)
     mask_g = (df_g_raw["Periodo"] == mes_s) & (df_g_raw["Año"] == anio_s) & (df_g_raw["Usuario"] == st.session_state.usuario_id)
     df_gf = pd.concat([df_g_raw[~mask_g], df_n], ignore_index=True)
-    df_i_nuevo = pd.DataFrame({"Año":[anio_s], "Periodo":[mes_s], "SaldoAnterior":[s_in], "Nomina":[n_in], "Otros":[o_in], "Usuario":[st.session_state.usuario_id]})
-    mask_i = (df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id)
-    df_if = pd.concat([df_i_raw[~mask_i], df_i_nuevo], ignore_index=True)
+    df_if = pd.concat([df_i_raw[~((df_i_raw["Periodo"] == mes_s) & (df_i_raw["Año"] == anio_s) & (df_i_raw["Usuario"] == st.session_state.usuario_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":o_in, "Usuario":st.session_state.usuario_id}])], ignore_index=True)
     with pd.ExcelWriter(BASE_FILE) as w:
         df_gf.to_excel(w, sheet_name="Gastos", index=False); df_if.to_excel(w, sheet_name="Ingresos", index=False)
     st.balloons(); st.rerun()
