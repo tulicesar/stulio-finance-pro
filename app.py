@@ -69,6 +69,8 @@ def sanitize(df):
     if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
     if "Periodo" in df.columns: df["Periodo"] = df["Periodo"].astype(str).str.strip()
     if "Usuario" in df.columns: df["Usuario"] = df["Usuario"].astype(str).str.strip()
+    # CORRECCIÓN: Forzamos que Pagado sea booleano para que el check sea editable
+    if "Pagado" in df.columns: df["Pagado"] = df["Pagado"].astype(bool)
     return df
 
 def cargar_bd():
@@ -92,16 +94,13 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF (CON RECUPERACIÓN DE NOMBRE) ---
+# --- 3. REPORTE PDF ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
-    
-    # Recuperamos el nombre desde session_state o desde el archivo
     nombre_usuario = st.session_state.get("u_nombre_completo", u_id)
-    
     buf = BytesIO(); c = canvas.Canvas(buf, pagesize=letter)
     total_periodo_nomina, total_periodo_otros, total_periodo_gastos = 0, 0, 0
 
@@ -109,7 +108,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 16); canvas_obj.drawString(50, 765, "My FinanceApp")
         canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
-        # Aquí se imprime el nombre recuperado
         canvas_obj.setFont("Helvetica-BoldOblique", 9); canvas_obj.setFillColor(HexColor("#d4af37")); canvas_obj.drawString(50, 735, f"Usuario: {user_name}")
         canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 725, 560, 725)
@@ -127,15 +125,12 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         g_mensual_sum = g_m.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1).sum() if not g_m.empty else 0
         total_periodo_nomina += nom; total_periodo_otros += otr_sum; total_periodo_gastos += g_mensual_sum
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
-        
         label_pdf_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
-
         if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         c.setFillColor(HexColor("#f8f9fa")); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Oblig. Pagadas: $ {vp:,.0f} | Oblig. Pendientes: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"{label_pdf_ahorro} FINAL: $ {bf:,.0f}"); y -= 80
-        
         c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.drawString(60, y, "Saldo Anterior"); c.drawRightString(480, y, f"$ {s_ant:,.0f}"); y -= 10
         c.drawString(60, y, "Nómina"); c.drawRightString(480, y, f"$ {nom:,.0f}"); y -= 5
@@ -153,7 +148,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             if y < 60: c.showPage(); y = head(c, titulo, anio, nombre_usuario); c.setFont("Helvetica", 8)
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65]); c.drawRightString(480, y, f"{row['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
         y -= 20
-
     if len(meses) > 1:
         if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         y -= 20; c.setFillColor(HexColor("#f8f9fa")); c.setStrokeColor(HexColor("#d4af37")); c.setLineWidth(2); c.rect(50, y-100, 510, 110, fill=1, stroke=1)
@@ -161,14 +155,12 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         ing_totales = total_periodo_nomina + total_periodo_otros; saldo_final = ing_totales - total_periodo_gastos
         c.setFont("Helvetica", 10); c.setFillColor(colors.black); c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
         c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}"); c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
-        
         if saldo_final >= 0: c.setFillColor(colors.darkgreen); label = "SALDO A FAVOR"
         else: c.setFillColor(colors.red); label = "DÉFICIT"
-        
         c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"{label}: $ {abs(saldo_final):,.0f}")
     c.showPage(); c.save(); buf.seek(0); return buf
 
-# --- 4. ACCESO (LOGIN ROBUSTO) ---
+# --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -182,15 +174,8 @@ if not st.session_state.autenticado:
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u:
                     u_data = db_u[u]
-                    # Gestión inteligente de recuperación de nombre y password
-                    password_correcta = False
-                    if isinstance(u_data, dict):
-                        password_correcta = (u_data.get("pass") == p)
-                        nombre_final = u_data.get("nombre", u)
-                    else:
-                        password_correcta = (u_data == p)
-                        nombre_final = u
-
+                    password_correcta = (u_data.get("pass") == p) if isinstance(u_data, dict) else (u_data == p)
+                    nombre_final = u_data.get("nombre", u) if isinstance(u_data, dict) else u
                     if password_correcta:
                         st.session_state.autenticado = True
                         st.session_state.usuario_id = u
@@ -215,7 +200,6 @@ df_g_full, df_i_full, df_oi_full = cargar_bd()
 
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
-    # RECUPERADO: El nombre del usuario se muestra aquí
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -230,10 +214,7 @@ with st.sidebar:
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant.empty)
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
-    
-    # ETIQUETA: Ingreso Fijo
     n_in = st.number_input("Ingreso Fijo (Sueldo o Nomina)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
-    
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
@@ -259,8 +240,6 @@ if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
-
-# Lógica de Recurrencia Inteligente
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
@@ -276,10 +255,12 @@ if df_mes_g.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
                 df_mes_g["Pagado"] = False 
 
+# CONFIGURACIÓN DE TABLAS (CORREGIDO PARA HACER "PAGADO" EDITABLE)
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %d"),
-    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %d")
+    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %d"),
+    "Pagado": st.column_config.CheckboxColumn("Pagado", default=False)
 }
 
 st.markdown("### 📝 Movimiento de Gastos")
@@ -293,18 +274,10 @@ df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
-
-# ETIQUETAS KPI
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
 st.divider(); c_kpi = st.columns(5)
-tarj = [
-    ("INGRESOS", it, "black"), 
-    ("OBLIG. PAGADAS", vp, "green"), 
-    ("OBLIG. PENDIENTES", vpy, "red"), 
-    ("DINERO DISPONIBLE", fact, "blue"), 
-    (label_ahorro, bf, "#d4af37")
-]
+tarj = [("INGRESOS", it, "black"), ("OBLIG. PAGADAS", vp, "green"), ("OBLIG. PENDIENTES", vpy, "red"), ("DINERO DISPONIBLE", fact, "blue"), (label_ahorro, bf, "#d4af37")]
 for i, (l, v, c) in enumerate(tarj): c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
 st.markdown("### 📊 Análisis de Distribución"); inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
