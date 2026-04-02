@@ -31,6 +31,7 @@ st.markdown("""
     <style>
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
+    /* Estilo para tablas XL */
     [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -54,14 +55,17 @@ st.markdown("""
 
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
 def fmt_miles(valor):
-    """Convierte un número a string con separadores de miles para visualización."""
-    try: return f"{int(float(valor)):,}".replace(",", ".")
-    except: return "0"
+    """Muestra el valor con signo $ y puntos de miles."""
+    try:
+        val = float(valor)
+        return f"$ {val:,.0f}".replace(",", ".")
+    except:
+        return "$ 0"
 
 def parse_miles(texto):
-    """Convierte un string con puntos/comas de vuelta a un número limpio."""
+    """Limpia el texto de $ y puntos para convertirlo en número real."""
     if not texto: return 0.0
-    # Quitamos puntos (separadores de miles) y dejamos solo dígitos
+    # Extrae solo los números
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
 
@@ -227,15 +231,15 @@ with st.sidebar:
     
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     
-    # --- AJUSTE: CAMPOS CON SEPARADORES DE MILES INTERNOS ---
+    # --- AJUSTE: CAMPOS CON FORMATO $ Y PUNTOS DENTRO DE LA CASILLA ---
     # Saldo Anterior
-    s_val_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
-    s_txt = st.text_input("Saldo Anterior", value=fmt_miles(s_val_init))
+    val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
+    s_txt = st.text_input("Saldo Anterior", value=fmt_miles(val_s_init))
     s_in = parse_miles(s_txt)
     
     # Ingreso Fijo
-    n_val_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
-    n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=fmt_miles(n_val_init))
+    val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
+    n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=fmt_miles(val_n_init))
     n_in = parse_miles(n_txt)
     
     placeholder_otros = st.empty()
