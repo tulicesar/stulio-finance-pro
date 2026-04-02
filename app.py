@@ -123,7 +123,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         c.setFillColor(HexColor("#f8f9fa")); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
-        c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
+        c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Oblig. Pagadas: $ {vp:,.0f} | Oblig. Pendientes: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
         c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.drawString(60, y, "Saldo Anterior"); c.drawRightString(480, y, f"$ {s_ant:,.0f}"); y -= 10
@@ -220,36 +220,23 @@ with st.sidebar:
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
-# --- LÓGICA DE CARGA INTELIGENTE (MEJORADA) ---
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
-    # Buscamos registros previos del mismo usuario y año
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
-    
     if not gastos_previos.empty:
         meses_map = {m: i for i, m in enumerate(meses_lista)}
         gastos_previos["mes_idx"] = gastos_previos["Periodo"].map(meses_map)
-        
-        # Filtramos solo lo que pasó ANTES del mes actual
         gastos_previos = gastos_previos[gastos_previos["mes_idx"] < mes_actual_idx]
-        
         if not gastos_previos.empty:
-            # Ordenamos por mes descendente para tener lo más reciente arriba
             gastos_previos = gastos_previos.sort_values(by="mes_idx", ascending=False)
-            
-            # Identificamos la ÚLTIMA decisión tomada para cada combinación de Categoría-Descripción
             ultimas_decisiones = gastos_previos.drop_duplicates(subset=["Categoría", "Descripción"])
-            
-            # Solo arrastramos si en su ÚLTIMA aparición seguía marcado como recurrente
             activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
-            
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
-                df_mes_g["Pagado"] = False # Siempre empieza sin pagar en el mes nuevo
+                df_mes_g["Pagado"] = False 
 
-# Configuración de tablas
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto": st.column_config.NumberColumn("Monto", format="$ %d"),
@@ -268,8 +255,10 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# Dashboard
-st.divider(); c_kpi = st.columns(5); tarj = [("INGRESOS", it, "black"), ("PAGADO", vp, "green"), ("PENDIENTE", vpy, "red"), ("FONDOS", fact, "blue"), ("AHORRO", bf, "#d4af37")]
+# Dashboard KPI
+st.divider(); c_kpi = st.columns(5)
+# ACTUALIZACIÓN DE NOMBRES EN TARJETAS KPI PARA CONSISTENCIA
+tarj = [("INGRESOS", it, "black"), ("OBLIG. PAGADAS", vp, "green"), ("OBLIG. PENDIENTES", vpy, "red"), ("FONDOS", fact, "blue"), ("AHORRO", bf, "#d4af37")]
 for i, (l, v, c) in enumerate(tarj): c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
 st.markdown("### 📊 Análisis de Distribución"); inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
@@ -287,9 +276,12 @@ with inf2:
     fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25)); st.plotly_chart(fig2, use_container_width=True)
 with inf3:
     st.markdown("#### Estado Real del Dinero")
-    fig3 = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, bf], hole=.7, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='percent')]); fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")]); st.plotly_chart(fig3, use_container_width=True)
-    st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Pagado <span>$ {vp:,.0f}</span></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Pendiente <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
+    # ACTUALIZACIÓN DE NOMBRES EN GRÁFICA DE DONA
+    fig3 = go.Figure(data=[go.Pie(labels=['Obligaciones Pagadas', 'Obligaciones pendientes', 'Ahorro'], values=[vp, vpy, bf], hole=.7, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='percent')]); fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")]); st.plotly_chart(fig3, use_container_width=True)
+    
+    # ACTUALIZACIÓN DE NOMBRES EN BARRAS DE LEYENDA (TIPO DESGLOSE)
+    st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#d4af37">Ahorro Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
 st.markdown("<br><br>", unsafe_allow_html=True)
