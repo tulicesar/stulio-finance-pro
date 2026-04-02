@@ -80,7 +80,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (saldo_fin / it * 100) if it > 0 else 0
     return it, vp, vpy, fondos_act, saldo_fin, ahorro_p
 
-# --- 3. GENERADOR DE PDF CORREGIDO (CON MOVIMIENTOS DETALLADOS) ---
+# --- 3. GENERADOR DE PDF CON LOGO EN ENCABEZADO ---
 def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -92,10 +92,20 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     
     def head(canvas_obj, t, a):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
+        
+        # INTENTO DE PONER LOGO HORIZONTAL
+        if os.path.exists(LOGO_APP_H):
+            # Dibujar imagen (x, y, ancho, alto)
+            canvas_obj.drawImage(LOGO_APP_H, 50, 740, width=180, preserveAspectRatio=True, mask='auto')
+        else:
+            # Respaldo si no hay imagen
+            canvas_obj.setFillColor(HexColor("#1a1d21"))
+            canvas_obj.setFont("Helvetica-Bold", 14); canvas_obj.drawString(50, 760, "My FinanceApp")
+            canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 745, "by Stulio Designs")
+            
         canvas_obj.setFillColor(HexColor("#1a1d21"))
-        canvas_obj.setFont("Helvetica-Bold", 18); canvas_obj.drawString(50, 750, "MY FINANCE")
-        canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 750, f"{t} - {a}")
-        canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
+        canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 755, f"{t} - {a}")
+        canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 735, 560, 735)
         return 710
 
     y = head(c, titulo, anio)
@@ -109,21 +119,17 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
         
         if y < 150: c.showPage(); y = head(c, titulo, anio)
         
-        # Resumen del mes
         c.setFillColor(HexColor("#f0f2f6")); c.rect(50, y-60, 510, 65, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it_m:,.0f} | Pagado: $ {vp_m:,.0f} | Pendiente: $ {vpy_m:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf_m:,.0f}")
-        
         y -= 80
         
-        # Encabezado de tabla de movimientos
         if not g_m.empty:
             c.setFillColor(HexColor("#1a1d21")); c.setFont("Helvetica-Bold", 8)
             c.drawString(60, y, "CATEGORÍA"); c.drawString(160, y, "DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO")
             c.line(50, y-5, 560, y-5)
             y -= 15
-            
             c.setFont("Helvetica", 8); c.setFillColor(colors.black)
             for _, fila in g_m.iterrows():
                 if y < 50: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
@@ -134,6 +140,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
                 y -= 12
             y -= 20
         else:
+            y -= 10
             c.setFont("Helvetica-Oblique", 8); c.drawString(60, y, "(Sin movimientos registrados)")
             y -= 20
 
