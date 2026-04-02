@@ -92,16 +92,15 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF ---
+# --- 3. REPORTE PDF (CON RECUPERACIÓN DE NOMBRE) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
-    db_u = cargar_usuarios()
-    # Acceso seguro al nombre del usuario
-    info_u = db_u.get(u_id, {})
-    nombre_usuario = info_u.get("nombre", u_id) if isinstance(info_u, dict) else u_id
+    
+    # Recuperamos el nombre desde session_state o desde el archivo
+    nombre_usuario = st.session_state.get("u_nombre_completo", u_id)
     
     buf = BytesIO(); c = canvas.Canvas(buf, pagesize=letter)
     total_periodo_nomina, total_periodo_otros, total_periodo_gastos = 0, 0, 0
@@ -110,6 +109,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 16); canvas_obj.drawString(50, 765, "My FinanceApp")
         canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
+        # Aquí se imprime el nombre recuperado
         canvas_obj.setFont("Helvetica-BoldOblique", 9); canvas_obj.setFillColor(HexColor("#d4af37")); canvas_obj.drawString(50, 735, f"Usuario: {user_name}")
         canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 725, 560, 725)
@@ -168,7 +168,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"{label}: $ {abs(saldo_final):,.0f}")
     c.showPage(); c.save(); buf.seek(0); return buf
 
-# --- 4. ACCESO ---
+# --- 4. ACCESO (LOGIN ROBUSTO) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -180,10 +180,9 @@ if not st.session_state.autenticado:
             u = st.text_input("Usuario", key="login_u")
             p = st.text_input("Pass", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
-                # FIX: Verificación robusta del usuario
                 if u in db_u:
                     u_data = db_u[u]
-                    # Manejo de usuarios antiguos (donde u_data era solo la contraseña string)
+                    # Gestión inteligente de recuperación de nombre y password
                     password_correcta = False
                     if isinstance(u_data, dict):
                         password_correcta = (u_data.get("pass") == p)
@@ -197,21 +196,17 @@ if not st.session_state.autenticado:
                         st.session_state.usuario_id = u
                         st.session_state.u_nombre_completo = nombre_final
                         st.rerun()
-                    else:
-                        st.error("❌ Contraseña incorrecta")
-                else:
-                    st.error("❌ Usuario no encontrado")
+                    else: st.error("❌ Contraseña incorrecta")
+                else: st.error("❌ Usuario no encontrado")
         with t_reg:
             rn = st.text_input("Nombre", key="reg_n")
             ru = st.text_input("ID Usuario", key="reg_u")
             rp = st.text_input("Pass", type="password", key="reg_p")
             if st.button("Crear Cuenta"):
-                if ru in db_u:
-                    st.warning("⚠️ El usuario ya existe")
+                if ru in db_u: st.warning("⚠️ El usuario ya existe")
                 else:
                     db_u[ru] = {"pass": rp, "nombre": rn}
-                    guardar_usuarios(db_u)
-                    st.success("✅ Cuenta creada con éxito")
+                    guardar_usuarios(db_u); st.success("✅ Cuenta creada con éxito")
     st.stop()
 
 # --- 5. LÓGICA SIDEBAR ---
@@ -220,6 +215,7 @@ df_g_full, df_i_full, df_oi_full = cargar_bd()
 
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
+    # RECUPERADO: El nombre del usuario se muestra aquí
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     anio_s = st.selectbox("Año", [2025, 2026], index=1)
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
@@ -234,7 +230,10 @@ with st.sidebar:
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant.empty)
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
+    
+    # ETIQUETA: Ingreso Fijo
     n_in = st.number_input("Ingreso Fijo (Sueldo o Nomina)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
+    
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
@@ -261,6 +260,7 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
+# Lógica de Recurrencia Inteligente
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
@@ -294,6 +294,7 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum()); placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
+# ETIQUETAS KPI
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
 st.divider(); c_kpi = st.columns(5)
