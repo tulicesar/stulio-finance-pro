@@ -19,7 +19,6 @@ LOGO_APP_H = "LOGOapp horizontal.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# LISTA DE CATEGORÍAS ACTUALIZADA (CON OBLIGACIONES FINANCIERAS)
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Salud", "Transporte", "Alimentación", 
     "Educación", "Cuidado Personal", "Entretenimiento", "Suscripciones", 
@@ -27,7 +26,6 @@ LISTA_CATEGORIAS = [
     "Obligaciones Finacieras", "Otros"
 ]
 
-# MAPA DE COLORES PERSONALIZADO
 COLOR_MAP = {
     "Hogar": "#FFB347", "Servicios": "#AEC6CF", "Salud": "#B39EB5", 
     "Transporte": "#77B5FE", "Alimentación": "#FDFD96", "Educación": "#77DD77",
@@ -103,7 +101,8 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
+        try: df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
+        except: df_oi = pd.DataFrame(columns=col_oi)
         return sanitize(df_g), sanitize(df_i), sanitize(df_oi)
     except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
 
@@ -111,7 +110,6 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
     vp = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
     if not df_g.empty:
-        # Si Pagado es False, suma Monto. Si Monto es 0, usa Valor Referencia.
         vpy = df_g[df_g["Pagado"] == False].apply(lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1).sum()
     else: vpy = 0
     bf = it - vp - vpy
@@ -224,6 +222,7 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
+    # Búsqueda del saldo del mes anterior para el arrastre AUTOMÁTICO
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"; a_ant = anio_s if idx > 0 else anio_s-1
     i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
@@ -231,13 +230,11 @@ with st.sidebar:
     
     s_sug = 0.0
     if not i_ant.empty:
-        # Recuperamos ingresos variables del mes anterior para el cálculo del sugerido
         oi_m_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_m_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
     
-    st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=False)
-    
-    val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
+    # AJUSTE: Si no hay datos guardados en el mes actual, arrastra automáticamente el sugerido
+    val_s_init = float(i_m_act["SaldoAnterior"].iloc[0]) if not i_m_act.empty else s_sug
     s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
     s_in = parse_moneda(s_txt)
     
@@ -270,16 +267,22 @@ if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
+
+# AJUSTE: LÓGICA DE RECURRENCIA INTELIGENTE
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
     if not gastos_previos.empty:
         meses_map = {m: i for i, m in enumerate(meses_lista)}
         gastos_previos["mes_idx"] = gastos_previos["Periodo"].map(meses_map)
+        # Solo miramos gastos de meses anteriores al actual
         gastos_previos = gastos_previos[gastos_previos["mes_idx"] < mes_actual_idx]
         if not gastos_previos.empty:
+            # Ordenamos para tener la decisión más reciente arriba
             gastos_previos = gastos_previos.sort_values(by="mes_idx", ascending=False)
+            # Tomamos la última configuración conocida de cada gasto (Categoría + Descripción)
             ultimas_decisiones = gastos_previos.drop_duplicates(subset=["Categoría", "Descripción"])
+            # Solo traemos los que quedaron marcados como RECURRENTES la última vez
             activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
