@@ -31,7 +31,6 @@ st.markdown("""
     <style>
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
-    /* Estilo para tablas XL */
     [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -54,18 +53,17 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
-def fmt_miles(valor):
-    """Muestra el valor con signo $ y puntos de miles."""
+def format_moneda(valor):
+    """Convierte un número a formato string: $ 1.000.000"""
     try:
-        val = float(valor)
-        return f"$ {val:,.0f}".replace(",", ".")
+        n = int(float(valor))
+        return f"$ {n:,.0f}".replace(",", ".")
     except:
         return "$ 0"
 
-def parse_miles(texto):
-    """Limpia el texto de $ y puntos para convertirlo en número real."""
+def parse_moneda(texto):
+    """Limpia el string formateado para obtener el número puro"""
     if not texto: return 0.0
-    # Extrae solo los números
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
 
@@ -231,16 +229,14 @@ with st.sidebar:
     
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
     
-    # --- AJUSTE: CAMPOS CON FORMATO $ Y PUNTOS DENTRO DE LA CASILLA ---
-    # Saldo Anterior
-    val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
-    s_txt = st.text_input("Saldo Anterior", value=fmt_miles(val_s_init))
-    s_in = parse_miles(s_txt)
+    # --- LA MAGIA: INPUTS DE TEXTO QUE FORMATEAN CON $ Y PUNTOS ---
+    s_val_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
+    s_input_txt = st.text_input("Saldo Anterior", value=format_moneda(s_val_init), help="Escribe el número y presiona Enter para ver los puntos")
+    s_in = parse_moneda(s_input_txt)
     
-    # Ingreso Fijo
-    val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
-    n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=fmt_miles(val_n_init))
-    n_in = parse_miles(n_txt)
+    n_val_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
+    n_input_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(n_val_init), help="Escribe el número y presiona Enter para ver los puntos")
+    n_in = parse_moneda(n_input_txt)
     
     placeholder_otros = st.empty()
     st.divider(); st.subheader("📑 Extractos")
