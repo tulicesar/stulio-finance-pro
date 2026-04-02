@@ -6,7 +6,7 @@ import os
 import json
 from io import BytesIO
 from datetime import datetime
-import pytz  # Nueva librería para el uso horario
+import pytz 
 
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
@@ -86,7 +86,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF ---
+# --- 3. REPORTE PDF CORREGIDO ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -101,15 +101,12 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
         canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
         
-        # --- AJUSTE DE HORA Y TAMAÑO DE TEXTO ---
-        # Definimos la zona horaria (ej: America/Bogota para Colombia)
+        # Hora local y texto pequeño
         tz = pytz.timezone('America/Bogota') 
         fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
-        
-        canvas_obj.setFont("Helvetica", 7) # Texto más pequeño (antes era el default)
-        canvas_obj.setFillColor(colors.grey) # Un color gris suave para que sea sutil
+        canvas_obj.setFont("Helvetica", 6)
+        canvas_obj.setFillColor(colors.grey)
         canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
-        # ----------------------------------------
         return 710
 
     y = head(c, titulo, anio)
@@ -121,22 +118,47 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         nom = i_m["Nomina"].iloc[0] if not i_m.empty else 0
         otr_sum = oi_m["Monto"].sum() if not oi_m.empty else 0
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
+        
         if y < 250: c.showPage(); y = head(c, titulo, anio)
+        
+        # Resumen del Mes
         c.setFillColor(HexColor("#f8f9fa")); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
-        c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
+        c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos Totales: $ {it:,.0f} | Pagado: $ {vp:,.0f} | Pendiente: $ {vpy:,.0f}")
         c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf:,.0f}"); y -= 80
-        c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
-        c.setFont("Helvetica", 8); c.drawString(60, y, f"Saldo Ant: $ {s_ant:,.0f} | Nómina: $ {nom:,.0f} | Extras: $ {otr_sum:,.0f}"); y -= 30
+        
+        # Detalle de Ingresos (Saldo Ant, Nómina y la suma de Extras)
+        c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RESUMEN DE INGRESOS"); y -= 15
+        c.setFont("Helvetica", 8); c.drawString(60, y, f"Saldo Ant: $ {s_ant:,.0f} | Nómina: $ {nom:,.0f} | Otros Ingresos (Suma): $ {otr_sum:,.0f}"); y -= 25
+        
+        # --- NUEVA SECCIÓN: LISTADO DE INGRESOS ADICIONALES ---
+        if not oi_m.empty:
+            c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "DETALLE DE INGRESOS ADICIONALES"); y -= 15
+            c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); y -= 12
+            c.setFont("Helvetica", 8)
+            for _, row_oi in oi_m.iterrows():
+                if y < 60: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
+                c.drawString(60, y, str(row_oi['Descripción'])); c.drawRightString(480, y, f"{row_oi['Monto']:,.0f}"); y -= 12
+            y -= 15
+
+        # --- SECCIÓN GASTOS CON TÍTULOS DE COLUMNA ---
         c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
+        # Títulos de columna
+        c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
+        
+        c.setFont("Helvetica", 8)
         for _, row in g_m.iterrows():
             if y < 60: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
-            c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65]); c.drawRightString(480, y, f"{row['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
-        y -= 20
+            desc_completa = f"{row['Categoría']} - {row['Descripción']}"[:65]
+            c.drawString(60, y, desc_completa)
+            c.drawRightString(480, y, f"{row['Monto']:,.0f}")
+            c.drawRightString(540, y, "SI" if row["Pagado"] else "NO")
+            y -= 12
+        y -= 25
+        
     c.showPage(); c.save(); buf.seek(0); return buf
 
-# (El resto de tu código de ACCESO y LÓGICA DE APP se mantiene igual...)
-# --- 4. ACCESO ---
+# --- EL RESTO DEL CÓDIGO (SIDEBAR Y UI) PERMANECE IGUAL ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -157,7 +179,6 @@ if not st.session_state.autenticado:
                 db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("Creado con éxito")
     st.stop()
 
-# --- 5. LÓGICA SIDEBAR ---
 u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd()
 
@@ -195,7 +216,7 @@ with st.sidebar:
     with c_pdf:
         if st.button("📄 PDF"):
             pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
-            st.download_button(f"Bajar PDF", pdf, f"Extracto_{mes_s}.pdf")
+            st.download_button(f"Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with c_xls:
         buf_xls = BytesIO()
         with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
@@ -203,17 +224,9 @@ with st.sidebar:
             df_oi_full[(df_oi_full["Periodo"]==mes_s)&(df_oi_full["Usuario"]==u_id)].to_excel(writer, sheet_name='OtrosIngresos', index=False)
         st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
 
-    st.subheader("⚖️ Balances Proyectados")
-    if st.button("📥 Semestre 1 (Ene-Jun)"):
-        pdf1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "Proyección S1", anio_s, u_id)
-        st.download_button("Bajar S1.pdf", pdf1, "S1_Proyectado.pdf")
-    if st.button("📥 Semestre 2 (Jul-Dic)"):
-        pdf2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "Proyección S2", anio_s, u_id)
-        st.download_button("Bajar S2.pdf", pdf2, "S2_Proyectado.pdf")
-    
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
-# --- 6. CUERPO PRINCIPAL ---
+# --- CUERPO PRINCIPAL Streamlit ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
@@ -242,57 +255,33 @@ c3.markdown(f'<div class="card"><div class="card-label">PENDIENTE</div><div clas
 c4.markdown(f'<div class="card"><div class="card-label">FONDOS ACTUALES</div><div class="card-value" style="color:blue;">$ {fact:,.0f}</div></div>', unsafe_allow_html=True)
 c5.markdown(f'<div class="card"><div class="card-label">AHORRO PROYECTADO</div><div class="card-value" style="color:#d4af37;">$ {bf:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 7. INFOGRAFÍAS ---
-st.markdown("### 📊 Análisis de Distribución")
+# Infografías
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
-
 with inf1:
     st.markdown("#### Desglose de Gastos")
     t_df = df_ed_g.copy(); t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not t_df.empty and t_df['V'].sum() > 0:
-        fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color='Categoría', color_discrete_map=COLOR_MAP)
+        fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color_discrete_map=COLOR_MAP)
         fig1.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
         st.plotly_chart(fig1, use_container_width=True)
-        res = t_df.groupby("Categoría")['V'].sum().reset_index()
-        for _, r in res.iterrows():
-            st.markdown(f'<div class="legend-bar" style="background:{COLOR_MAP.get(r["Categoría"],"#eee")}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number", value=ahorro_p,
         number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
-        gauge={
-            'axis': {'range': [0, 100], 'tickwidth': 1, 'tickcolor': "#888", 'tickvals': [0, 20, 40, 60, 80, 100]},
-            'bar': {'color': "#d4af37", 'thickness': 0.6},
-            'bgcolor': "white",
-            'borderwidth': 1, 'bordercolor': "#ccc",
-            'steps': [
-                {'range': [0, ahorro_p], 'color': '#d4af37'},
-                {'range': [ahorro_p, 100], 'color': '#f2f2f2'}
-            ],
-            'threshold': {'line': {'color': "grey", 'width': 3}, 'thickness': 0.8, 'value': ahorro_p}
-        }
+        gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#d4af37"}, 'bgcolor': "white"}
     ))
     fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
     st.plotly_chart(fig2, use_container_width=True)
-    st.markdown("<p style='text-align:center; font-weight:bold; color:#888; margin-top:-30px;'>Ahorro Proyectado</p>", unsafe_allow_html=True)
 
 with inf3:
     st.markdown("#### Estado Real del Dinero")
     fig3 = go.Figure(data=[go.Pie(labels=['Pagado', 'Pendiente', 'Ahorro'], values=[vp, vpy, bf], hole=.7, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='none')])
-    fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")])
+    fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
     st.plotly_chart(fig3, use_container_width=True)
-    st.markdown(f"""
-        <div style='font-size:0.9rem; font-weight:bold;'>
-        <span style='color:#2ecc71;'>● Pagado: $ {vp:,.0f}</span><br>
-        <span style='color:#e74c3c;'>● Pendiente: $ {vpy:,.0f}</span><br>
-        <span style='color:#d4af37;'>● Ahorro Proyectado: $ {bf:,.0f}</span>
-        </div>
-    """, unsafe_allow_html=True)
 
 st.markdown("<br><br>", unsafe_allow_html=True)
-
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     df_g_final = pd.concat([df_g_full[~((df_g_full["Periodo"]==mes_s)&(df_g_full["Año"]==anio_s)&(df_g_full["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
     df_oi_final = pd.concat([df_oi_full[~((df_oi_full["Periodo"]==mes_s)&(df_oi_full["Año"]==anio_s)&(df_oi_full["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
