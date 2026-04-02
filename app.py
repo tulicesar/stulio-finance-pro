@@ -27,14 +27,11 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #0e1117; color: #dee2e6; }
     
-    /* --- AJUSTE PARA CELULAR: TEXTO DE TABLAS MÁS GRANDE --- */
-    [data-testid="stDataEditor"] div {
-        font-size: 1.8rem !important; /* Texto de las celdas muy grande */
+    /* --- CAMBIO SOLICITADO: TEXTO DE TABLAS GIGANTE --- */
+    [data-testid="stDataEditor"] { 
+        font-size: 2.0rem !important; 
     }
-    [data-testid="stDataEditor"] th div {
-        font-size: 1.2rem !important; /* Títulos de columnas legibles */
-    }
-    /* ------------------------------------------------------ */
+    /* -------------------------------------------------- */
 
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
     .card {
@@ -167,17 +164,19 @@ with st.sidebar:
     idx = meses_lista.index(mes_s)
     m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"
     a_ant = anio_s if idx > 0 else anio_s-1
+    
     i_ant_row = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
     g_ant_df = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant) & (df_g_full["Usuario"] == u_id)]
     oi_ant_df = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
     
     s_sug = 0.0
     if not i_ant_row.empty:
-        _, _, _, _, bf_a, _ = calcular_metricas(g_ant_df, i_ant_row["Nomina"].sum(), oi_ant_df["Monto"].sum(), i_ant_row["SaldoAnterior"].iloc[0])
+        it_a, vp_a, vpy_a, _, bf_a, _ = calcular_metricas(g_ant_df, i_ant_row["Nomina"].sum(), oi_ant_df["Monto"].sum(), i_ant_row["SaldoAnterior"].iloc[0])
         s_sug = float(bf_a)
 
     st.divider()
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant_row.empty)
+    
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
@@ -215,7 +214,7 @@ config_moneda = st.column_config.NumberColumn("Monto", format="$ %d")
 
 st.markdown("### 📝 Movimiento de Gastos")
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
-df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_moneda}, key="g_ed")
+df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda, "Valor Referencia": config_moneda}, key="g_ed")
 
 st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
@@ -286,7 +285,7 @@ with inf3:
         </div>
     """, unsafe_allow_html=True)
 
-# --- ESPACIO PARA EL BOTÓN ---
+# --- REUBICACIÓN DEL BOTÓN ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
