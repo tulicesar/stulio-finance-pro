@@ -155,14 +155,30 @@ with st.sidebar:
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx>0 else "Diciembre"; a_ant = anio_s if idx>0 else anio_s-1
+    # --- ARRASTRE DE SALDO AUTOMÁTICO (RESTAURADO) ---
+    idx = meses_lista.index(mes_s)
+    m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"
+    a_ant = anio_s if idx > 0 else anio_s-1
+    
+    i_ant_row = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant) & (df_i_full["Usuario"] == u_id)]
+    g_ant_df = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant) & (df_g_full["Usuario"] == u_id)]
+    oi_ant_df = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
+    
+    s_sug = 0.0
+    if not i_ant_row.empty:
+        it_a, vp_a, vpy_a, _, bf_a, _ = calcular_metricas(g_ant_df, i_ant_row["Nomina"].sum(), oi_ant_df["Monto"].sum(), i_ant_row["SaldoAnterior"].iloc[0])
+        s_sug = float(bf_a)
+
+    st.divider()
+    arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=not i_ant_row.empty)
+    
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
-    st.divider()
-    s_in = st.number_input("Saldo Anterior", value=float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
+    s_in = st.number_input("Saldo Anterior", value=s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0))
     n_in = st.number_input("Ingresos Fijos (Sueldo)", value=float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0))
     placeholder_otros = st.empty()
 
+    # TÍTULO: Extracto del Mes
     st.divider(); st.subheader("📑 Extracto del Mes")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
@@ -200,6 +216,7 @@ st.markdown("### 💰 Registro de Otros Ingresos Adicionales")
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].copy()
 df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": config_moneda}, key="oi_ed")
 
+# Cálculos Automáticos
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_vivos = float(df_ed_oi["Monto"].sum())
@@ -232,6 +249,7 @@ with inf1:
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
+    # VELOCÍMETRO ESTILO IMAGEN (BLANCO Y DORADO)
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number", value=ahorro_p,
         number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'},
@@ -265,7 +283,7 @@ with inf3:
     """, unsafe_allow_html=True)
 
 # --- REUBICACIÓN DEL BOTÓN ---
-# Añadimos exactamente dos espacios moderados usando saltos de línea HTML
+# Añadimos exactamente dos espacios moderados
 st.markdown("<br><br>", unsafe_allow_html=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
