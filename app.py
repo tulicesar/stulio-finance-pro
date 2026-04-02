@@ -10,7 +10,7 @@ from datetime import datetime
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
-# Rutas de archivos exactas
+# Rutas de archivos
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
@@ -35,11 +35,12 @@ st.markdown("""
     [data-testid="stDataEditor"] th { font-size: 1.4rem !important; color: #d4af37 !important; }
     [data-testid="stDataEditor"] td { font-size: 1.4rem !important; }
     
-    /* PESTAÑAS Y TARJETAS */
+    /* PESTAÑAS DE LOGIN */
     .stTabs [data-baseweb="tab-list"] { background-color: transparent; }
     .stTabs [data-baseweb="tab"] { color: #dee2e6; font-size: 1.2rem; }
     .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
 
+    /* TARJETAS DE MÉTRICAS */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -58,7 +59,7 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. MOTOR DE DATOS ---
+# --- 2. MOTOR DE DATOS BLINDADO ---
 def cargar_usuarios():
     if os.path.exists(USER_DB):
         with open(USER_DB, "r") as f:
@@ -68,6 +69,23 @@ def cargar_usuarios():
 
 def guardar_usuarios(db):
     with open(USER_DB, "w") as f: json.dump(db, f, indent=4)
+
+# Filtro Sanitario: Obliga a Pandas a entender correctamente los tipos de datos
+def sanitize(df, is_gastos=False, is_oi=False):
+    if df.empty: return df
+    if "Año" in df.columns: df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
+    if "Periodo" in df.columns: df["Periodo"] = df["Periodo"].astype(str).str.strip()
+    if "Usuario" in df.columns: df["Usuario"] = df["Usuario"].astype(str).str.strip()
+    if is_gastos:
+        df["Monto"] = pd.to_numeric(df["Monto"], errors="coerce").fillna(0.0)
+        df["Valor Referencia"] = pd.to_numeric(df["Valor Referencia"], errors="coerce").fillna(0.0)
+        df["Pagado"] = df["Pagado"].fillna(False).astype(bool)
+        if "Movimiento Recurrente" in df.columns:
+            df["Movimiento Recurrente"] = df["Movimiento Recurrente"].fillna(False).astype(bool)
+        else: df["Movimiento Recurrente"] = False
+    if is_oi:
+        df["Monto"] = pd.to_numeric(df["Monto"], errors="coerce").fillna(0.0)
+    return df
 
 def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]
@@ -79,21 +97,17 @@ def cargar_bd():
     try:
         df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
         df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        
-        # Bloque de lectura seguro para Otros Ingresos
         try: 
             df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
             for c in col_oi:
                 if c not in df_oi.columns: df_oi[c] = None
-        except: 
-            df_oi = pd.DataFrame(columns=col_oi)
-            
-        df_g["Pagado"] = df_g["Pagado"].fillna(False).astype(bool)
-        if "Movimiento Recurrente" in df_g.columns:
-            df_g["Movimiento Recurrente"] = df_g["Movimiento Recurrente"].fillna(False).astype(bool)
-        else:
-            df_g["Movimiento Recurrente"] = False
-            
+        except: df_oi = pd.DataFrame(columns=col_oi)
+        
+        # Aplicamos el filtro sanitario al leer el Excel
+        df_g = sanitize(df_g, is_gastos=True)
+        df_i = sanitize(df_i)
+        df_oi = sanitize(df_oi, is_oi=True)
+        
         return df_g, df_i, df_oi
     except: 
         return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
@@ -111,79 +125,58 @@ def generar_pdf_reporte(df_g_full, df_i_full, meses, titulo, anio):
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
-    
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
-    
     def head(canvas_obj, t, a):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
-        canvas_obj.setFillColor(HexColor("#1a1d21"))
-        canvas_obj.setFont("Helvetica-Bold", 16)
-        canvas_obj.drawString(50, 765, "My FinanceApp")
-        canvas_obj.setFont("Helvetica", 10)
-        canvas_obj.drawString(50, 750, "by Stulio Designs")
-        canvas_obj.setFont("Helvetica-Bold", 12)
-        canvas_obj.drawRightString(560, 760, f"{t} - {a}")
-        canvas_obj.setStrokeColor(HexColor("#d4af37"))
-        canvas_obj.line(50, 740, 560, 740)
+        canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 16); canvas_obj.drawString(50, 765, "My FinanceApp")
+        canvas_obj.setFont("Helvetica", 10); canvas_obj.drawString(50, 750, "by Stulio Designs")
+        canvas_obj.setFont("Helvetica-Bold", 12); canvas_obj.drawRightString(560, 760, f"{t} - {a}")
+        canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 740, 560, 740)
         return 710
-
     y = head(c, titulo, anio)
-    
     for m in meses:
         i_m = df_i_full[(df_i_full["Periodo"] == m) & (df_i_full["Año"] == anio) & (df_i_full["Usuario"] == st.session_state.usuario_id)]
         g_m = df_g_full[(df_g_full["Periodo"] == m) & (df_g_full["Año"] == anio) & (df_g_full["Usuario"] == st.session_state.usuario_id)]
         s_ant_m = i_m["SaldoAnterior"].iloc[0] if not i_m.empty else 0.0
         it_m, vp_m, vpy_m, _, bf_m, _ = calcular_metricas(g_m, i_m["Nomina"].sum() if not i_m.empty else 0, i_m["Otros"].sum() if not i_m.empty else 0, s_ant_m)
-        
         if y < 150: c.showPage(); y = head(c, titulo, anio)
         c.setFillColor(HexColor("#f0f2f6")); c.rect(50, y-60, 510, 65, fill=1, stroke=0)
         c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it_m:,.0f} | Pagado: $ {vp_m:,.0f} | Pendiente: $ {vpy_m:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf_m:,.0f}")
-        y -= 85
+        c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"AHORRO FINAL: $ {bf_m:,.0f}"); y -= 85
         if not g_m.empty:
             c.setFillColor(HexColor("#1a1d21")); c.setFont("Helvetica-Bold", 8)
             c.drawString(60, y, "CATEGORÍA"); c.drawString(160, y, "DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO")
-            c.line(50, y-5, 560, y-5); y -= 15
-            c.setFont("Helvetica", 8); c.setFillColor(colors.black)
+            c.line(50, y-5, 560, y-5); y -= 15; c.setFont("Helvetica", 8); c.setFillColor(colors.black)
             for _, fila in g_m.iterrows():
                 if y < 50: c.showPage(); y = head(c, titulo, anio); c.setFont("Helvetica", 8)
                 c.drawString(60, y, str(fila["Categoría"])); c.drawString(160, y, str(fila["Descripción"])[:45]); c.drawRightString(480, y, f"{fila['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if fila["Pagado"] else "NO"); y -= 12
             y -= 20
-        else:
-            y -= 25
+        else: y -= 25
     c.showPage(); c.save(); buf.seek(0)
     return buf
 
 # --- 3. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
-
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         try: st.image(LOGO_LOGIN, use_container_width=True)
         except: st.markdown("<h2 style='text-align: center; color:#d4af37;'>My FinanceApp</h2>", unsafe_allow_html=True)
-        
         tab_in, tab_reg = st.tabs(["🔑 Iniciar Sesión", "📝 Registrar Nuevo Usuario"])
         db_u = cargar_usuarios()
-        
         with tab_in:
             u = st.text_input("Usuario"); p = st.text_input("Contraseña", type="password")
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u and db_u[u]["pass"] == p:
-                    st.session_state.autenticado = True
-                    st.session_state.usuario_id = u
-                    st.session_state.u_nombre_completo = db_u[u].get("nombre", u)
-                    st.rerun()
+                    st.session_state.autenticado = True; st.session_state.usuario_id = u; st.session_state.u_nombre_completo = db_u[u].get("nombre", u); st.rerun()
                 else: st.error("❌ Credenciales incorrectas")
-        
         with tab_reg:
             rn = st.text_input("Nombre Completo"); ru = st.text_input("ID de Usuario Nuevo"); rp = st.text_input("Crear Contraseña", type="password")
             if st.button("Crear Cuenta", use_container_width=True):
                 if ru in db_u: st.warning("El usuario ya existe.")
-                elif ru and rp:
-                    db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("¡Usuario creado con éxito! Ya puedes iniciar sesión.")
+                elif ru and rp: db_u[ru] = {"pass": rp, "nombre": rn}; guardar_usuarios(db_u); st.success("¡Usuario creado con éxito! Ya puedes iniciar sesión.")
                 else: st.error("Completa todos los campos.")
     st.stop()
 
@@ -222,14 +215,12 @@ with st.sidebar:
     
     placeholder_otros = st.empty()
 
-    st.divider()
-    st.subheader("📑 Extracto Mensual")
+    st.divider(); st.subheader("📑 Extracto Mensual")
     col_pdf, col_xls = st.columns(2)
     with col_pdf:
         if st.button("📄 PDF"):
             pdf = generar_pdf_reporte(df_g_user, df_i_user, [mes_s], f"Extracto {mes_s}", anio_s)
             st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
-    
     with col_xls:
         df_export = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
         buf_xls = BytesIO()
@@ -256,18 +247,19 @@ config_moneda = st.column_config.NumberColumn("Monto", format="$ %d", step=1000)
 st.markdown("## 📝 Registro de Gastos")
 df_mes_g = df_g_user[(df_g_user["Periodo"] == mes_s) & (df_g_user["Año"] == anio_s)].copy()
 
-# MAGIA RESTAURADA: Auto-completar Movimientos Recurrentes del mes pasado
+# Lógica de Movimientos Recurrentes Restaurada Correctamente
 if df_mes_g.empty:
-    df_rec = df_g_user[(df_g_user["Periodo"] == m_ant) & (df_g_user["Año"] == a_ant) & (df_g_user["Movimiento Recurrente"] == True)]
+    df_rec = df_g_user[(df_g_user["Periodo"] == m_ant) & (df_g_user["Año"] == a_ant) & (df_g_user["Movimiento Recurrente"] == True)].copy()
     if not df_rec.empty:
-        df_mes_g = df_rec.copy()
+        df_mes_g = df_rec
         df_mes_g["Pagado"] = False
         df_mes_g["Monto"] = 0.0
+        df_mes_g["Periodo"] = mes_s
+        df_mes_g["Año"] = anio_s
 
 df_ed_g = st.data_editor(
     df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), 
-    use_container_width=True, 
-    num_rows="dynamic",
+    use_container_width=True, num_rows="dynamic",
     column_config={"Monto": config_moneda, "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %d", step=1000)},
     key=f"g_edit_{mes_s}"
 )
@@ -276,13 +268,11 @@ st.markdown("## 💰 Registro Otros Ingresos (Adicionales)")
 df_mes_oi = df_oi_user[(df_oi_user["Periodo"] == mes_s) & (df_oi_user["Año"] == anio_s)].copy()
 df_ed_oi = st.data_editor(
     df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), 
-    use_container_width=True, 
-    num_rows="dynamic",
+    use_container_width=True, num_rows="dynamic",
     column_config={"Monto": config_moneda},
     key=f"oi_edit_{mes_s}"
 )
 
-# Convertir de forma segura sin borrar filas importantes
 df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0.0)
 df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0.0)
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0.0)
@@ -329,9 +319,11 @@ with c3:
     st.plotly_chart(pie, use_container_width=True)
 
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
-    # LIMPIEZA SEGURA DE FILAS VACÍAS
-    df_ed_g_clean = df_ed_g[(df_ed_g["Categoría"].astype(str).str.strip() != "") | (df_ed_g["Descripción"].astype(str).str.strip() != "") | (df_ed_g["Monto"] > 0)]
-    df_ed_oi_clean = df_ed_oi[(df_ed_oi["Descripción"].astype(str).str.strip() != "") | (df_ed_oi["Monto"] > 0)]
+    # Limpieza final segura (Evita que textos vacíos tumben la BD)
+    df_ed_g_clean = df_ed_g.dropna(subset=["Categoría", "Descripción"], how="all")
+    df_ed_oi_clean = df_ed_oi.dropna(subset=["Descripción", "Monto"], how="all")
+    df_ed_oi_clean["Descripción"] = df_ed_oi_clean["Descripción"].astype(str).str.strip()
+    df_ed_oi_clean = df_ed_oi_clean[(df_ed_oi_clean["Descripción"] != "nan") & (df_ed_oi_clean["Descripción"] != "")]
 
     df_g_final = pd.concat([df_g_raw[~((df_g_raw["Periodo"]==mes_s)&(df_g_raw["Año"]==anio_s)&(df_g_raw["Usuario"]==u_id))], df_ed_g_clean.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
     df_oi_final = pd.concat([df_oi_raw[~((df_oi_raw["Periodo"]==mes_s)&(df_oi_raw["Año"]==anio_s)&(df_oi_raw["Usuario"]==u_id))], df_ed_oi_clean.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
@@ -342,7 +334,6 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS"):
         df_i_final.to_excel(w, sheet_name="Ingresos", index=False)
         df_oi_final.to_excel(w, sheet_name="OtrosIngresos", index=False)
     
-    # LA SOLUCIÓN AL BUG VISUAL: Borramos la caché de las tablas
     if f"g_edit_{mes_s}" in st.session_state: del st.session_state[f"g_edit_{mes_s}"]
     if f"oi_edit_{mes_s}" in st.session_state: del st.session_state[f"oi_edit_{mes_s}"]
     
