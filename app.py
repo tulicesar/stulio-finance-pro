@@ -19,19 +19,34 @@ LOGO_APP_H = "LOGOapp horizontal.png"
 BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
+# LISTA DE CATEGORÍAS ORGANIZADA ALFABÉTICAMENTE
 LISTA_CATEGORIAS = [
-    "Hogar", "Servicios", "Salud", "Transporte", "Alimentación", 
-    "Educación", "Cuidado Personal", "Entretenimiento", "Suscripciones", 
-    "Seguros", "Mascotas", "Inversiones", "Impuestos", "Regalos", 
-    "Obligaciones Finacieras", "Otros"
+    "Alimentación",
+    "Cuidado Personal",
+    "Educación",
+    "Entretenimiento",
+    "Hogar",
+    "Impuestos",
+    "Inversiones",
+    "Mascotas",
+    "Obligaciones Finacieras",
+    "Otros",
+    "Regalos",
+    "Salud",
+    "Seguros",
+    "Servicios",
+    "Suscripciones",
+    "Transporte"
 ]
 
+# MAPA DE COLORES (Asociado a las categorías)
 COLOR_MAP = {
-    "Hogar": "#FFB347", "Servicios": "#AEC6CF", "Salud": "#B39EB5", 
-    "Transporte": "#77B5FE", "Alimentación": "#FDFD96", "Educación": "#77DD77",
-    "Cuidado Personal": "#FFB7C5", "Entretenimiento": "#FF6961", "Suscripciones": "#CFCFCF",
-    "Seguros": "#84b6f4", "Mascotas": "#FFD1DC", "Inversiones": "#B2E2F2",
-    "Impuestos": "#DEA5A4", "Regalos": "#F49AC2", "Obligaciones Finacieras": "#999999", "Otros": "#96DED1"
+    "Alimentación": "#FDFD96", "Cuidado Personal": "#FFB7C5", "Educación": "#77DD77",
+    "Entretenimiento": "#FF6961", "Hogar": "#FFB347", "Impuestos": "#DEA5A4",
+    "Inversiones": "#B2E2F2", "Mascotas": "#FFD1DC", "Obligaciones Finacieras": "#999999",
+    "Otros": "#96DED1", "Regalos": "#F49AC2", "Salud": "#B39EB5",
+    "Seguros": "#84b6f4", "Servicios": "#AEC6CF", "Suscripciones": "#CFCFCF",
+    "Transporte": "#77B5FE"
 }
 
 st.markdown("""
@@ -232,7 +247,6 @@ with st.sidebar:
         oi_m_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant) & (df_oi_full["Usuario"] == u_id)]
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_m_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
     
-    # REHABILITADO: Interruptor de arrastre con valor ON por defecto
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=True)
     
     val_s_init = s_sug if arr_on else (float(i_m_act["SaldoAnterior"].iloc[0]) if not i_m_act.empty else 0.0)
@@ -269,7 +283,7 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
-# LÓGICA DE RECURRENCIA INTELIGENTE: Si desactivaste un recurrente en el pasado, NO aparece más.
+# RECURRENCIA INTELIGENTE
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
@@ -280,7 +294,6 @@ if df_mes_g.empty:
         if not gastos_previos.empty:
             gastos_previos = gastos_previos.sort_values(by="mes_idx", ascending=False)
             ultimas_decisiones = gastos_previos.drop_duplicates(subset=["Categoría", "Descripción"])
-            # Solo traemos los que su ÚLTIMA configuración fue 'Recurrente = True'
             activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
