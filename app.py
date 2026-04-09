@@ -77,8 +77,9 @@ def cargar_bd():
 
         return df_g, df_i, df_oi
     except Exception as e:
-        # Mostramos el error de forma segura para evitar el crash de ASCII
-        st.error(f"Error en base de datos. Verifica la conexion.")
+        # Esto nos dirá el error real en la pantalla de la app
+        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
+        st.error(f"Error real detectado: {error_msg}")
         return pd.DataFrame(columns=cols_g), pd.DataFrame(columns=cols_i), pd.DataFrame(columns=cols_oi)
 
 # --- 4. ACCESO ---
