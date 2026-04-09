@@ -53,29 +53,32 @@ def cargar_usuarios():
             except: pass
     return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
 
-# --- 3. CARGA DE DATOS (SUPER ROBUSTA) ---
+# --- 3. CARGA DE DATOS (REPARADO) ---
 def cargar_bd():
-    # Definimos columnas base para que NUNCA de KeyError
     cols_g = ["Año", "Periodo", "Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente", "Usuario"]
     cols_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
     cols_oi = ["Año", "Periodo", "Descripcion", "Monto", "Usuario"]
 
     try:
-        # 1. Traer datos de Supabase
         rg = supabase.table("gastos").select("*").execute()
         ri = supabase.table("ingresos_base").select("*").execute()
         roi = supabase.table("otros_ingresos").select("*").execute()
 
-        # 2. Convertir a DataFrame o crear uno vacío con columnas si no hay datos
-        # Mapeamos los nombres de Supabase (minúsculas) a los del código (Mayúsculas)
+        # Mapeo de Supabase a la App
         df_g = pd.DataFrame(rg.data).rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoria","descripcion":"Descripcion","monto":"Monto","valor_referencia":"Referencia","pagado":"Pagado","recurrente":"Recurrente","usuario_id":"Usuario"}) if rg.data else pd.DataFrame(columns=cols_g)
         df_i = pd.DataFrame(ri.data).rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"}) if ri.data else pd.DataFrame(columns=cols_i)
         df_oi = pd.DataFrame(roi.data).rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripcion","monto":"Monto","usuario_id":"Usuario"}) if roi.data else pd.DataFrame(columns=cols_oi)
 
-        # Aseguramos que tengan las columnas aunque el rename falle
-        for c in cols_g: if c not in df_g.columns: df_g[c] = None
-        for c in cols_i: if c not in df_i.columns: df_i[c] = None
-        for c in cols_oi: if c not in df_oi.columns: df_oi[c] = None
+        # Corrección del SyntaxError: Ponemos los bucles con su sangría correcta
+        for c in cols_g:
+            if c not in df_g.columns:
+                df_g[c] = None
+        for c in cols_i:
+            if c not in df_i.columns:
+                df_i[c] = None
+        for c in cols_oi:
+            if c not in df_oi.columns:
+                df_oi[c] = None
 
         return df_g, df_i, df_oi
     except Exception as e:
@@ -107,7 +110,7 @@ with st.sidebar:
     anio_s = st.selectbox("Año", [2025, 2026, 2027], index=1)
     mes_s = st.selectbox("Mes Actual", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=datetime.now().month-1)
     
-    # Filtrar ingresos (Aquí es donde daba el error)
+    # Filtro de ingresos
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     val_s_init = i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0
@@ -124,7 +127,7 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 df_ed_g = st.data_editor(df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
 df_ed_oi = st.data_editor(df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].reindex(columns=["Descripcion", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
 
-# Cálculos rápidos
+# Cálculos
 otr_v = float(df_ed_oi["Monto"].sum()) if not df_ed_oi.empty else 0.0
 g_pagado = df_ed_g[df_ed_g["Pagado"]==True]["Monto"].sum() if not df_ed_g.empty else 0
 g_pend = df_ed_g[df_ed_g["Pagado"]==False]["Monto"].sum() if not df_ed_g.empty else 0
@@ -136,17 +139,17 @@ st.divider()
 c1, c2, c3, c4, c5 = st.columns(5)
 tarj = [("INGRESOS", it, "black"), ("PAGADO", g_pagado, "green"), ("PENDIENTE", g_pend, "red"), ("DISPONIBLE", it-g_pagado, "blue"), ("SALDO FINAL", bf, "#d4af37")]
 for i, (l, v, color) in enumerate(tarj): 
-    st.columns(5)[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{color}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
+    c1, c2, c3, c4, c5 = st.columns(5) # Re-declaración para que Streamlit no se pierda
+    with [c1, c2, c3, c4, c5][i]:
+        st.markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{color}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
 # --- 6. GUARDAR ---
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     try:
-        # Borrar previos
         supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
         supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
         supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
-        # Guardar (Asegurando nombres de Supabase)
         g_save = df_ed_g.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Categoria":"categoria","Descripcion":"descripcion","Monto":"monto","Referencia":"valor_referencia","Pagado":"pagado","Recurrente":"recurrente"}).to_dict(orient="records")
         oi_save = df_ed_oi.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Descripcion":"descripcion","Monto":"monto"}).to_dict(orient="records")
         i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
@@ -155,5 +158,5 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
         if oi_save: supabase.table("otros_ingresos").insert(oi_save).execute()
         supabase.table("ingresos_base").insert(i_save).execute()
 
-        st.balloons(); st.success("✅ ¡Sincronizado con Supabase!"); st.rerun()
-    except Exception as e: st.error(f"❌ Error al guardar: {e}")
+        st.balloons(); st.success("✅ ¡Sincronizado!"); st.rerun()
+    except Exception as e: st.error(f"❌ Error: {e}")
