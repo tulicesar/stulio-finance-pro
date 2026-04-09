@@ -341,35 +341,47 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#d4af37">{label_ahorro} Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
-# --- 7. GUARDAR EN SUPABASE ---
+# --- 7. GUARDAR EN SUPABASE (VERSIÓN BLINDADA) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
+
+# Creamos una validación: ¿Realmente hay algo que guardar?
+tiene_gastos = not df_ed_g.dropna(how="all").empty 
+tiene_ingresos_extra = not df_ed_oi.dropna(how="all").empty
+
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    try:
-        # 1. Borramos lo del mes para evitar duplicados
-        supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-        supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-        supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+    # BLOQUEO DE SEGURIDAD: Si todo está en cero/vacío, no borramos nada.
+    if not tiene_gastos and not tiene_ingresos_extra and s_in == 0 and n_in == 0:
+        st.error("🛑 ¡ERROR DE SEGURIDAD! La tabla parece estar vacía. No se ha guardado nada para evitar borrar tus datos previos por accidente.")
+    else:
+        try:
+            with st.spinner("Sincronizando con la nube..."):
+                # 1. Borramos solo si estamos seguros de que vamos a insertar algo
+                supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
-        # 2. Preparamos datos traduciendo de tus columnas a las de la base de datos
-        g_save = df_ed_g.dropna(subset=["Descripción"]).assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={
-            "Categoría":"categoria", "Descripción":"descripcion", "Monto":"monto", "Valor Referencia":"valor_referencia", 
-            "Pagado":"pagado", "Movimiento Recurrente":"recurrente"
-        })[["anio", "periodo", "categoria", "descripcion", "monto", "valor_referencia", "pagado", "recurrente", "usuario_id"]].to_dict(orient="records")
-        
-        oi_save = df_ed_oi.dropna(subset=["Descripción"]).assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={
-            "Descripción":"descripcion", "Monto":"monto"
-        })[["anio", "periodo", "descripcion", "monto", "usuario_id"]].to_dict(orient="records")
-        
-        i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
+                # 2. Preparamos datos (Filtro más inteligente: solo borra si TODA la fila es nula)
+                df_g_limpio = df_ed_g.dropna(how="all", subset=["Categoría", "Monto"])
+                g_save = df_g_limpio.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={
+                    "Categoría":"categoria", "Descripción":"descripcion", "Monto":"monto", "Valor Referencia":"valor_referencia", 
+                    "Pagado":"pagado", "Movimiento Recurrente":"recurrente"
+                })[["anio", "periodo", "categoria", "descripcion", "monto", "valor_referencia", "pagado", "recurrente", "usuario_id"]].to_dict(orient="records")
+                
+                df_oi_limpio = df_ed_oi.dropna(how="all", subset=["Monto"])
+                oi_save = df_oi_limpio.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={
+                    "Descripción":"descripcion", "Monto":"monto"
+                })[["anio", "periodo", "descripcion", "monto", "usuario_id"]].to_dict(orient="records")
+                
+                i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
 
-        # 3. Insertamos
-        if g_save: supabase.table("gastos").insert(g_save).execute()
-        if oi_save: supabase.table("otros_ingresos").insert(oi_save).execute()
-        supabase.table("ingresos_base").insert(i_save).execute()
+                # 3. Insertamos
+                if g_save: supabase.table("gastos").insert(g_save).execute()
+                if oi_save: supabase.table("otros_ingresos").insert(oi_save).execute()
+                supabase.table("ingresos_base").insert(i_save).execute()
 
-        st.balloons()
-        st.cache_data.clear() # Limpiamos la memoria para que los PDFs salgan actualizados al instante
-        st.success("✅ ¡Guardado en la Nube con éxito!")
-        st.rerun()
-    except Exception as e:
-        st.error(f"❌ Error al guardar en Supabase: {e}")
+                st.balloons()
+                st.cache_data.clear() 
+                st.success(f"✅ ¡Datos de {mes_s} asegurados en la nube!")
+                st.rerun()
+        except Exception as e:
+            st.error(f"❌ Error al guardar: {e}")
