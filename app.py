@@ -180,22 +180,31 @@ for i, (l, v, color) in enumerate(tarj):
     with [c1, c2, c3, c4, c5][i]:
         st.markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{color}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 6. GUARDAR ---
+# --- 6. GUARDAR (CORREGIDO) ---
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     try:
+        # 1. Borrar datos previos para no duplicar
         supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
         supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
         supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
+        # 2. Preparar los datos para Supabase
         g_save = df_ed_g.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Categoria":"categoria","Descripcion":"descripcion","Monto":"monto","Referencia":"valor_referencia","Pagado":"pagado","Recurrente":"recurrente"}).to_dict(orient="records")
         oi_save = df_ed_oi.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Descripcion":"descripcion","Monto":"monto"}).to_dict(orient="records")
         i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
 
-        if g_save: supabase.table("gastos").insert(g_save).execute()
-        if oi_save: supabase.table("otros_ingresos").insert(oi_save).execute()
+        # 3. Insertar nuevos registros
+        if g_save: 
+            supabase.table("gastos").insert(g_save).execute()
+        if oi_save: 
+            supabase.table("otros_ingresos").insert(oi_save).execute()
+        
         supabase.table("ingresos_base").insert(i_save).execute()
 
-        st.balloons(); st.success("Sincronizado"); st.rerun()
+        st.balloons()
+        st.success("✅ ¡Sincronizado con Supabase!")
+        st.rerun()
+
     except Exception as e: 
-        # Esto nos mostrará el error real en color rojo
-        st.error(f"❌ Error real de Supabase: {e}"))
+        # Esta es la línea que corregimos (quitamos el paréntesis extra)
+        st.error(f"❌ Error real de Supabase: {e}")
