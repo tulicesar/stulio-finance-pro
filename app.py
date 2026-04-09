@@ -141,68 +141,77 @@ df_g_full, df_i_full, df_oi_full = cargar_bd()
 
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
-    st.markdown(f"### {st.session_state.u_nombre_completo}")
-    anio_s = st.selectbox("Anio", [2025, 2026, 2027], index=1)
+    st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
+    
+    # Puntos 5 y 6: Cambiamos 'Anio' por 'Año' y actualizamos la lista
+    anio_s = st.selectbox("Año", [2026, 2027, 2028], index=0)
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    # Filtro de ingresos (Sin tildes en las claves)
+    # Filtro de ingresos
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Anio"]==anio_s) & (df_i_full["Usuario"]==u_id)]
     
     val_s_init = i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0
     val_n_init = i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0
     
+    # Punto 2: Restauramos los campos del Saldo Anterior y Fijo con tu formato de moneda
+    st.markdown("---")
     s_in = parse_moneda(st.text_input("Saldo Anterior", value=format_moneda(val_s_init)))
     n_in = parse_moneda(st.text_input("Ingreso Fijo", value=format_moneda(val_n_init)))
+    
+    # Punto 4 (Paso A): Creamos una "caja vacía" en la barra lateral para llenarla después con la sumatoria
+    caja_sumatoria_oi = st.empty()
+    st.markdown("---")
+
     if st.button("Salir"): st.session_state.autenticado = False; st.rerun()
 
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
-st.markdown(f"## Gestion de {mes_s} {anio_s}")
 
-# Editores de datos
-df_ed_g = st.data_editor(df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Anio"] == anio_s) & (df_g_full["Usuario"] == u_id)].reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Categoria": st.column_config.SelectboxColumn("Categoria", options=LISTA_CATEGORIAS)})
-df_ed_oi = st.data_editor(df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Anio"] == anio_s) & (df_oi_full["Usuario"] == u_id)].reindex(columns=["Descripcion", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
+# Punto 9: Infografía y Gestión
+st.markdown(f"## 📊 Gestión de {mes_s} {anio_s}")
 
-# Calculos
+# --- EDITORES DE DATOS ---
+st.markdown("#### 📝 Registro de Gastos")
+
+# Punto 1: Casillas 'Pagado' y 'Recurrente' inactivas (False) por defecto
+df_ed_g = st.data_editor(
+    df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Anio"] == anio_s) & (df_g_full["Usuario"] == u_id)]
+    .reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"])
+    .reset_index(drop=True), 
+    use_container_width=True, 
+    num_rows="dynamic", 
+    column_config={
+        "Categoria": st.column_config.SelectboxColumn("Categoria", options=LISTA_CATEGORIAS),
+        "Pagado": st.column_config.CheckboxColumn("Pagado", default=False),
+        "Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False)
+    }
+)
+
+# Punto 3: Restaurar título de la tabla de Ingresos Adicionales
+st.markdown("#### 💸 Ingresos Adicionales (Variables)")
+df_ed_oi = st.data_editor(
+    df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Anio"] == anio_s) & (df_oi_full["Usuario"] == u_id)]
+    .reindex(columns=["Descripcion", "Monto"])
+    .reset_index(drop=True), 
+    use_container_width=True, 
+    num_rows="dynamic"
+)
+
+# --- CÁLCULOS ---
 otr_v = float(df_ed_oi["Monto"].sum()) if not df_ed_oi.empty else 0.0
+
+# Punto 4 (Paso B): Llenamos la caja vacía del sidebar con el total calculado
+caja_sumatoria_oi.metric("Total Ingresos Adic.", f"$ {otr_v:,.0f}")
+
 g_pagado = df_ed_g[df_ed_g["Pagado"]==True]["Monto"].sum() if not df_ed_g.empty else 0
 g_pend = df_ed_g[df_ed_g["Pagado"]==False]["Monto"].sum() if not df_ed_g.empty else 0
 it = s_in + n_in + otr_v
 bf = it - g_pagado - g_pend
 
-# KPIs
+# --- KPIS E INFOGRAFÍA (Parte del Punto 9) ---
 st.divider()
 c1, c2, c3, c4, c5 = st.columns(5)
 tarj = [("INGRESOS", it, "black"), ("PAGADO", g_pagado, "green"), ("PENDIENTE", g_pend, "red"), ("DISPONIBLE", it-g_pagado, "blue"), ("SALDO FINAL", bf, "#d4af37")]
 for i, (l, v, color) in enumerate(tarj): 
     with [c1, c2, c3, c4, c5][i]:
         st.markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{color}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
-
-# --- 6. GUARDAR (CORREGIDO) ---
-if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    try:
-        # 1. Borrar datos previos para no duplicar
-        supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-        supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-        supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-
-        # 2. Preparar los datos para Supabase
-        g_save = df_ed_g.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Categoria":"categoria","Descripcion":"descripcion","Monto":"monto","Referencia":"valor_referencia","Pagado":"pagado","Recurrente":"recurrente"}).to_dict(orient="records")
-        oi_save = df_ed_oi.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Descripcion":"descripcion","Monto":"monto"}).to_dict(orient="records")
-        i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
-
-        # 3. Insertar nuevos registros
-        if g_save: 
-            supabase.table("gastos").insert(g_save).execute()
-        if oi_save: 
-            supabase.table("otros_ingresos").insert(oi_save).execute()
-        
-        supabase.table("ingresos_base").insert(i_save).execute()
-
-        st.balloons()
-        st.success("✅ ¡Sincronizado con Supabase!")
-        st.rerun()
-
-    except Exception as e: 
-        # Esta es la línea que corregimos (quitamos el paréntesis extra)
-        st.error(f"❌ Error real de Supabase: {e}")
