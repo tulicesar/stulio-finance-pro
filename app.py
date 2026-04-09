@@ -203,37 +203,57 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"{label}: $ {abs(saldo_final):,.0f}")
     c.showPage(); c.save(); buf.seek(0); return buf
 
-# --- 4. ACCESO BLINDADO ---
+# --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
-        db_u = cargar_usuarios()
+        db_u = cargar_usuarios() # Esta función ahora lee de Supabase (la cambiamos antes)
+        
         with t_in:
             u = st.text_input("Usuario", key="login_u")
             p = st.text_input("Pass", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u:
                     u_data = db_u[u]
-                    password_correcta = (u_data.get("pass") == p) if isinstance(u_data, dict) else (u_data == p)
-                    nombre_final = u_data.get("nombre", u) if isinstance(u_data, dict) else u
+                    # Comprobamos la clave (usando el mapeo que hicimos en cargar_usuarios)
+                    password_correcta = (u_data.get("pass") == p)
+                    nombre_final = u_data.get("nombre", u)
+                    
                     if password_correcta:
                         st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, nombre_final
                         st.rerun()
                     else: st.error("❌ Contraseña incorrecta")
                 else: st.error("❌ Usuario no encontrado")
+        
         with t_reg:
-            rn, ru, rp = st.text_input("Nombre", key="reg_n"), st.text_input("ID Usuario", key="reg_u"), st.text_input("Pass", type="password", key="reg_p")
-            if st.button("Crear/Actualizar Cuenta"):
-                if ru in db_u and isinstance(db_u[ru], dict) and db_u[ru].get("pass") != rp:
-                    st.error("❌ El usuario existe y la contraseña no coincide")
+            st.markdown("### Registrar / Actualizar")
+            rn = st.text_input("Nombre Completo", key="reg_n")
+            ru = st.text_input("ID Usuario", key="reg_u")
+            rp = st.text_input("Pass", type="password", key="reg_p")
+            
+            if st.button("Crear/Actualizar Cuenta", use_container_width=True):
+                if not ru or not rp or not rn:
+                    st.warning("⚠️ Completa todos los campos para el registro")
                 else:
-                    db_u[ru] = {"pass": rp, "nombre": rn}
-                    guardar_usuarios(db_u); st.success("✅ Cuenta configurada con éxito")
+                    try:
+                        # 🚀 ENVIANDO A SUPABASE 🚀
+                        datos_usuario = {
+                            "usuario_id": ru, 
+                            "password": rp,         # Columna de tu tabla
+                            "nombre_completo": rn   # Columna de tu tabla
+                        }
+                        supabase.table("usuarios").upsert(datos_usuario).execute()
+                        
+                        st.success(f"✅ ¡Excelente! '{rn}' ya está en la nube.")
+                        st.balloons()
+                        # Limpiamos caché para que el login reconozca al nuevo usuario de inmediato
+                        st.cache_data.clear()
+                    except Exception as e:
+                        st.error(f"❌ Error al conectar con Supabase: {e}")
     st.stop()
-
 # --- 5. LÓGICA SIDEBAR ORIGINAL ---
 u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd(u_id)
