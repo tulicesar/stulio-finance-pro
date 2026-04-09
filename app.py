@@ -28,12 +28,21 @@ LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
-LISTA_CATEGORIAS = ["Hogar", "Servicios", "Salud", "Transporte", "Obligaciones", "Alimentación", "Impuestos", "Otros"]
+LISTA_CATEGORIAS = [
+    "Hogar", "Servicios", "Alimentación", "Transporte", 
+    "Obligaciones Financieras", "Salud", "Educación", 
+    "Cuidado Personal", "Mascotas", "Viajes y Recreación", 
+    "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
+]
 
 COLOR_MAP = {
-    "Hogar": "#FFB347", "Servicios": "#FFB347", "Salud": "#B39EB5", 
-    "Transporte": "#77B5FE", "Obligaciones": "#FF6961", "Alimentación": "#FDFD96", 
-    "Otros": "#77DD77", "Impuestos": "#84b6f4"
+    "Hogar": "#FFB347", "Servicios": "#FFB347", "Alimentación": "#FDFD96",
+    "Transporte": "#77B5FE", "Obligaciones Financieras": "#FF6961", 
+    "Salud": "#B39EB5", "Educación": "#84b6f4", "Cuidado Personal": "#FFD1DC",
+    "Mascotas": "#CFCFCF", "Viajes y Recreación": "#77DD77", 
+    "Seguros": "#AEC6CF", "Ahorro e Inversión": "#d4af37", # Color dorado como tu saldo
+    "Impuestos": "#84b6f4", "Otros": "#77DD77"
+}
 }
 
 st.markdown("""
