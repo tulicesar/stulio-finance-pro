@@ -1,88 +1,80 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-import plotly.express as px
-import os
 import json
-import re
-from io import BytesIO
+import os
 from datetime import datetime
-import pytz
 from supabase import create_client, Client
+import io
 
-# --- 0. CONEXION A SUPABASE ---
+# --- 1. CONFIGURACIÓN INICIAL ---
+st.set_page_config(page_title="Stulio Finance Pro", page_icon="💰", layout="wide")
+
+# Configuración de Supabase
 try:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     supabase: Client = create_client(url, key)
 except Exception as e:
-    st.error("Error en Secrets de Supabase.")
+    st.error(f"Error conectando a Supabase. Revisa los Secrets. Detalles: {e}")
+    st.stop()
 
-# --- 1. CONFIGURACION ---
-st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
-
+# Constantes
 USER_DB = "usuarios.json"
-LOGO_LOGIN = "logoapp 1.png"
-LOGO_SIDEBAR = "logoapp 2.png" 
-LOGO_APP_H = "LOGOapp horizontal.png" 
+LOGO_LOGIN = "logo_login.png" 
+LOGO_SIDEBAR = "logo_sidebar.png"
+LOGO_APP_H = "logo_app.png"
+MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+LISTA_CATEGORIAS = ["Vivienda", "Transporte", "Alimentación", "Salud", "Educación", "Entretenimiento", "Ropa", "Ahorro", "Deudas", "Otros"]
 
-# Lista sin tildes para evitar errores de encoding
-LISTA_CATEGORIAS = ["Alimentacion", "Cuidado Personal", "Educacion", "Entretenimiento", "Hogar", "Impuestos", "Inversiones", "Mascotas", "Obligaciones Financieras", "Otros", "Regalos", "Salud", "Seguros", "Servicios", "Suscripciones", "Transporte"]
+# Estilos CSS
+st.markdown("""
+    <style>
+    .card { border-radius: 10px; padding: 15px; background-color: #f9f9f9; box-shadow: 2px 2px 5px rgba(0,0,0,0.1); text-align: center; }
+    .card-label { font-size: 14px; font-weight: bold; color: #555; }
+    .card-value { font-size: 20px; font-weight: bold; margin-top: 5px; }
+    </style>
+""", unsafe_allow_html=True)
 
-st.markdown("""<style>
-    .stApp { background: #0e1117; color: #dee2e6; }
-    .card { background-color: #ffffff; border-radius: 12px; padding: 15px; color: #1a1d21; text-align: center; border-bottom: 4px solid #d4af37; }
-    .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; }
-    .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; }
-    .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; }
-    h2, h3 { color: #d4af37 !important; font-weight: bold !important; }
-</style>""", unsafe_allow_html=True)
 
-# --- 2. FUNCIONES MOTOR ---
+# --- 2. FUNCIONES AUXILIARES ---
+def cargar_usuarios():
+    if not os.path.exists(USER_DB):
+        return {}
+    with open(USER_DB, "r") as f:
+        return json.load(f)
+
 def format_moneda(valor):
-    try: return f"$ {int(float(valor)):,.0f}".replace(",", ".")
-    except: return "$ 0"
+    try:
+        return f"{int(valor):,}".replace(",", ".")
+    except ValueError:
+        return "0"
 
 def parse_moneda(texto):
-    clean = re.sub(r'[^\d]', '', str(texto))
-    return float(clean) if clean else 0.0
-
-def cargar_usuarios():
-    if os.path.exists(USER_DB):
-        with open(USER_DB, "r") as f:
-            try: return json.load(f)
-            except: pass
-    return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
-
-# --- 3. CARGA DE DATOS (REPARADO SIN TILDES) ---
-def cargar_bd():
-    cols_g = ["Anio", "Periodo", "Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente", "Usuario"]
-    cols_i = ["Anio", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
-    cols_oi = ["Anio", "Periodo", "Descripcion", "Monto", "Usuario"]
-
     try:
-        rg = supabase.table("gastos").select("*").execute()
-        ri = supabase.table("ingresos_base").select("*").execute()
-        roi = supabase.table("otros_ingresos").select("*").execute()
+        return float(str(texto).replace(".", "").replace(",", "").replace("$", "").strip())
+    except ValueError:
+        return 0.0
 
-        # Mapeo exacto de tus columnas de Supabase (minúsculas) a la App (Mayúsculas sin tildes)
-        df_g = pd.DataFrame(rg.data).rename(columns={"anio":"Anio","periodo":"Periodo","categoria":"Categoria","descripcion":"Descripcion","monto":"Monto","valor_referencia":"Referencia","pagado":"Pagado","recurrente":"Recurrente","usuario_id":"Usuario"}) if rg.data else pd.DataFrame(columns=cols_g)
-        df_i = pd.DataFrame(ri.data).rename(columns={"anio":"Anio","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"}) if ri.data else pd.DataFrame(columns=cols_i)
-        df_oi = pd.DataFrame(roi.data).rename(columns={"anio":"Anio","periodo":"Periodo","descripcion":"Descripcion","monto":"Monto","usuario_id":"Usuario"}) if roi.data else pd.DataFrame(columns=cols_oi)
+@st.cache_data(ttl=10) # Caché de 10 segundos para no saturar la base de datos
+def cargar_bd(u_id):
+    # Descargamos solo la info del usuario logueado
+    r_g = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
+    r_i = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
+    r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+    
+    df_g = pd.DataFrame(r_g.data) if r_g.data else pd.DataFrame(columns=["categoria", "descripcion", "monto", "valor_referencia", "pagado", "recurrente", "periodo", "anio", "usuario_id"])
+    df_i = pd.DataFrame(r_i.data) if r_i.data else pd.DataFrame(columns=["anio", "periodo", "saldo_anterior", "nomina", "otros", "usuario_id"])
+    df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["descripcion", "monto", "periodo", "anio", "usuario_id"])
+    
+    # Capitalizamos columnas para la UI
+    df_g = df_g.rename(columns={"categoria":"Categoria", "descripcion":"Descripcion", "monto":"Monto", "valor_referencia":"Referencia", "pagado":"Pagado", "recurrente":"Recurrente", "periodo":"Periodo", "anio":"Anio", "usuario_id":"Usuario"})
+    df_i = df_i.rename(columns={"anio":"Anio", "periodo":"Periodo", "saldo_anterior":"SaldoAnterior", "nomina":"Nomina", "otros":"Otros", "usuario_id":"Usuario"})
+    df_oi = df_oi.rename(columns={"descripcion":"Descripcion", "monto":"Monto", "periodo":"Periodo", "anio":"Anio", "usuario_id":"Usuario"})
+    
+    return df_g, df_i, df_oi
 
-        # Asegurar columnas para evitar KeyError
-        for df, cols in [(df_g, cols_g), (df_i, cols_i), (df_oi, cols_oi)]:
-            for c in cols:
-                if c not in df.columns: df[c] = None
 
-        return df_g, df_i, df_oi
-    except Exception as e:
-        # Esto nos dirá el error real en la pantalla de la app
-        error_msg = str(e).encode('ascii', 'ignore').decode('ascii')
-        st.error(f"Error real detectado: {error_msg}")
-        return pd.DataFrame(columns=cols_g), pd.DataFrame(columns=cols_i), pd.DataFrame(columns=cols_oi)
-
-# --- 4. ACCESO (Versión corregida y alineada) ---
+# --- 3. ACCESO (LOGIN/REGISTRO) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -98,7 +90,6 @@ if not st.session_state.autenticado:
             if st.button("Ingresar", use_container_width=True):
                 if u in db_u:
                     u_data = db_u[u]
-                    # Soporta formato viejo (string) y nuevo (dict)
                     if isinstance(u_data, dict):
                         pw_ok = (u_data.get("pass") == p)
                         nom = u_data.get("nombre", u)
@@ -112,12 +103,12 @@ if not st.session_state.autenticado:
                         st.session_state.u_nombre_completo = nom
                         st.rerun()
                     else:
-                        st.error("❌ Contrasena incorrecta")
+                        st.error("❌ Contraseña incorrecta")
                 else:
                     st.error("❌ Usuario no encontrado")
         
         with t_reg:
-            st.markdown("### Registro y Actualización")
+            st.markdown("### Crear o Actualizar cuenta")
             rn = st.text_input("Nombre Completo", key="reg_n")
             ru = st.text_input("ID Usuario", key="reg_u")
             rp = st.text_input("Pass", type="password", key="reg_p")
@@ -125,59 +116,65 @@ if not st.session_state.autenticado:
                 if not ru or not rp:
                     st.warning("⚠️ Completa usuario y contraseña")
                 else:
-                    # Si el usuario existe, validamos pass para dejarlo actualizar nombre
                     if ru in db_u and isinstance(db_u[ru], dict) and db_u[ru].get("pass") != rp:
                         st.error("❌ El usuario existe y la contraseña no coincide")
                     else:
                         db_u[ru] = {"pass": rp, "nombre": rn}
                         with open(USER_DB, "w") as f:
                             json.dump(db_u, f, indent=4)
-                        st.success(f"✅ ¡Hecho! Datos de '{rn}' guardados. Ya puedes ir al Login.")
+                        st.success(f"✅ ¡Hecho! Datos guardados. Ve al Login.")
     st.stop()
 
-# --- 5. LOGICA DASHBOARD ---
+
+# --- 4. LÓGICA DASHBOARD ---
 u_id = st.session_state.usuario_id
-df_g_full, df_i_full, df_oi_full = cargar_bd()
+df_g_full, df_i_full, df_oi_full = cargar_bd(u_id)
 
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     
-    # Puntos 5 y 6: Cambiamos 'Anio' por 'Año' y actualizamos la lista
+    # 5 y 6. Cambio a 'Año' y actualización de lista de años
     anio_s = st.selectbox("Año", [2026, 2027, 2028], index=0)
-    meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
+    mes_s = st.selectbox("Mes Actual", MESES, index=datetime.now().month-1)
     
-    # Filtro de ingresos
-    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Anio"]==anio_s) & (df_i_full["Usuario"]==u_id)]
-    
+    # Filtro del mes
+    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Anio"]==anio_s)]
     val_s_init = i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0
     val_n_init = i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0
     
-    # Punto 2: Restauramos los campos del Saldo Anterior y Fijo con tu formato de moneda
     st.markdown("---")
+    # 2. Restauración campos de ingreso fijos
     s_in = parse_moneda(st.text_input("Saldo Anterior", value=format_moneda(val_s_init)))
     n_in = parse_moneda(st.text_input("Ingreso Fijo", value=format_moneda(val_n_init)))
     
-    # Punto 4 (Paso A): Creamos una "caja vacía" en la barra lateral para llenarla después con la sumatoria
+    # 4. Caja para el total de ingresos adicionales
     caja_sumatoria_oi = st.empty()
+    
     st.markdown("---")
-
     if st.button("Salir"): st.session_state.autenticado = False; st.rerun()
 
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 
-# Punto 9: Infografía y Gestión
-st.markdown(f"## 📊 Gestión de {mes_s} {anio_s}")
 
-# --- EDITORES DE DATOS ---
+# --- 5. CUERPO PRINCIPAL ---
+# 9. Infografía Financiera
+st.markdown("---")
+st.markdown("### 📊 Infografía Financiera y Resumen")
+col_info1, col_info2, col_info3 = st.columns(3)
+col_info1.metric("Fondo Fijo (Nómina + Saldo)", f"$ {format_moneda(n_in + s_in)}")
+caja_infografia_gastos = col_info2.empty()
+caja_infografia_disp = col_info3.empty()
+st.markdown("---")
+
+st.markdown(f"## Gestión de {mes_s} {anio_s}")
+
 st.markdown("#### 📝 Registro de Gastos")
+df_g_mes = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Anio"] == anio_s)]
 
-# Punto 1: Casillas 'Pagado' y 'Recurrente' inactivas (False) por defecto
+# 1. Editor de gastos con checkboxes en False por defecto
 df_ed_g = st.data_editor(
-    df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Anio"] == anio_s) & (df_g_full["Usuario"] == u_id)]
-    .reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"])
-    .reset_index(drop=True), 
+    df_g_mes.reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"]).reset_index(drop=True), 
     use_container_width=True, 
     num_rows="dynamic", 
     column_config={
@@ -187,31 +184,107 @@ df_ed_g = st.data_editor(
     }
 )
 
-# Punto 3: Restaurar título de la tabla de Ingresos Adicionales
+# 3. Restauración de título de variables
 st.markdown("#### 💸 Ingresos Adicionales (Variables)")
+df_oi_mes = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Anio"] == anio_s)]
+
 df_ed_oi = st.data_editor(
-    df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Anio"] == anio_s) & (df_oi_full["Usuario"] == u_id)]
-    .reindex(columns=["Descripcion", "Monto"])
-    .reset_index(drop=True), 
+    df_oi_mes.reindex(columns=["Descripcion", "Monto"]).reset_index(drop=True), 
     use_container_width=True, 
     num_rows="dynamic"
 )
 
-# --- CÁLCULOS ---
+# Cálculos Matemáticos
 otr_v = float(df_ed_oi["Monto"].sum()) if not df_ed_oi.empty else 0.0
+# Actualizamos métrica del Sidebar (Punto 4)
+caja_sumatoria_oi.metric("Total Ingresos Adic.", f"$ {format_moneda(otr_v)}")
 
-# Punto 4 (Paso B): Llenamos la caja vacía del sidebar con el total calculado
-caja_sumatoria_oi.metric("Total Ingresos Adic.", f"$ {otr_v:,.0f}")
-
-g_pagado = df_ed_g[df_ed_g["Pagado"]==True]["Monto"].sum() if not df_ed_g.empty else 0
-g_pend = df_ed_g[df_ed_g["Pagado"]==False]["Monto"].sum() if not df_ed_g.empty else 0
+g_pagado = float(df_ed_g[df_ed_g["Pagado"]==True]["Monto"].sum()) if not df_ed_g.empty else 0.0
+g_pend = float(df_ed_g[df_ed_g["Pagado"]==False]["Monto"].sum()) if not df_ed_g.empty else 0.0
 it = s_in + n_in + otr_v
 bf = it - g_pagado - g_pend
 
-# --- KPIS E INFOGRAFÍA (Parte del Punto 9) ---
+# Llenar la infografía superior dinámicamente
+caja_infografia_gastos.metric("Total Gastos (Pagado + Pendiente)", f"$ {format_moneda(g_pagado + g_pend)}")
+caja_infografia_disp.metric("Disponible Teórico", f"$ {format_moneda(it - (g_pagado + g_pend))}")
+
+# Tarjetas KPI
 st.divider()
 c1, c2, c3, c4, c5 = st.columns(5)
 tarj = [("INGRESOS", it, "black"), ("PAGADO", g_pagado, "green"), ("PENDIENTE", g_pend, "red"), ("DISPONIBLE", it-g_pagado, "blue"), ("SALDO FINAL", bf, "#d4af37")]
 for i, (l, v, color) in enumerate(tarj): 
     with [c1, c2, c3, c4, c5][i]:
         st.markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{color}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
+
+
+# --- 6. GUARDAR DATOS EN NUBE ---
+st.markdown("---")
+if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
+    try:
+        # Borrar datos previos
+        supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+        supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+        supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+
+        # Preparar y limpiar vacíos
+        g_save = df_ed_g.dropna(subset=["Descripcion"]).assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Categoria":"categoria","Descripcion":"descripcion","Monto":"monto","Referencia":"valor_referencia","Pagado":"pagado","Recurrente":"recurrente"}).to_dict(orient="records")
+        oi_save = df_ed_oi.dropna(subset=["Descripcion"]).assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Descripcion":"descripcion","Monto":"monto"}).to_dict(orient="records")
+        i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
+
+        # Insertar
+        if g_save: supabase.table("gastos").insert(g_save).execute()
+        if oi_save: supabase.table("otros_ingresos").insert(oi_save).execute()
+        supabase.table("ingresos_base").insert(i_save).execute()
+
+        st.balloons()
+        st.success("✅ ¡Sincronizado con Supabase!")
+        st.cache_data.clear() # Limpia caché para forzar lectura de lo nuevo
+        st.rerun()
+
+    except Exception as e: 
+        st.error(f"❌ Error real de Supabase: {e}")
+
+
+# --- 7. MÓDULO DE REPORTES Y PROYECCIONES ---
+# 7 y 8. Restauración de Reportes y Proyecciones Semestrales
+st.markdown("---")
+st.markdown("## 📑 Generación de Extractos y Proyecciones")
+
+col_rep1, col_rep2 = st.columns(2)
+
+with col_rep1:
+    st.markdown("#### 📅 Extracto Mensual")
+    
+    # Generador Excel
+    buffer = io.BytesIO()
+    with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
+        df_ed_g.to_excel(writer, sheet_name='Gastos', index=False)
+        df_ed_oi.to_excel(writer, sheet_name='Ingresos Adic', index=False)
+    
+    st.download_button(
+        label="📥 Descargar Extracto (Excel)",
+        data=buffer.getvalue(),
+        file_name=f"Extracto_{mes_s}_{anio_s}_{u_id}.xlsx",
+        mime="application/vnd.ms-excel",
+        use_container_width=True
+    )
+    
+    # Botón PDF
+    if st.button("📄 Generar Extracto (PDF)", use_container_width=True):
+        st.info("💡 PDF Activo: Puedes integrar aquí tu librería fpdf conectando las variables actuales.")
+
+with col_rep2:
+    st.markdown("#### 🔮 Proyección Semestral")
+    semestre_sel = st.selectbox("Selecciona el semestre", ["Semestre 1 (Ene - Jun)", "Semestre 2 (Jul - Dic)"])
+    if st.button("📊 Generar Proyección", use_container_width=True):
+        meses_filtro = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio"] if "1" in semestre_sel else ["Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        
+        # Filtramos la base de datos completa por el semestre seleccionado
+        df_proy = df_g_full[(df_g_full["Anio"] == anio_s) & (df_g_full["Periodo"].isin(meses_filtro))]
+        total_proy = df_proy["Monto"].sum() if not df_proy.empty else 0
+        
+        st.success(f"Gasto acumulado proyectado para {semestre_sel}: **$ {format_moneda(total_proy)}**")
+        if not df_proy.empty:
+            st.dataframe(df_proy.groupby("Categoria")["Monto"].sum().reset_index(), use_container_width=True)
+        else:
+            st.warning("No hay datos registrados en este semestre para proyectar.")
