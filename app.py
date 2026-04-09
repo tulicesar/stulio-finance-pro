@@ -93,49 +93,24 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         db_u = cargar_usuarios()
         
-        with t_in:
-            u = st.text_input("Usuario", key="login_u")
-            p = st.text_input("Pass", type="password", key="login_p")
-            if st.button("Ingresar", use_container_width=True):
-                if u in db_u:
-                    u_data = db_u[u]
-                    
-                    # LOGICA BLINDADA: Revisa si es formato nuevo (dict) o viejo (str)
-                    if isinstance(u_data, dict):
-                        password_correcta = (u_data.get("pass") == p)
-                        nombre_final = u_data.get("nombre", u)
-                    else:
-                        password_correcta = (u_data == p)
-                        nombre_final = u
-                    
-                    if password_correcta:
-                        st.session_state.autenticado = True
-                        st.session_state.usuario_id = u
-                        st.session_state.u_nombre_completo = nombre_final
-                        st.rerun()
-                    else:
-                        st.error("❌ Contrasena incorrecta")
-                else:
-                    st.error("❌ Usuario no encontrado")
-        
-        with t_reg:
-            st.markdown("### Crear nueva cuenta")
+       with t_reg:
+            st.markdown("### Crear o Actualizar cuenta")
             rn = st.text_input("Nombre Completo", key="reg_n")
             ru = st.text_input("ID Usuario", key="reg_u")
             rp = st.text_input("Pass", type="password", key="reg_p")
-            if st.button("Crear Cuenta"):
+            if st.button("Procesar Registro/Actualización"):
                 if not ru or not rp:
-                    st.warning("⚠️ Completa todos los campos")
-                elif ru in db_u:
-                    st.warning("⚠️ El usuario ya existe")
+                    st.warning("⚠️ Completa usuario y contraseña")
                 else:
-                    # Guardamos en el formato nuevo para que no de errores
-                    db_u[ru] = {"pass": rp, "nombre": rn}
-                    # Nota: Aqui usaremos la funcion local para guardar el JSON
-                    with open(USER_DB, "w") as f:
-                        json.dump(db_u, f, indent=4)
-                    st.success("✅ Cuenta creada con exito. Ve al Login.")
-    st.stop()
+                    # Si el usuario existe y la contraseña coincide, o si es nuevo
+                    if ru in db_u and db_u[ru].get("pass") != rp:
+                        st.error("❌ El usuario ya existe y la contraseña no coincide")
+                    else:
+                        # Guardamos o actualizamos
+                        db_u[ru] = {"pass": rp, "nombre": rn}
+                        with open(USER_DB, "w") as f:
+                            json.dump(db_u, f, indent=4)
+                        st.success(f"✅ ¡Hecho! Datos de '{rn}' guardados. Ya puedes ir al Login.")
 
 # --- 5. LOGICA DASHBOARD ---
 u_id = st.session_state.usuario_id
