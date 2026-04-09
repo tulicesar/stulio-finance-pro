@@ -196,4 +196,6 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
         supabase.table("ingresos_base").insert(i_save).execute()
 
         st.balloons(); st.success("Sincronizado"); st.rerun()
-    except Exception as e: st.error(f"Error al guardar. Revisa los datos.")
+    except Exception as e: 
+        # Esto nos mostrará el error real en color rojo
+        st.error(f"❌ Error real de Supabase: {e}"))
