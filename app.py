@@ -8,7 +8,16 @@ import re
 from io import BytesIO
 from datetime import datetime
 import math
-import pytz 
+import pytz
+from supabase import create_client, Client
+
+# --- 0. CONEXIÓN A SUPABASE ---
+try:
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    supabase: Client = create_client(url, key)
+except Exception as e:
+    st.error("⚠️ Error en los Secrets de Supabase. Verifica la configuración en Streamlit Cloud.")
 
 # --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
@@ -16,30 +25,14 @@ st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", 
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
-BASE_FILE = "base.xlsx"
 USER_DB = "usuarios.json"
 
-# LISTA DE CATEGORÍAS ORGANIZADA ALFABÉTICAMENTE
 LISTA_CATEGORIAS = [
-    "Alimentación",
-    "Cuidado Personal",
-    "Educación",
-    "Entretenimiento",
-    "Hogar",
-    "Impuestos",
-    "Inversiones",
-    "Mascotas",
-    "Obligaciones Finacieras",
-    "Otros",
-    "Regalos",
-    "Salud",
-    "Seguros",
-    "Servicios",
-    "Suscripciones",
-    "Transporte"
+    "Alimentación", "Cuidado Personal", "Educación", "Entretenimiento",
+    "Hogar", "Impuestos", "Inversiones", "Mascotas", "Obligaciones Finacieras",
+    "Otros", "Regalos", "Salud", "Seguros", "Servicios", "Suscripciones", "Transporte"
 ]
 
-# MAPA DE COLORES (Asociado a las categorías)
 COLOR_MAP = {
     "Alimentación": "#FDFD96", "Cuidado Personal": "#FFB7C5", "Educación": "#77DD77",
     "Entretenimiento": "#FF6961", "Hogar": "#FFB347", "Impuestos": "#DEA5A4",
@@ -74,13 +67,12 @@ st.markdown("""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 2. MOTOR DE DATOS Y FORMATEO ---
+# --- 2. MOTOR DE DATOS ---
 def format_moneda(valor):
     try:
         n = int(float(valor))
         return f"$ {n:,.0f}".replace(",", ".")
-    except:
-        return "$ 0"
+    except: return "$ 0"
 
 def parse_moneda(texto):
     if not texto: return 0.0
@@ -112,14 +104,21 @@ def cargar_bd():
     col_g = ["Año", "Periodo", "Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente", "Usuario"]
     col_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
     col_oi = ["Año", "Periodo", "Descripción", "Monto", "Usuario"]
-    if not os.path.exists(BASE_FILE): return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
+    
     try:
-        df_g = pd.read_excel(BASE_FILE, sheet_name="Gastos")
-        df_i = pd.read_excel(BASE_FILE, sheet_name="Ingresos")
-        try: df_oi = pd.read_excel(BASE_FILE, sheet_name="OtrosIngresos")
-        except: df_oi = pd.DataFrame(columns=col_oi)
+        # Usando ingresos_base como se ve en tu imagen
+        res_g = supabase.table("gastos").select("*").execute()
+        res_i = supabase.table("ingresos_base").select("*").execute()
+        res_oi = supabase.table("otros_ingresos").select("*").execute()
+
+        df_g = pd.DataFrame(res_g.data) if res_g.data else pd.DataFrame(columns=col_g)
+        df_i = pd.DataFrame(res_i.data) if res_i.data else pd.DataFrame(columns=col_i)
+        df_oi = pd.DataFrame(res_oi.data) if res_oi.data else pd.DataFrame(columns=col_oi)
+
         return sanitize(df_g), sanitize(df_i), sanitize(df_oi)
-    except: return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
+    except Exception as e:
+        st.error(f"Error cargando Supabase: {e}")
+        return pd.DataFrame(columns=col_g), pd.DataFrame(columns=col_i), pd.DataFrame(columns=col_oi)
 
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
@@ -234,9 +233,7 @@ with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
     
-    # --- ACTUALIZACIÓN: AÑO 2027 AGREGADO ---
     anio_s = st.selectbox("Año", [2025, 2026, 2027], index=1)
-    
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
@@ -251,7 +248,6 @@ with st.sidebar:
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_m_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
     
     st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=True)
-    
     val_s_init = s_sug if arr_on else (float(i_m_act["SaldoAnterior"].iloc[0]) if not i_m_act.empty else 0.0)
     s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
     s_in = parse_moneda(s_txt)
@@ -286,7 +282,6 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
 
-# RECURRENCIA INTELIGENTE
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
     gastos_previos = df_g_full[(df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].copy()
@@ -348,10 +343,27 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#d4af37">{label_ahorro} Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
 st.markdown("<br><br>", unsafe_allow_html=True)
+
+# --- BOTÓN DE GUARDADO SINCRONIZADO CON SUPABASE ---
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    df_g_final = pd.concat([df_g_full[~((df_g_full["Periodo"]==mes_s)&(df_g_full["Año"]==anio_s)&(df_g_full["Usuario"]==u_id))], df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    df_oi_final = pd.concat([df_oi_full[~((df_oi_full["Periodo"]==mes_s)&(df_oi_full["Año"]==anio_s)&(df_oi_full["Usuario"]==u_id))], df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id)], ignore_index=True)
-    df_i_final = pd.concat([df_i_full[~((df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id))], pd.DataFrame([{"Año":anio_s, "Periodo":mes_s, "SaldoAnterior":s_in, "Nomina":n_in, "Otros":otr_v, "Usuario":u_id}])], ignore_index=True)
-    with pd.ExcelWriter(BASE_FILE) as w:
-        df_g_final.to_excel(w, sheet_name="Gastos", index=False); df_i_final.to_excel(w, sheet_name="Ingresos", index=False); df_oi_final.to_excel(w, sheet_name="OtrosIngresos", index=False)
-    st.balloons(); st.rerun()
+    try:
+        # 1. Borrar lo existente del mes para no duplicar (usando nombres de tu imagen)
+        supabase.table("gastos").delete().eq("Usuario", u_id).eq("Año", anio_s).eq("Periodo", mes_s).execute()
+        supabase.table("otros_ingresos").delete().eq("Usuario", u_id).eq("Año", anio_s).eq("Periodo", mes_s).execute()
+        supabase.table("ingresos_base").delete().eq("Usuario", u_id).eq("Año", anio_s).eq("Periodo", mes_s).execute()
+
+        # 2. Preparar datos
+        lista_gastos = df_ed_g.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id).to_dict(orient="records")
+        lista_otros = df_ed_oi.assign(Periodo=mes_s, Año=anio_s, Usuario=u_id).to_dict(orient="records")
+        registro_ingreso = {"Año": anio_s, "Periodo": mes_s, "SaldoAnterior": s_in, "Nomina": n_in, "Otros": otr_v, "Usuario": u_id}
+
+        # 3. Insertar nuevos
+        if lista_gastos: supabase.table("gastos").insert(lista_gastos).execute()
+        if lista_otros: supabase.table("otros_ingresos").insert(lista_otros).execute()
+        supabase.table("ingresos_base").insert(registro_ingreso).execute()
+
+        st.balloons()
+        st.success("✅ ¡Datos sincronizados con la nube de Stulio Designs!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"❌ Error al guardar en Supabase: {e}")
