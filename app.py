@@ -40,9 +40,8 @@ COLOR_MAP = {
     "Transporte": "#77B5FE", "Obligaciones Financieras": "#FF6961", 
     "Salud": "#B39EB5", "Educación": "#84b6f4", "Cuidado Personal": "#FFD1DC",
     "Mascotas": "#CFCFCF", "Viajes y Recreación": "#77DD77", 
-    "Seguros": "#AEC6CF", "Ahorro e Inversión": "#d4af37", # Color dorado como tu saldo
+    "Seguros": "#AEC6CF", "Ahorro e Inversión": "#d4af37", 
     "Impuestos": "#84b6f4", "Otros": "#77DD77"
-}
 }
 
 st.markdown("""
