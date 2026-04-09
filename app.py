@@ -71,6 +71,7 @@ st.markdown("""
 
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
 def format_moneda(valor):
+    """Convierte un número a formato string: $ 1.000.000"""
     try:
         n = int(float(valor))
         return f"$ {n:,.0f}".replace(",", ".")
@@ -78,25 +79,33 @@ def format_moneda(valor):
         return "$ 0"
 
 def parse_moneda(texto):
+    """Limpia el string formateado para obtener el número puro"""
     if not texto: return 0.0
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
 
 def cargar_usuarios():
-    if os.path.exists(USER_DB):
-        with open(USER_DB, "r") as f:
-            try: 
-                data = json.load(f)
-                if isinstance(data, dict): return data
-            except: pass
-    return {}
+    """Carga los usuarios desde la tabla 'usuarios' en Supabase"""
+    try:
+        # 🌟 CONSULTA A SUPABASE 🌟
+        res = supabase.table("usuarios").select("*").execute()
+        # Mapeamos tus columnas: 'usuario_id', 'password' y 'nombre_completo'
+        db_dict = {
+            user['usuario_id']: {
+                "pass": user['password'], 
+                "nombre": user['nombre_completo']
+            } for user in res.data
+        }
+        return db_dict
+    except Exception as e:
+        # Si la tabla está vacía o hay error, devolvemos un diccionario vacío
+        return {}
 
-def guardar_usuarios(db):
-    with open(USER_DB, "w") as f: json.dump(db, f, indent=4)
+# Nota: La función guardar_usuarios(db) se elimina porque ahora usaremos .upsert() directamente
 
 @st.cache_data(ttl=5) # Cache corto para rapidez con Supabase
 def cargar_bd(u_id):
-    # 🌟 Aquí cambiamos Excel por Supabase 🌟
+    # Consultamos las tablas de movimientos
     r_g = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
     r_i = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
     r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
@@ -105,14 +114,15 @@ def cargar_bd(u_id):
     df_i = pd.DataFrame(r_i.data) if r_i.data else pd.DataFrame(columns=["anio", "periodo", "saldo_anterior", "nomina", "otros", "usuario_id"])
     df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio", "periodo", "descripcion", "monto", "usuario_id"])
     
-    # Renombramos a las mayúsculas de TU código original para que gráficos y PDF funcionen
+    # Renombramos para compatibilidad con el resto del código
     df_g = df_g.rename(columns={"anio":"Año", "periodo":"Periodo", "categoria":"Categoría", "descripcion":"Descripción", "monto":"Monto", "valor_referencia":"Valor Referencia", "pagado":"Pagado", "recurrente":"Movimiento Recurrente", "usuario_id":"Usuario"})
     df_i = df_i.rename(columns={"anio":"Año", "periodo":"Periodo", "saldo_anterior":"SaldoAnterior", "nomina":"Nomina", "otros":"Otros", "usuario_id":"Usuario"})
     df_oi = df_oi.rename(columns={"anio":"Año", "periodo":"Periodo", "descripcion":"Descripción", "monto":"Monto", "usuario_id":"Usuario"})
     
-    if "Año" in df_g.columns: df_g["Año"] = pd.to_numeric(df_g["Año"], errors="coerce").fillna(0).astype(int)
-    if "Año" in df_i.columns: df_i["Año"] = pd.to_numeric(df_i["Año"], errors="coerce").fillna(0).astype(int)
-    if "Año" in df_oi.columns: df_oi["Año"] = pd.to_numeric(df_oi["Año"], errors="coerce").fillna(0).astype(int)
+    # Aseguramos que el Año sea entero
+    for df in [df_g, df_i, df_oi]:
+        if "Año" in df.columns:
+            df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
     
     return df_g, df_i, df_oi
 
