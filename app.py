@@ -82,35 +82,58 @@ def cargar_bd():
         st.error(f"Error real detectado: {error_msg}")
         return pd.DataFrame(columns=cols_g), pd.DataFrame(columns=cols_i), pd.DataFrame(columns=cols_oi)
 
-# --- 4. ACCESO (Pestañas recuperadas y Login robusto) ---
+# --- 4. ACCESO (Versión corregida y alineada) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
         
-        # Recuperamos las pestañas
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         db_u = cargar_usuarios()
         
-       with t_reg:
-            st.markdown("### Crear o Actualizar cuenta")
+        with t_in:
+            u = st.text_input("Usuario", key="login_u")
+            p = st.text_input("Pass", type="password", key="login_p")
+            if st.button("Ingresar", use_container_width=True):
+                if u in db_u:
+                    u_data = db_u[u]
+                    # Soporta formato viejo (string) y nuevo (dict)
+                    if isinstance(u_data, dict):
+                        pw_ok = (u_data.get("pass") == p)
+                        nom = u_data.get("nombre", u)
+                    else:
+                        pw_ok = (u_data == p)
+                        nom = u
+                    
+                    if pw_ok:
+                        st.session_state.autenticado = True
+                        st.session_state.usuario_id = u
+                        st.session_state.u_nombre_completo = nom
+                        st.rerun()
+                    else:
+                        st.error("❌ Contrasena incorrecta")
+                else:
+                    st.error("❌ Usuario no encontrado")
+        
+        with t_reg:
+            st.markdown("### Registro y Actualización")
             rn = st.text_input("Nombre Completo", key="reg_n")
             ru = st.text_input("ID Usuario", key="reg_u")
             rp = st.text_input("Pass", type="password", key="reg_p")
-            if st.button("Procesar Registro/Actualización"):
+            if st.button("Procesar Registro"):
                 if not ru or not rp:
                     st.warning("⚠️ Completa usuario y contraseña")
                 else:
-                    # Si el usuario existe y la contraseña coincide, o si es nuevo
-                    if ru in db_u and db_u[ru].get("pass") != rp:
-                        st.error("❌ El usuario ya existe y la contraseña no coincide")
+                    # Si el usuario existe, validamos pass para dejarlo actualizar nombre
+                    if ru in db_u and isinstance(db_u[ru], dict) and db_u[ru].get("pass") != rp:
+                        st.error("❌ El usuario existe y la contraseña no coincide")
                     else:
-                        # Guardamos o actualizamos
                         db_u[ru] = {"pass": rp, "nombre": rn}
                         with open(USER_DB, "w") as f:
                             json.dump(db_u, f, indent=4)
                         st.success(f"✅ ¡Hecho! Datos de '{rn}' guardados. Ya puedes ir al Login.")
+    st.stop()
 
 # --- 5. LOGICA DASHBOARD ---
 u_id = st.session_state.usuario_id
