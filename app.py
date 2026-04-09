@@ -16,9 +16,9 @@ try:
     key = st.secrets["supabase"]["key"]
     supabase: Client = create_client(url, key)
 except Exception as e:
-    st.error("⚠️ Error en los Secrets de Supabase. Revisa la URL y la Key.")
+    st.error("⚠️ Error en los Secrets de Supabase.")
 
-# --- 1. CONFIGURACIÓN ---
+# --- 1. CONFIGURACIÓN Y ESTILO ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 USER_DB = "usuarios.json"
@@ -37,7 +37,7 @@ st.markdown("""<style>
     h2, h3 { color: #d4af37 !important; font-weight: bold !important; }
 </style>""", unsafe_allow_html=True)
 
-# --- 2. FUNCIONES DE APOYO ---
+# --- 2. FUNCIONES MOTOR ---
 def format_moneda(valor):
     try: return f"$ {int(float(valor)):,.0f}".replace(",", ".")
     except: return "$ 0"
@@ -53,26 +53,34 @@ def cargar_usuarios():
             except: pass
     return {"tulicesar": {"pass": "Thulli.07", "nombre": "Tulio Salcedo"}}
 
-# --- 3. CARGA DE DATOS (Ajustado a tus columnas reales) ---
+# --- 3. CARGA DE DATOS (SUPER ROBUSTA) ---
 def cargar_bd():
+    # Definimos columnas base para que NUNCA de KeyError
+    cols_g = ["Año", "Periodo", "Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente", "Usuario"]
+    cols_i = ["Año", "Periodo", "SaldoAnterior", "Nomina", "Otros", "Usuario"]
+    cols_oi = ["Año", "Periodo", "Descripcion", "Monto", "Usuario"]
+
     try:
-        res_g = supabase.table("gastos").select("*").execute()
-        res_i = supabase.table("ingresos_base").select("*").execute()
-        res_oi = supabase.table("otros_ingresos").select("*").execute()
+        # 1. Traer datos de Supabase
+        rg = supabase.table("gastos").select("*").execute()
+        ri = supabase.table("ingresos_base").select("*").execute()
+        roi = supabase.table("otros_ingresos").select("*").execute()
 
-        # Mapeo para que el editor de Streamlit se vea bonito
-        map_g = {"anio": "Año", "periodo": "Periodo", "categoria": "Categoria", "descripcion": "Descripcion", "monto": "Monto", "valor_referencia": "Referencia", "pagado": "Pagado", "recurrente": "Recurrente", "usuario_id": "Usuario"}
-        map_i = {"anio": "Año", "periodo": "Periodo", "saldo_anterior": "SaldoAnterior", "nomina": "Nomina", "otros": "Otros", "usuario_id": "Usuario"}
-        map_oi = {"anio": "Año", "periodo": "Periodo", "descripcion": "Descripcion", "monto": "Monto", "usuario_id": "Usuario"}
+        # 2. Convertir a DataFrame o crear uno vacío con columnas si no hay datos
+        # Mapeamos los nombres de Supabase (minúsculas) a los del código (Mayúsculas)
+        df_g = pd.DataFrame(rg.data).rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoria","descripcion":"Descripcion","monto":"Monto","valor_referencia":"Referencia","pagado":"Pagado","recurrente":"Recurrente","usuario_id":"Usuario"}) if rg.data else pd.DataFrame(columns=cols_g)
+        df_i = pd.DataFrame(ri.data).rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"}) if ri.data else pd.DataFrame(columns=cols_i)
+        df_oi = pd.DataFrame(roi.data).rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripcion","monto":"Monto","usuario_id":"Usuario"}) if roi.data else pd.DataFrame(columns=cols_oi)
 
-        df_g = pd.DataFrame(res_g.data).rename(columns=map_g) if res_g.data else pd.DataFrame(columns=map_g.values())
-        df_i = pd.DataFrame(res_i.data).rename(columns=map_i) if res_i.data else pd.DataFrame(columns=map_i.values())
-        df_oi = pd.DataFrame(res_oi.data).rename(columns=map_oi) if res_oi.data else pd.DataFrame(columns=map_oi.values())
-        
+        # Aseguramos que tengan las columnas aunque el rename falle
+        for c in cols_g: if c not in df_g.columns: df_g[c] = None
+        for c in cols_i: if c not in df_i.columns: df_i[c] = None
+        for c in cols_oi: if c not in df_oi.columns: df_oi[c] = None
+
         return df_g, df_i, df_oi
     except Exception as e:
         st.error(f"Error cargando Supabase: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(columns=cols_g), pd.DataFrame(columns=cols_i), pd.DataFrame(columns=cols_oi)
 
 # --- 4. ACCESO ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
@@ -89,7 +97,7 @@ if not st.session_state.autenticado:
             else: st.error("❌ Credenciales incorrectas")
     st.stop()
 
-# --- 5. DASHBOARD ---
+# --- 5. LÓGICA DASHBOARD ---
 u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd()
 
@@ -99,19 +107,24 @@ with st.sidebar:
     anio_s = st.selectbox("Año", [2025, 2026, 2027], index=1)
     mes_s = st.selectbox("Mes Actual", ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"], index=datetime.now().month-1)
     
-    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)&(df_i_full["Usuario"]==u_id)]
-    s_in = parse_moneda(st.text_input("Saldo Anterior", value=format_moneda(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)))
-    n_in = parse_moneda(st.text_input("Ingreso Fijo", value=format_moneda(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)))
+    # Filtrar ingresos (Aquí es donde daba el error)
+    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s) & (df_i_full["Usuario"]==u_id)]
+    
+    val_s_init = i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0
+    val_n_init = i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0
+    
+    s_in = parse_moneda(st.text_input("Saldo Anterior", value=format_moneda(val_s_init)))
+    n_in = parse_moneda(st.text_input("Ingreso Fijo", value=format_moneda(val_n_init)))
     if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
 
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
-# Filtro de datos para mostrar en los editores
-df_ed_g = st.data_editor(df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Categoria": st.column_config.SelectboxColumn("Categoria", options=LISTA_CATEGORIAS)})
+# Editores de datos
+df_ed_g = st.data_editor(df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s) & (df_g_full["Usuario"] == u_id)].reindex(columns=["Categoria", "Descripcion", "Monto", "Referencia", "Pagado", "Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
 df_ed_oi = st.data_editor(df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s) & (df_oi_full["Usuario"] == u_id)].reindex(columns=["Descripcion", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic")
 
-# Cálculos de métricas
+# Cálculos rápidos
 otr_v = float(df_ed_oi["Monto"].sum()) if not df_ed_oi.empty else 0.0
 g_pagado = df_ed_g[df_ed_g["Pagado"]==True]["Monto"].sum() if not df_ed_g.empty else 0
 g_pend = df_ed_g[df_ed_g["Pagado"]==False]["Monto"].sum() if not df_ed_g.empty else 0
@@ -125,7 +138,7 @@ tarj = [("INGRESOS", it, "black"), ("PAGADO", g_pagado, "green"), ("PENDIENTE", 
 for i, (l, v, color) in enumerate(tarj): 
     st.columns(5)[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{color}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- 6. GUARDAR (Mapeando a tus columnas reales de la imagen) ---
+# --- 6. GUARDAR ---
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     try:
         # Borrar previos
@@ -133,14 +146,14 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
         supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
         supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
-        # Preparar para guardar con nombres de Supabase
-        g_save = df_ed_g.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Categoria": "categoria", "Descripcion": "descripcion", "Monto": "monto", "Referencia": "valor_referencia", "Pagado": "pagado", "Recurrente": "recurrente"}).to_dict(orient="records")
-        oi_save = df_ed_oi.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Descripcion": "descripcion", "Monto": "monto"}).to_dict(orient="records")
+        # Guardar (Asegurando nombres de Supabase)
+        g_save = df_ed_g.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Categoria":"categoria","Descripcion":"descripcion","Monto":"monto","Referencia":"valor_referencia","Pagado":"pagado","Recurrente":"recurrente"}).to_dict(orient="records")
+        oi_save = df_ed_oi.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={"Descripcion":"descripcion","Monto":"monto"}).to_dict(orient="records")
         i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
 
         if g_save: supabase.table("gastos").insert(g_save).execute()
         if oi_save: supabase.table("otros_ingresos").insert(oi_save).execute()
         supabase.table("ingresos_base").insert(i_save).execute()
 
-        st.balloons(); st.success("✅ Sincronizado"); st.rerun()
+        st.balloons(); st.success("✅ ¡Sincronizado con Supabase!"); st.rerun()
     except Exception as e: st.error(f"❌ Error al guardar: {e}")
