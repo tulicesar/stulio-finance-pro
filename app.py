@@ -82,19 +82,59 @@ def cargar_bd():
         st.error(f"Error real detectado: {error_msg}")
         return pd.DataFrame(columns=cols_g), pd.DataFrame(columns=cols_i), pd.DataFrame(columns=cols_oi)
 
-# --- 4. ACCESO ---
+# --- 4. ACCESO (Pestañas recuperadas y Login robusto) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
+        
+        # Recuperamos las pestañas
+        t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         db_u = cargar_usuarios()
-        u, p = st.text_input("Usuario"), st.text_input("Pass", type="password")
-        if st.button("Ingresar"):
-            if u in db_u and db_u[u]["pass"] == p:
-                st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, db_u[u]["nombre"]
-                st.rerun()
-            else: st.error("Credenciales incorrectas")
+        
+        with t_in:
+            u = st.text_input("Usuario", key="login_u")
+            p = st.text_input("Pass", type="password", key="login_p")
+            if st.button("Ingresar", use_container_width=True):
+                if u in db_u:
+                    u_data = db_u[u]
+                    
+                    # LOGICA BLINDADA: Revisa si es formato nuevo (dict) o viejo (str)
+                    if isinstance(u_data, dict):
+                        password_correcta = (u_data.get("pass") == p)
+                        nombre_final = u_data.get("nombre", u)
+                    else:
+                        password_correcta = (u_data == p)
+                        nombre_final = u
+                    
+                    if password_correcta:
+                        st.session_state.autenticado = True
+                        st.session_state.usuario_id = u
+                        st.session_state.u_nombre_completo = nombre_final
+                        st.rerun()
+                    else:
+                        st.error("❌ Contrasena incorrecta")
+                else:
+                    st.error("❌ Usuario no encontrado")
+        
+        with t_reg:
+            st.markdown("### Crear nueva cuenta")
+            rn = st.text_input("Nombre Completo", key="reg_n")
+            ru = st.text_input("ID Usuario", key="reg_u")
+            rp = st.text_input("Pass", type="password", key="reg_p")
+            if st.button("Crear Cuenta"):
+                if not ru or not rp:
+                    st.warning("⚠️ Completa todos los campos")
+                elif ru in db_u:
+                    st.warning("⚠️ El usuario ya existe")
+                else:
+                    # Guardamos en el formato nuevo para que no de errores
+                    db_u[ru] = {"pass": rp, "nombre": rn}
+                    # Nota: Aqui usaremos la funcion local para guardar el JSON
+                    with open(USER_DB, "w") as f:
+                        json.dump(db_u, f, indent=4)
+                    st.success("✅ Cuenta creada con exito. Ve al Login.")
     st.stop()
 
 # --- 5. LOGICA DASHBOARD ---
