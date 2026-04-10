@@ -363,47 +363,66 @@ for i, (l, v, c) in enumerate(tarj):
 
 # (Aquí siguen tus gráficos de Plotly, esos están bien)
 
-# --- 7. GUARDAR EN SUPABASE (BLINDAJE TOTAL V2) ---
+# --- 7. GUARDAR EN SUPABASE (MAPEO SEGURO) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
-
-# 1. Preparamos los datos PRIMERO para saber qué tenemos
-df_g_limpio = df_ed_g.dropna(how="all", subset=["Categoría", "Monto"])
-g_save = df_g_limpio.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={
-    "Categoría":"categoria", "Descripción":"descripcion", "Monto":"monto", "Valor Referencia":"valor_referencia", 
-    "Pagado":"pagado", "Movimiento Recurrente":"recurrente"
-}).to_dict(orient="records")
-
-df_oi_limpio = df_ed_oi.dropna(how="all", subset=["Monto"])
-oi_save = df_oi_limpio.assign(periodo=mes_s, anio=anio_s, usuario_id=u_id).rename(columns={
-    "Descripción":"descripcion", "Monto":"monto"
-}).to_dict(orient="records")
-
-# 2. El Botón con lógica de protección
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    # Verificación de emergencia: ¿Estamos intentando guardar un mes vacío teniendo datos en el servidor?
-    if not g_save and not oi_save and s_in == 0 and n_in == 0:
-        st.error("🛑 ¡DETENIDO! No puedes guardar una pantalla vacía. Si quieres borrar el mes, hazlo manualmente en la base de datos.")
+    # Filtramos filas vacías
+    df_g_limpio = df_ed_g.dropna(subset=["Categoría", "Descripción", "Monto"], how="all")
+    df_oi_limpio = df_ed_oi.dropna(subset=["Descripción", "Monto"], how="all")
+
+    if df_g_limpio.empty and df_oi_limpio.empty and n_in == 0:
+        st.error("🛑 No hay datos suficientes para guardar. Evita borrar el mes por error.")
     else:
         try:
-            with st.spinner("Protegiendo tus datos y sincronizando..."):
-                # --- GUARDADO DE GASTOS (Solo si hay datos en pantalla) ---
-                if g_save:
-                    supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                    supabase.table("gastos").insert(g_save).execute()
-                
-                # --- GUARDADO DE INGRESOS EXTRA (Solo si hay datos en pantalla) ---
-                if oi_save:
-                    supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                    supabase.table("otros_ingresos").insert(oi_save).execute()
-
-                # --- GUARDADO DE INGRESOS BASE (Siempre se guarda porque s_in y n_in siempre existen) ---
+            with st.spinner("Sincronizando con Supabase..."):
+                # 1. BORRAR DATOS ANTERIORES
+                supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
                 supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                i_save = {"anio": anio_s, "periodo": mes_s, "saldo_anterior": s_in, "nomina": n_in, "otros": otr_v, "usuario_id": u_id}
-                supabase.table("ingresos_base").insert(i_save).execute()
+
+                # 2. GUARDAR GASTOS (Mapeo manual de columnas)
+                if not df_g_limpio.empty:
+                    gastos_db = []
+                    for _, row in df_g_limpio.iterrows():
+                        gastos_db.append({
+                            "anio": int(anio_s),
+                            "periodo": str(mes_s),
+                            "categoria": str(row["Categoría"]),
+                            "descripcion": str(row["Descripción"]),
+                            "monto": float(row["Monto"]),
+                            "valor_referencia": float(row["Valor Referencia"]),
+                            "pagado": bool(row["Pagado"]),
+                            "recurrente": bool(row["Movimiento Recurrente"]),
+                            "usuario_id": str(u_id)
+                        })
+                    supabase.table("gastos").insert(gastos_db).execute()
+
+                # 3. GUARDAR OTROS INGRESOS
+                if not df_oi_limpio.empty:
+                    otros_db = []
+                    for _, row in df_oi_limpio.iterrows():
+                        otros_db.append({
+                            "anio": int(anio_s),
+                            "periodo": str(mes_s),
+                            "descripcion": str(row["Descripción"]),
+                            "monto": float(row["Monto"]),
+                            "usuario_id": str(u_id)
+                        })
+                    supabase.table("otros_ingresos").insert(otros_db).execute()
+
+                # 4. GUARDAR INGRESO BASE
+                supabase.table("ingresos_base").insert({
+                    "anio": int(anio_s),
+                    "periodo": str(mes_s),
+                    "saldo_anterior": float(s_in),
+                    "nomina": float(n_in),
+                    "otros": float(otr_v),
+                    "usuario_id": str(u_id)
+                }).execute()
 
                 st.balloons()
-                st.cache_data.clear() 
-                st.success(f"✅ ¡Datos de {mes_s} guardados de forma segura!")
+                st.cache_data.clear()
+                st.success("✅ ¡Todo guardado y sincronizado!")
                 st.rerun()
         except Exception as e:
             st.error(f"❌ Error crítico: {e}")
