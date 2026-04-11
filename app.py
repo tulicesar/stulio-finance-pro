@@ -141,7 +141,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF (POSICIÓN Y RENDERIZADO DE LOGO CORREGIDO) ---
+# --- 3. REPORTE PDF (CÓDIGO FINAL COMPLETO) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -150,45 +150,54 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     import os
 
     nombre_usuario = st.session_state.get("u_nombre_completo", u_id)
-    buf = BytesIO(); c = canvas.Canvas(buf, pagesize=letter)
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=letter)
     
-    total_periodo_nomina, total_periodo_otros, total_periodo_gastos = 0, 0, 0
+    # Acumuladores para el balance final
+    total_periodo_nomina = 0
+    total_periodo_otros = 0
+    total_periodo_gastos = 0
 
     def head(canvas_obj, t, a, user_name):
-        # Fondo blanco total
-        canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
+        canvas_obj.setFillColor(colors.white)
+        canvas_obj.rect(0, 0, 612, 792, fill=1)
         
-        # 🌟 LOGO HORIZONTAL (AJUSTE DE SEGURIDAD) 🌟
-        # Usamos el nombre que tienes configurado en la Sección 1
+        # 🌟 LOGO HORIZONTAL (Uso de la variable global LOGO_APP_H) 🌟
+        # Intentamos con el nombre exacto que definiste en la Sección 1
         logo_path = "LOGOapp horizontal.png" 
         
         if os.path.exists(logo_path):
-            # Posicionamos el logo un poco más abajo (y=620) para asegurar que entre en la hoja
-            # El ancho de 500 puntos es casi toda la página
-            canvas_obj.drawImage(logo_path, 55, 620, width=500, preserveAspectRatio=True)
+            # Coordenadas seguras para que no se salga de la hoja
+            canvas_obj.drawImage(logo_path, 55, 630, width=500, preserveAspectRatio=True)
         else:
-            # Si no lo encuentra, forzamos este texto para saber qué pasó
-            canvas_obj.setFillColor(colors.red)
-            canvas_obj.setFont("Helvetica-Bold", 14)
-            canvas_obj.drawString(50, 750, "ERROR: No se encontró el logo en el servidor")
+            # Texto de respaldo si el archivo no se encuentra
+            canvas_obj.setFillColor(HexColor("#1a1d21"))
+            canvas_obj.setFont("Helvetica-Bold", 16)
+            canvas_obj.drawString(50, 750, "My FinanceApp")
+            canvas_obj.setFont("Helvetica", 10)
+            canvas_obj.drawString(50, 735, "by Stulio Designs")
 
-        # Info del Usuario y Título (Bajamos todo para que el logo respire)
-        canvas_obj.setFont("Helvetica-BoldOblique", 9); canvas_obj.setFillColor(HexColor("#d4af37"))
-        canvas_obj.drawString(50, 610, f"Usuario: {user_name}")
+        # Info del Usuario y Título
+        canvas_obj.setFont("Helvetica-BoldOblique", 9)
+        canvas_obj.setFillColor(HexColor("#d4af37"))
+        canvas_obj.drawString(50, 620, f"Usuario: {user_name}")
         
-        canvas_obj.setFillColor(HexColor("#1a1d21")); canvas_obj.setFont("Helvetica-Bold", 11)
-        canvas_obj.drawRightString(560, 610, f"{t} {a}")
+        canvas_obj.setFillColor(HexColor("#1a1d21"))
+        canvas_obj.setFont("Helvetica-Bold", 11)
+        canvas_obj.drawRightString(560, 620, f"{t} {a}")
         
-        # Línea decorativa dorada justo debajo de la info
-        canvas_obj.setStrokeColor(HexColor("#d4af37")); canvas_obj.line(50, 605, 560, 605)
+        # Línea dorada decorativa
+        canvas_obj.setStrokeColor(HexColor("#d4af37"))
+        canvas_obj.line(50, 615, 560, 615)
         
-        # Pie de página con fecha y hora
-        tz = pytz.timezone('America/Bogota'); fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
-        canvas_obj.setFont("Helvetica", 7); canvas_obj.setFillColor(colors.grey)
+        # Pie de página
+        tz = pytz.timezone('America/Bogota')
+        fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
+        canvas_obj.setFont("Helvetica", 7)
+        canvas_obj.setFillColor(colors.grey)
         canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
         
-        # El contenido de los meses empezará en la posición 580
-        return 580
+        return 590
 
     y = head(c, titulo, anio, nombre_usuario)
     
@@ -201,21 +210,96 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         nom = (i_m["Nomina"].iloc[0] if not i_m.empty else 0)
         otr_sum = oi_m["Monto"].sum() if not oi_m.empty else 0
         
+        # Sincronización con la lógica de la App
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
+        
         total_periodo_nomina += nom
         total_periodo_otros += otr_sum
         total_periodo_gastos += (vp + vpy)
         
         label_pdf_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
         
-        if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
+        if y < 250:
+            c.showPage()
+            y = head(c, titulo, anio, nombre_usuario)
         
-        c.setFillColor(HexColor("#f8f9fa")); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
-        c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
-        c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Oblig. Pagadas: $ {vp:,.0f} | Oblig. Pendientes: $ {vpy:,.0f}")
-        c.setFillColor(HexColor("#d4af37")); c.drawString(60, y-45, f"{label_pdf_ahorro} FINAL: $ {bf:,.0f}"); y -= 80
+        c.setFillColor(HexColor("#f8f9fa"))
+        c.rect(50, y-55, 510, 60, fill=1, stroke=0)
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica-Bold", 11)
+        c.drawString(60, y-15, f"MES: {m}")
+        c.setFont("Helvetica", 9)
+        c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Oblig. Pagadas: $ {vp:,.0f} | Oblig. Pendientes: $ {vpy:,.0f}")
+        c.setFillColor(HexColor("#d4af37"))
+        c.drawString(60, y-45, f"{label_pdf_ahorro} FINAL: $ {bf:,.0f}")
+        y -= 80
         
-        # ... (Sigue el resto del código igual hacia abajo)
+        # Relación de Ingresos
+        c.setFont("Helvetica-Bold", 9); c.setFillColor(colors.black); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
+        c.setFont("Helvetica", 8); c.drawString(60, y, "Saldo Anterior"); c.drawRightString(480, y, f"$ {s_ant:,.0f}"); y -= 10
+        c.drawString(60, y, "Nómina"); c.drawRightString(480, y, f"$ {nom:,.0f}"); y -= 5
+        
+        if not oi_m.empty:
+            c.setStrokeColor(colors.lightgrey); c.line(60, y, 480, y); y -= 12
+            c.setFont("Helvetica-BoldOblique", 7); c.setFillColor(colors.darkgrey); c.drawString(60, y, "Ingresos Variables"); y -= 10
+            for _, r_oi in oi_m.iterrows():
+                c.setFont("Helvetica", 8); c.setFillColor(colors.black); c.drawString(65, y, f"● {r_oi['Descripción']}"); c.drawRightString(480, y, f"$ {r_oi['Monto']:,.0f}"); y -= 10
+            c.setFont("Helvetica-Bold", 8); c.line(60, y+5, 480, y+5); c.drawRightString(480, y-5, f"Total Otros Ingresos: $ {otr_sum:,.0f}"); y -= 25
+        else:
+            y -= 15
+            
+        # Relación de Gastos
+        c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
+        c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
+        c.setFont("Helvetica", 8)
+        
+        for _, row in g_m.iterrows():
+            if y < 60:
+                c.showPage()
+                y = head(c, titulo, anio, nombre_usuario)
+                c.setFont("Helvetica", 8)
+            c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65])
+            c.drawRightString(480, y, f"{row['Monto']:,.0f}")
+            c.drawRightString(540, y, "SI" if row["Pagado"] else "NO")
+            y -= 12
+        y -= 20
+
+    # Resumen General Final
+    if len(meses) > 1:
+        if y < 150:
+            c.showPage()
+            y = head(c, titulo, anio, nombre_usuario)
+        y -= 20
+        c.setFillColor(HexColor("#f8f9fa"))
+        c.setStrokeColor(HexColor("#d4af37"))
+        c.setLineWidth(2)
+        c.rect(50, y-100, 510, 110, fill=1, stroke=1)
+        c.setFillColor(HexColor("#1a1d21"))
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(70, y-5, f"RESUMEN: {titulo.upper()}")
+        
+        ing_totales = total_periodo_nomina + total_periodo_otros
+        saldo_final_periodo = ing_totales - total_periodo_gastos
+        
+        c.setFont("Helvetica", 10); c.setFillColor(colors.black)
+        c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
+        c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}")
+        c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
+        
+        if saldo_final_periodo >= 0:
+            c.setFillColor(colors.darkgreen)
+            label = "SALDO A FAVOR"
+        else:
+            c.setFillColor(colors.red)
+            label = "DÉFICIT"
+            
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(70, y-85, f"{label} AL FINALIZAR: $ {abs(saldo_final_periodo):,.0f}")
+        
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf  # 🌟 ¡ESTA LÍNEA ES LA QUE FALTABA! 🌟
 # --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
