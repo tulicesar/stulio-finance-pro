@@ -283,7 +283,7 @@ with st.sidebar:
         m_ant = "Diciembre"
         a_ant = anio_s - 1
     
-    # 3. Traemos los datos de ese mes anterior (sea del mismo año o del pasado)
+    # 3. Traemos los datos de ese mes anterior
     i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant)]
     g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant)]
     oi_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant)]
@@ -291,13 +291,12 @@ with st.sidebar:
     # 4. Calculamos cuánto sobró el mes pasado
     s_sug = 0.0
     if not i_ant.empty:
-        # Usamos la función de métricas para saber el beneficio final (bf_a)
         _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
         s_sug = float(bf_a)
     
     st.divider()
-    # El toggle ahora te avisa de qué año viene el saldo
-    arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=False)
+    # 🌟 CAMBIO CLAVE: value=True para que arranque activado
+    arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
     
     # 5. Definimos los valores iniciales de los inputs
     val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
