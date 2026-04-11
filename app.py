@@ -11,7 +11,7 @@ import math
 import pytz 
 from supabase import create_client, Client
 
-# --- 1. CONFIGURACIÓN Y ESTILO ---
+# --- 1. CONFIGURACIÓN Y ESTILO (PALETA BLACK & BOLD) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 # Conexión a Supabase
@@ -36,40 +36,63 @@ LISTA_CATEGORIAS = [
     "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
 ]
 
-# --- COLORES ACTUALIZADOS ---
+# --- COLORES ACTUALIZADOS (PALETA: Prussian Blue, Orange, Alabaster) ---
 COLOR_MAP = {
-    "Hogar": "#FFB347", "Servicios": "#FFB347", "Alimentación": "#FDFD96",
-    "Transporte": "#77B5FE", "Gasto Vehiculos": "#B0C4DE", # Azul acero
-    "Obligaciones Financieras": "#FF6961", "Salud": "#B39EB5", 
-    "Educación": "#84b6f4", "Cuidado Personal": "#FFD1DC",
-    "Mascotas": "#CFCFCF", "Viajes y Recreación": "#77DD77", 
-    "Servicios de Streaming": "#B39EB5", # Púrpura/Lavanda
-    "Seguros": "#AEC6CF", "Ahorro e Inversión": "#d4af37", 
-    "Impuestos": "#84b6f4", "Otros": "#77DD77"
+    "Hogar": "#fca311", "Servicios": "#e5e5e5", "Alimentación": "#ffffff",
+    "Transporte": "#fca311", "Gasto Vehiculos": "#e5e5e5",
+    "Obligaciones Financieras": "#fca311", "Salud": "#e5e5e5", 
+    "Educación": "#ffffff", "Cuidado Personal": "#e5e5e5",
+    "Mascotas": "#fca311", "Viajes y Recreación": "#ffffff", 
+    "Servicios de Streaming": "#fca311",
+    "Seguros": "#e5e5e5", "Ahorro e Inversión": "#fca311", 
+    "Impuestos": "#e5e5e5", "Otros": "#ffffff"
 }
 
 st.markdown("""
     <style>
+    /* Fondo principal y textos */
     header { background-color: rgba(0,0,0,0) !important; }
-    .stApp { background: #0e1117; color: #dee2e6; }
+    .stApp { background: #14213d; color: #ffffff; }
+    
+    /* Editor de datos */
     [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
-    .stTabs [aria-selected="true"] { color: #d4af37 !important; border-bottom-color: #d4af37 !important; font-weight: bold; }
+    
+    /* Pestañas */
+    .stTabs [aria-selected="true"] { color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }
+    
+    /* Tarjetas KPI (Blanco con Azul Prusiano) */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
-        color: #1a1d21; text-align: center; border-bottom: 4px solid #d4af37;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.6); margin-bottom: 10px;
+        color: #14213d; text-align: center; border-bottom: 5px solid #fca311;
         min-height: 100px; display: flex; flex-direction: column; justify-content: center;
     }
-    .card-label { font-size: 0.8rem; color: #6c757d; font-weight: 800; text-transform: uppercase; line-height: 1.1; }
-    .card-value { font-size: 1.6rem; font-weight: 800; color: #1a1d21; margin: 3px 0; }
+    .card-label { font-size: 0.8rem; color: #14213d; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }
+    .card-value { font-size: 1.6rem; font-weight: 800; color: #14213d; margin: 3px 0; }
+    
+    /* Barras de leyenda */
     .legend-bar {
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
-        font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
+        font-size: 0.9rem; font-weight: bold; color: #14213d; 
         display: flex; justify-content: space-between; align-items: center;
     }
-    section[data-testid="stSidebar"] { background: rgba(0,0,0,0.8) !important; backdrop-filter: blur(15px); }
-    .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #d4af37; color: black; border: none; }
-    h2, h3 { color: #d4af37 !important; font-weight: bold !important; }
+    
+    /* Sidebar (Negro puro para contraste) */
+    section[data-testid="stSidebar"] { background: #000000 !important; border-right: 1px solid #14213d; }
+    
+    /* Botones (Naranja con letras Azules) */
+    .stButton>button { 
+        border-radius: 10px; font-weight: bold; width: 100%; 
+        background-color: #fca311; color: #14213d; border: none;
+        transition: 0.3s;
+    }
+    .stButton>button:hover { background-color: #ffffff; color: #14213d; }
+    
+    /* Títulos */
+    h2, h3 { color: #fca311 !important; font-weight: bold !important; }
+    
+    /* Divisores */
+    hr { border-top: 1px solid #e5e5e5; opacity: 0.1; }
     </style>
     """, unsafe_allow_html=True)
 
