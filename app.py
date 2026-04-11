@@ -28,7 +28,7 @@ LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
-# --- CATEGORÍAS CON VARIEDAD DE COLORES (RESTAURADOS) ---
+# --- CATEGORÍAS CON VARIEDAD DE COLORES ---
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación", 
@@ -37,37 +37,23 @@ LISTA_CATEGORIAS = [
 ]
 
 COLOR_MAP = {
-    "Hogar": "#fca311",             # Naranja principal
-    "Servicios": "#77B5FE",         # Azul cielo
-    "Alimentación": "#77DD77",      # Verde pastel
-    "Transporte": "#FF6961",        # Rojo pastel
-    "Gasto Vehiculos": "#FDFD96",   # Amarillo pastel
-    "Obligaciones Financieras": "#84b6f4", # Azul suave
-    "Salud": "#fdcae1",             # Rosa chicle
-    "Educación": "#B39EB5",         # Lavanda
-    "Cuidado Personal": "#FFD1DC",  # Rosa pastel
-    "Mascotas": "#CFCFCF",          # Gris plata
-    "Viajes y Recreación": "#AEC6CF", # Azul humo
-    "Servicios de Streaming": "#cfcfc4", # Gris cálido
-    "Seguros": "#836953",           # Café elegante
-    "Ahorro e Inversión": "#d4af37", # Dorado
-    "Impuestos": "#ffda9e",         # Durazno
-    "Otros": "#b2e2f2"              # Turquesa claro
+    "Hogar": "#fca311", "Servicios": "#77B5FE", "Alimentación": "#77DD77",
+    "Transporte": "#FF6961", "Gasto Vehiculos": "#FDFD96",
+    "Obligaciones Financieras": "#84b6f4", "Salud": "#fdcae1", 
+    "Educación": "#B39EB5", "Cuidado Personal": "#FFD1DC",
+    "Mascotas": "#CFCFCF", "Viajes y Recreación": "#AEC6CF", 
+    "Servicios de Streaming": "#cfcfc4",
+    "Seguros": "#836953", "Ahorro e Inversión": "#d4af37", 
+    "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
 }
 
 st.markdown(f"""
     <style>
-    /* Fondo principal Gris Carbono */
     header {{ background-color: rgba(0,0,0,0) !important; }}
     .stApp {{ background: #495057; color: #ffffff; }}
-    
-    /* Editor de datos */
     [data-testid="stDataEditor"] div {{ font-size: 2.0rem !important; }}
-    
-    /* Pestañas */
     .stTabs [aria-selected="true"] {{ color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }}
     
-    /* Tarjetas KPI */
     .card {{
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -77,33 +63,15 @@ st.markdown(f"""
     .card-label {{ font-size: 0.8rem; color: #495057; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }}
     .card-value {{ font-size: 1.6rem; font-weight: 800; color: #495057; margin: 3px 0; }}
     
-    /* Barras de leyenda */
     .legend-bar {{
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
         font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
     }}
     
-    /* Barra Lateral (Sidebar) con el nuevo gris #212529 */
-    section[data-testid="stSidebar"] {{ 
-        background-color: #212529 !important; 
-        border-right: 1px solid #495057; 
-    }}
-    
-    /* Botones Naranja */
-    .stButton>button {{ 
-        border-radius: 10px; font-weight: bold; width: 100%; 
-        background-color: #fca311; color: #212529; border: none;
-    }}
-    .stButton>button:hover {{ background-color: #ffffff; color: #212529; }}
-    
-    /* Títulos */
+    section[data-testid="stSidebar"] {{ background-color: #212529 !important; border-right: 1px solid #495057; }}
+    .stButton>button {{ border-radius: 10px; font-weight: bold; width: 100%; background-color: #fca311; color: #212529; border: none; }}
     h2, h3 {{ color: #fca311 !important; font-weight: bold !important; }}
-    
-    /* Estilo de los textos en la barra lateral */
-    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] h3 {{
-        color: #ffffff !important;
-    }}
     </style>
     """, unsafe_allow_html=True)
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
