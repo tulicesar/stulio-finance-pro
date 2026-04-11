@@ -28,18 +28,22 @@ LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
+# --- CATEGORÍAS ACTUALIZADAS ---
 LISTA_CATEGORIAS = [
-    "Hogar", "Servicios", "Alimentación", "Transporte", 
+    "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación", 
-    "Cuidado Personal", "Mascotas", "Viajes y Recreación", 
+    "Cuidado Personal", "Mascotas", "Viajes y Recreación", "Servicios de Streaming",
     "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
 ]
 
+# --- COLORES ACTUALIZADOS ---
 COLOR_MAP = {
     "Hogar": "#FFB347", "Servicios": "#FFB347", "Alimentación": "#FDFD96",
-    "Transporte": "#77B5FE", "Obligaciones Financieras": "#FF6961", 
-    "Salud": "#B39EB5", "Educación": "#84b6f4", "Cuidado Personal": "#FFD1DC",
+    "Transporte": "#77B5FE", "Gasto Vehiculos": "#B0C4DE", # Azul acero
+    "Obligaciones Financieras": "#FF6961", "Salud": "#B39EB5", 
+    "Educación": "#84b6f4", "Cuidado Personal": "#FFD1DC",
     "Mascotas": "#CFCFCF", "Viajes y Recreación": "#77DD77", 
+    "Servicios de Streaming": "#B39EB5", # Púrpura/Lavanda
     "Seguros": "#AEC6CF", "Ahorro e Inversión": "#d4af37", 
     "Impuestos": "#84b6f4", "Otros": "#77DD77"
 }
