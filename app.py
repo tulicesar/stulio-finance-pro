@@ -258,29 +258,48 @@ if not st.session_state.autenticado:
                     except Exception as e:
                         st.error(f"❌ Error al conectar con Supabase: {e}")
     st.stop()
-# --- 5. LÓGICA SIDEBAR ORIGINAL ---
+# --- 5. LÓGICA SIDEBAR (CONEXIÓN CROSS-YEAR) ---
 u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd(u_id)
 
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
     st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
+    
+    # Selector de Año y Mes
     anio_s = st.selectbox("Año", [2026, 2027, 2028], index=0)
     meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
     
-    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s)&(df_i_full["Año"]==anio_s)]
-    idx = meses_lista.index(mes_s); m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"; a_ant = anio_s if idx > 0 else anio_s-1
+    # 1. Buscamos el mes actual en la BD
+    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
+    
+    # 2. Lógica para detectar el MES y AÑO anterior (Crucial para Enero)
+    idx = meses_lista.index(mes_s)
+    if idx > 0:
+        m_ant = meses_lista[idx-1]
+        a_ant = anio_s
+    else:
+        m_ant = "Diciembre"
+        a_ant = anio_s - 1
+    
+    # 3. Traemos los datos de ese mes anterior (sea del mismo año o del pasado)
     i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant)]
     g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant)]
     oi_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant)]
     
+    # 4. Calculamos cuánto sobró el mes pasado
     s_sug = 0.0
     if not i_ant.empty:
-        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0]); s_sug = float(bf_a)
+        # Usamos la función de métricas para saber el beneficio final (bf_a)
+        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
+        s_sug = float(bf_a)
     
-    st.divider(); arr_on = st.toggle(f"Arrastrar saldo de {m_ant}", value=False)
+    st.divider()
+    # El toggle ahora te avisa de qué año viene el saldo
+    arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=False)
     
+    # 5. Definimos los valores iniciales de los inputs
     val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
     s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
     s_in = parse_moneda(s_txt)
@@ -290,6 +309,8 @@ with st.sidebar:
     n_in = parse_moneda(n_txt)
     
     placeholder_otros = st.empty()
+    
+    # --- BOTONES DE ACCIÓN ---
     st.divider(); st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
@@ -302,12 +323,16 @@ with st.sidebar:
             df_g_full[df_g_full["Periodo"]==mes_s].to_excel(writer, sheet_name='Gastos', index=False)
             df_oi_full[df_oi_full["Periodo"]==mes_s].to_excel(writer, sheet_name='OtrosIngresos', index=False)
         st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
+    
     st.subheader("⚖️ Proyecciones")
     if st.button("📥 Semestre 1"):
         p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "S1", anio_s, u_id); st.download_button("S1.pdf", p1, "S1.pdf")
     if st.button("📥 Semestre 2"):
         p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "S2", anio_s, u_id); st.download_button("S2.pdf", p2, "S2.pdf")
-    if st.button("🚪 Salir"): st.session_state.autenticado = False; st.rerun()
+    
+    if st.button("🚪 Salir"): 
+        st.session_state.autenticado = False
+        st.rerun()
 
 # --- 6. CUERPO PRINCIPAL (RESTAURADO COMPLETO) ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
