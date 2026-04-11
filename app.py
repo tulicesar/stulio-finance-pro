@@ -382,56 +382,109 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# --- 6 HISTÓRICO DE SALDO A FAVOR (ESTILO RECIBO DE LUZ) ---
+# --- 6. CUERPO PRINCIPAL (RESTAURADO COMPLETAMENTE) ---
+if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
+st.markdown(f"## Gestión de {mes_s} {anio_s}")
+
+# Carga de datos del mes actual
+df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s)].copy()
+
+# Lógica de Recurrentes (Cruce de Años)
+if df_mes_g.empty:
+    meses_map_r = {m: i for i, m in enumerate(meses_lista)}
+    gastos_hist = df_g_full.copy()
+    if not gastos_hist.empty:
+        gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
+        p_actual = (anio_s * 12) + meses_lista.index(mes_s)
+        g_prev = gastos_hist[gastos_hist["lt"] < p_actual].sort_values(by="lt", ascending=False)
+        if not g_prev.empty:
+            df_mes_g = g_prev.drop_duplicates(subset=["Categoría", "Descripción"])
+            df_mes_g = df_mes_g[df_mes_g["Movimiento Recurrente"] == True].copy()
+            df_mes_g["Pagado"] = False
+
+# --- SECCIÓN 1: TABLA DE GASTOS ---
+st.markdown("### 📝 Movimiento de Gastos")
+config_g = {
+    "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+    "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
+    "Pagado": st.column_config.CheckboxColumn("Pagado", default=False),
+    "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False)
+}
+df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed")
+
+# --- SECCIÓN 2: TABLA DE INGRESOS ADICIONALES ---
+st.markdown("### 💰 Ingresos Adicionales")
+df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s)].copy()
+df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")}, key="oi_ed")
+
+# --- SECCIÓN 3: CÁLCULOS Y KPIs ---
+df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
+df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0)
+df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
+
+otr_v = float(df_ed_oi["Monto"].sum())
+# El placeholder_otros debe estar definido arriba en el sidebar
+placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
+
+it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
+label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
+
 st.divider()
-st.markdown("### 📈 Histórico de Saldo a Favor (Últimos 6 meses)")
+c_kpi = st.columns(5)
+tarj = [
+    ("INGRESOS", it, "black"), 
+    ("OBLIG. PAGADAS", vp, "green"), 
+    ("OBLIG. PENDIENTES", vpy, "red"), 
+    ("DINERO DISPONIBLE", fact, "blue"), 
+    (label_ahorro, bf, "#fca311")
+]
+for i, (l, v, col) in enumerate(tarj):
+    c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
-historico_data = []
-mes_actual_idx = meses_lista.index(mes_s)
+# --- SECCIÓN 4: LAS 3 INFOGRAFÍAS ORIGINALES ---
+st.markdown("### 📊 Análisis de Distribución")
+inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
-# Recolectamos datos de los últimos 6 meses (de más antiguo a más reciente)
-for i in range(5, -1, -1):
-    idx = mes_actual_idx - i
-    a_hist = anio_s
-    if idx < 0:
-        idx += 12
-        a_hist -= 1
-    
-    m_nombre = meses_lista[idx]
-    
-    # Filtramos datos históricos del usuario
-    g_h = df_g_full[(df_g_full["Periodo"] == m_nombre) & (df_g_full["Año"] == a_hist)]
-    i_h = df_i_full[(df_i_full["Periodo"] == m_nombre) & (df_i_full["Año"] == a_hist)]
-    oi_h = df_oi_full[(df_oi_full["Periodo"] == m_nombre) & (df_oi_full["Año"] == a_hist)]
-    
-    if not i_h.empty:
-        nom_h = i_h["Nomina"].iloc[0]
-        s_ant_h = i_h["SaldoAnterior"].iloc[0]
-        otr_h = oi_h["Monto"].sum() if not oi_h.empty else 0
-        _, _, _, _, bf_h, _ = calcular_metricas(g_h, nom_h, otr_h, s_ant_h)
-        historico_data.append({"Mes": f"{m_nombre[:3]}", "Saldo": bf_h})
+with inf1:
+    st.markdown("#### Desglose de Gastos")
+    t_df = df_ed_g.copy()
+    t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
+    if not t_df.empty and t_df['V'].sum() > 0:
+        fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color='Categoría', color_discrete_map=COLOR_MAP)
+        fig1.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
+        st.plotly_chart(fig1, use_container_width=True)
+        res = t_df.groupby("Categoría")['V'].sum().reset_index()
+        for _, r in res.iterrows():
+            c_cat = COLOR_MAP.get(r['Categoría'], "#6c757d")
+            st.markdown(f'<div class="legend-bar" style="background:{c_cat}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
 
-if historico_data:
-    df_hist = pd.DataFrame(historico_data)
-    fig_hist = px.bar(
-        df_hist, x='Mes', y='Saldo',
-        text_auto='.2s',
-        color_discrete_sequence=['#fca311'] # El naranja de tu paleta
-    )
-    
-    fig_hist.update_layout(
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        font_color="#ffffff",
-        height=300,
-        margin=dict(t=20, b=20, l=0, r=0),
-        yaxis_title=None, xaxis_title=None
-    )
-    
-    fig_hist.update_traces(marker_line_color='#ffffff', marker_line_width=1, opacity=0.8)
-    st.plotly_chart(fig_hist, use_container_width=True)
-else:
-    st.info("ℹ️ Aún no hay registros históricos para mostrar el gráfico de barras.")
+with inf2:
+    st.markdown("#### Eficiencia de Ahorro")
+    v_cl = max(0, min(ahorro_p, 100))
+    fig2 = go.Figure(go.Indicator(
+        mode="gauge+number", value=v_cl, 
+        number={'suffix': "%", 'font': {'color': '#fca311', 'size': 50}, 'valueformat': '.0f'},
+        gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#fca311"}, 'bgcolor': "white"}
+    ))
+    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
+    st.plotly_chart(fig2, use_container_width=True)
+
+with inf3:
+    st.markdown("#### Estado Real del Dinero")
+    fig3 = go.Figure(data=[go.Pie(
+        labels=['Pagado', 'Pendiente', 'Ahorro'], 
+        values=[vp, vpy, bf if bf > 0 else 0], 
+        hole=.7, 
+        marker_colors=['#2ecc71', '#e74c3c', '#fca311'], 
+        textinfo='percent'
+    )])
+    fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0),
+                       annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#fca311")])
+    st.plotly_chart(fig3, use_container_width=True)
+    st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
 # --- 7. GUARDAR EN SUPABASE ---
 st.markdown("<br><br>", unsafe_allow_html=True)
