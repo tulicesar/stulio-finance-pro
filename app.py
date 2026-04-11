@@ -11,7 +11,7 @@ import math
 import pytz 
 from supabase import create_client, Client
 
-# --- 1. CONFIGURACIÓN Y ESTILO (SPACE CADET & MULTICOLOR) ---
+# --- 1. CONFIGURACIÓN Y ESTILO (GRIS NEUTRO & MULTICOLOR) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 # Conexión a Supabase
@@ -28,7 +28,7 @@ LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
-# --- CATEGORÍAS ACTUALIZADAS ---
+# --- CATEGORÍAS CON VARIEDAD DE COLORES ---
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación", 
@@ -36,7 +36,6 @@ LISTA_CATEGORIAS = [
     "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
 ]
 
-# --- COLORES RESTAURADOS (Variedad para la Infografía) ---
 COLOR_MAP = {
     "Hogar": "#fca311",             # Naranja principal
     "Servicios": "#77B5FE",         # Azul cielo
@@ -58,9 +57,9 @@ COLOR_MAP = {
 
 st.markdown(f"""
     <style>
-    /* Fondo principal Space Cadet */
+    /* Fondo principal Gris Neutro */
     header {{ background-color: rgba(0,0,0,0) !important; }}
-    .stApp {{ background: #2b2d42; color: #ffffff; }}
+    .stApp {{ background: #495057; color: #ffffff; }}
     
     /* Editor de datos */
     [data-testid="stDataEditor"] div {{ font-size: 2.0rem !important; }}
@@ -68,38 +67,38 @@ st.markdown(f"""
     /* Pestañas */
     .stTabs [aria-selected="true"] {{ color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }}
     
-    /* Tarjetas KPI (Blanco con texto Space Cadet) */
+    /* Tarjetas KPI (Blanco con texto Gris Carbono) */
     .card {{
         background-color: #ffffff; border-radius: 12px; padding: 15px;
-        box-shadow: 0 8px 20px rgba(0,0,0,0.6); margin-bottom: 10px;
-        color: #2b2d42; text-align: center; border-bottom: 5px solid #fca311;
+        box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
+        color: #495057; text-align: center; border-bottom: 5px solid #fca311;
         min-height: 100px; display: flex; flex-direction: column; justify-content: center;
     }}
-    .card-label {{ font-size: 0.8rem; color: #2b2d42; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }}
-    .card-value {{ font-size: 1.6rem; font-weight: 800; color: #2b2d42; margin: 3px 0; }}
+    .card-label {{ font-size: 0.8rem; color: #495057; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }}
+    .card-value {{ font-size: 1.6rem; font-weight: 800; color: #495057; margin: 3px 0; }}
     
-    /* Barras de leyenda (Texto oscuro para legibilidad sobre colores pastel) */
+    /* Barras de leyenda (Texto oscuro para legibilidad) */
     .legend-bar {{
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
         font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
     }}
     
-    /* Sidebar (Negro puro para máximo contraste) */
-    section[data-testid="stSidebar"] {{ background: #000000 !important; border-right: 1px solid #fca311; }}
+    /* Sidebar Negro */
+    section[data-testid="stSidebar"] {{ background: #000000 !important; border-right: 1px solid #495057; }}
     
-    /* Botones Naranja */
+    /* Botones Naranja con texto Gris */
     .stButton>button {{ 
         border-radius: 10px; font-weight: bold; width: 100%; 
-        background-color: #fca311; color: #2b2d42; border: none;
+        background-color: #fca311; color: #495057; border: none;
     }}
-    .stButton>button:hover {{ background-color: #ffffff; color: #2b2d42; }}
+    .stButton>button:hover {{ background-color: #ffffff; color: #495057; }}
     
     /* Títulos Naranja */
     h2, h3 {{ color: #fca311 !important; font-weight: bold !important; }}
     
     /* Divisores */
-    hr {{ border-top: 1px solid #e5e5e5; opacity: 0.1; }}
+    hr {{ border-top: 1px solid #ffffff; opacity: 0.1; }}
     </style>
     """, unsafe_allow_html=True)
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
