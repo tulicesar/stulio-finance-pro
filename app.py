@@ -290,7 +290,7 @@ if not st.session_state.autenticado:
                     except Exception as e:
                         st.error(f"❌ Error al conectar con Supabase: {e}")
     st.stop()
-# --- 5. LÓGICA SIDEBAR (CONEXIÓN CROSS-YEAR) ---
+# --- 5. LÓGICA SIDEBAR (CONEXIÓN CROSS-YEAR + NOMBRES PROYECTADOS) ---
 u_id = st.session_state.usuario_id
 df_g_full, df_i_full, df_oi_full = cargar_bd(u_id)
 
@@ -306,7 +306,7 @@ with st.sidebar:
     # 1. Buscamos el mes actual en la BD
     i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
     
-    # 2. Lógica para detectar el MES y AÑO anterior (Crucial para Enero)
+    # 2. Lógica para detectar el MES y AÑO anterior
     idx = meses_lista.index(mes_s)
     if idx > 0:
         m_ant = meses_lista[idx-1]
@@ -327,7 +327,7 @@ with st.sidebar:
         s_sug = float(bf_a)
     
     st.divider()
-    # 🌟 CAMBIO CLAVE: value=True para que arranque activado
+    # Toggle activado por defecto (Misión cumplida ✅)
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
     
     # 5. Definimos los valores iniciales de los inputs
@@ -355,11 +355,17 @@ with st.sidebar:
             df_oi_full[df_oi_full["Periodo"]==mes_s].to_excel(writer, sheet_name='OtrosIngresos', index=False)
         st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
     
+    # --- PROYECCIONES CON NOMBRES LARGOS ---
     st.subheader("⚖️ Proyecciones")
     if st.button("📥 Semestre 1"):
-        p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], "S1", anio_s, u_id); st.download_button("S1.pdf", p1, "S1.pdf")
+        titulo_s1 = "Balance Proyectado Enero - Junio"
+        p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], titulo_s1, anio_s, u_id)
+        st.download_button(f"Descargar {titulo_s1}", p1, f"Balance_S1_{anio_s}.pdf")
+
     if st.button("📥 Semestre 2"):
-        p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "S2", anio_s, u_id); st.download_button("S2.pdf", p2, "S2.pdf")
+        titulo_s2 = "Balance Proyectado Julio - Diciembre"
+        p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], titulo_s2, anio_s, u_id)
+        st.download_button(f"Descargar {titulo_s2}", p2, f"Balance_S2_{anio_s}.pdf")
     
     if st.button("🚪 Salir"): 
         st.session_state.autenticado = False
