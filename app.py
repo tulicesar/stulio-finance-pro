@@ -11,7 +11,7 @@ import math
 import pytz 
 from supabase import create_client, Client
 
-# --- 1. CONFIGURACIÓN Y ESTILO (GRIS NEUTRO & MULTICOLOR) ---
+# --- 1. CONFIGURACIÓN Y ESTILO (GRIS NEUTRO, CHARCOAL SIDEBAR & MULTICOLOR) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 # Conexión a Supabase
@@ -28,7 +28,7 @@ LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
-# --- CATEGORÍAS CON VARIEDAD DE COLORES ---
+# --- CATEGORÍAS CON VARIEDAD DE COLORES (RESTAURADOS) ---
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación", 
@@ -57,7 +57,7 @@ COLOR_MAP = {
 
 st.markdown(f"""
     <style>
-    /* Fondo principal Gris Neutro */
+    /* Fondo principal Gris Carbono */
     header {{ background-color: rgba(0,0,0,0) !important; }}
     .stApp {{ background: #495057; color: #ffffff; }}
     
@@ -67,7 +67,7 @@ st.markdown(f"""
     /* Pestañas */
     .stTabs [aria-selected="true"] {{ color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }}
     
-    /* Tarjetas KPI (Blanco con texto Gris Carbono) */
+    /* Tarjetas KPI */
     .card {{
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -77,28 +77,33 @@ st.markdown(f"""
     .card-label {{ font-size: 0.8rem; color: #495057; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }}
     .card-value {{ font-size: 1.6rem; font-weight: 800; color: #495057; margin: 3px 0; }}
     
-    /* Barras de leyenda (Texto oscuro para legibilidad) */
+    /* Barras de leyenda */
     .legend-bar {{
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
         font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
     }}
     
-    /* Sidebar Negro */
-    section[data-testid="stSidebar"] {{ background: #000000 !important; border-right: 1px solid #495057; }}
+    /* Barra Lateral (Sidebar) con el nuevo gris #212529 */
+    section[data-testid="stSidebar"] {{ 
+        background-color: #212529 !important; 
+        border-right: 1px solid #495057; 
+    }}
     
-    /* Botones Naranja con texto Gris */
+    /* Botones Naranja */
     .stButton>button {{ 
         border-radius: 10px; font-weight: bold; width: 100%; 
-        background-color: #fca311; color: #495057; border: none;
+        background-color: #fca311; color: #212529; border: none;
     }}
-    .stButton>button:hover {{ background-color: #ffffff; color: #495057; }}
+    .stButton>button:hover {{ background-color: #ffffff; color: #212529; }}
     
-    /* Títulos Naranja */
+    /* Títulos */
     h2, h3 {{ color: #fca311 !important; font-weight: bold !important; }}
     
-    /* Divisores */
-    hr {{ border-top: 1px solid #ffffff; opacity: 0.1; }}
+    /* Estilo de los textos en la barra lateral */
+    [data-testid="stSidebar"] .stMarkdown p, [data-testid="stSidebar"] h3 {{
+        color: #ffffff !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
