@@ -11,7 +11,7 @@ import math
 import pytz 
 from supabase import create_client, Client
 
-# --- 1. CONFIGURACIÓN Y ESTILO (PALETA BLACK & BOLD) ---
+# --- 1. CONFIGURACIÓN Y ESTILO (SPACE CADET & MULTICOLOR) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 # Conexión a Supabase
@@ -36,66 +36,72 @@ LISTA_CATEGORIAS = [
     "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
 ]
 
-# --- COLORES ACTUALIZADOS (PALETA: Prussian Blue, Orange, Alabaster) ---
+# --- COLORES RESTAURADOS (Variedad para la Infografía) ---
 COLOR_MAP = {
-    "Hogar": "#fca311", "Servicios": "#e5e5e5", "Alimentación": "#ffffff",
-    "Transporte": "#fca311", "Gasto Vehiculos": "#e5e5e5",
-    "Obligaciones Financieras": "#fca311", "Salud": "#e5e5e5", 
-    "Educación": "#ffffff", "Cuidado Personal": "#e5e5e5",
-    "Mascotas": "#fca311", "Viajes y Recreación": "#ffffff", 
-    "Servicios de Streaming": "#fca311",
-    "Seguros": "#e5e5e5", "Ahorro e Inversión": "#fca311", 
-    "Impuestos": "#e5e5e5", "Otros": "#ffffff"
+    "Hogar": "#fca311",             # Naranja principal
+    "Servicios": "#77B5FE",         # Azul cielo
+    "Alimentación": "#77DD77",      # Verde pastel
+    "Transporte": "#FF6961",        # Rojo pastel
+    "Gasto Vehiculos": "#FDFD96",   # Amarillo pastel
+    "Obligaciones Financieras": "#84b6f4", # Azul suave
+    "Salud": "#fdcae1",             # Rosa chicle
+    "Educación": "#B39EB5",         # Lavanda
+    "Cuidado Personal": "#FFD1DC",  # Rosa pastel
+    "Mascotas": "#CFCFCF",          # Gris plata
+    "Viajes y Recreación": "#AEC6CF", # Azul humo
+    "Servicios de Streaming": "#cfcfc4", # Gris cálido
+    "Seguros": "#836953",           # Café elegante
+    "Ahorro e Inversión": "#d4af37", # Dorado
+    "Impuestos": "#ffda9e",         # Durazno
+    "Otros": "#b2e2f2"              # Turquesa claro
 }
 
-st.markdown("""
+st.markdown(f"""
     <style>
-    /* Fondo principal y textos */
-    header { background-color: rgba(0,0,0,0) !important; }
-    .stApp { background: #14213d; color: #ffffff; }
+    /* Fondo principal Space Cadet */
+    header {{ background-color: rgba(0,0,0,0) !important; }}
+    .stApp {{ background: #2b2d42; color: #ffffff; }}
     
     /* Editor de datos */
-    [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
+    [data-testid="stDataEditor"] div {{ font-size: 2.0rem !important; }}
     
     /* Pestañas */
-    .stTabs [aria-selected="true"] { color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }
+    .stTabs [aria-selected="true"] {{ color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }}
     
-    /* Tarjetas KPI (Blanco con Azul Prusiano) */
-    .card {
+    /* Tarjetas KPI (Blanco con texto Space Cadet) */
+    .card {{
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.6); margin-bottom: 10px;
-        color: #14213d; text-align: center; border-bottom: 5px solid #fca311;
+        color: #2b2d42; text-align: center; border-bottom: 5px solid #fca311;
         min-height: 100px; display: flex; flex-direction: column; justify-content: center;
-    }
-    .card-label { font-size: 0.8rem; color: #14213d; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }
-    .card-value { font-size: 1.6rem; font-weight: 800; color: #14213d; margin: 3px 0; }
+    }}
+    .card-label {{ font-size: 0.8rem; color: #2b2d42; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }}
+    .card-value {{ font-size: 1.6rem; font-weight: 800; color: #2b2d42; margin: 3px 0; }}
     
-    /* Barras de leyenda */
-    .legend-bar {
+    /* Barras de leyenda (Texto oscuro para legibilidad sobre colores pastel) */
+    .legend-bar {{
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
-        font-size: 0.9rem; font-weight: bold; color: #14213d; 
+        font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
-    }
+    }}
     
-    /* Sidebar (Negro puro para contraste) */
-    section[data-testid="stSidebar"] { background: #000000 !important; border-right: 1px solid #14213d; }
+    /* Sidebar (Negro puro para máximo contraste) */
+    section[data-testid="stSidebar"] {{ background: #000000 !important; border-right: 1px solid #fca311; }}
     
-    /* Botones (Naranja con letras Azules) */
-    .stButton>button { 
+    /* Botones Naranja */
+    .stButton>button {{ 
         border-radius: 10px; font-weight: bold; width: 100%; 
-        background-color: #fca311; color: #14213d; border: none;
-        transition: 0.3s;
-    }
-    .stButton>button:hover { background-color: #ffffff; color: #14213d; }
+        background-color: #fca311; color: #2b2d42; border: none;
+    }}
+    .stButton>button:hover {{ background-color: #ffffff; color: #2b2d42; }}
     
-    /* Títulos */
-    h2, h3 { color: #fca311 !important; font-weight: bold !important; }
+    /* Títulos Naranja */
+    h2, h3 {{ color: #fca311 !important; font-weight: bold !important; }}
     
     /* Divisores */
-    hr { border-top: 1px solid #e5e5e5; opacity: 0.1; }
+    hr {{ border-top: 1px solid #e5e5e5; opacity: 0.1; }}
     </style>
     """, unsafe_allow_html=True)
-
 # --- 2. MOTOR DE DATOS Y FORMATEO ---
 def format_moneda(valor):
     """Convierte un número a formato string: $ 1.000.000"""
