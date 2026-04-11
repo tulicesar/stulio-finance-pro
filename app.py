@@ -174,7 +174,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF (IDENTIDAD BLACK & BOLD + HISTÓRICO) ---
+# --- 3. REPORTE PDF (TOTALMENTE INTEGRADO) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -186,7 +186,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     buf = BytesIO()
     c = canvas.Canvas(buf, pagesize=letter)
     
-    # Colores de tu paleta
     C_AZUL = HexColor("#14213d")
     C_NARANJA = HexColor("#fca311")
     C_GRIS = HexColor("#e5e5e5")
@@ -196,28 +195,15 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
 
     def head(canvas_obj, t, a, user_name):
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
-        
-        # 🌟 LOGO HORIZONTAL 🌟
-        logo_opciones = ["LOGOapp horizontal.png", "LOGOapp horizontal.jpg", "image_f9b7c0.jpg"]
-        logo_encontrado = None
-        for opcion in logo_opciones:
-            if os.path.exists(opcion):
-                logo_encontrado = opcion
-                break
-        
-        if logo_encontrado:
-            canvas_obj.drawImage(logo_encontrado, 55, 670, width=500, height=100, preserveAspectRatio=True, anchor='c')
-
+        logo_path = "LOGOapp horizontal.png"
+        if os.path.exists(logo_path):
+            canvas_obj.drawImage(logo_path, 55, 670, width=500, height=100, preserveAspectRatio=True, anchor='c')
         canvas_obj.setFont("Helvetica-BoldOblique", 9); canvas_obj.setFillColor(C_AZUL)
         canvas_obj.drawString(50, 650, f"Usuario: {user_name}")
         canvas_obj.drawRightString(560, 650, f"{t} {a}")
-        
-        canvas_obj.setStrokeColor(C_NARANJA); canvas_obj.setLineWidth(2)
-        canvas_obj.line(50, 645, 560, 645)
-        
+        canvas_obj.setStrokeColor(C_NARANJA); canvas_obj.setLineWidth(2); canvas_obj.line(50, 645, 560, 645)
         tz = pytz.timezone('America/Bogota'); fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
-        canvas_obj.setFont("Helvetica", 7); canvas_obj.setFillColor(colors.grey)
-        canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
+        canvas_obj.setFont("Helvetica", 7); canvas_obj.setFillColor(colors.grey); canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
         return 620
 
     y = head(c, titulo, anio, nombre_usuario)
@@ -239,13 +225,9 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFillColor(C_GRIS); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagadas: $ {vp:,.0f} | Pendientes: $ {vpy:,.0f}")
+        c.setFillColor(C_NARANJA); c.setFont("Helvetica-Bold", 9); c.drawString(60, y-45, f"SALDO A FAVOR FINAL: $ {bf:,.0f}"); y -= 80
         
-        # 🌟 SALDO EN NEGRITA Y NARANJA 🌟
-        c.setFillColor(C_NARANJA); c.setFont("Helvetica-Bold", 9)
-        c.drawString(60, y-45, f"SALDO A FAVOR FINAL: $ {bf:,.0f}")
-        y -= 80
-        
-        # Relación de Ingresos
+        # Relación Ingresos
         c.setFont("Helvetica-Bold", 9); c.setFillColor(C_AZUL); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
         c.setFont("Helvetica", 8); c.setFillColor(C_NEGRO); c.drawString(60, y, "Saldo Anterior"); c.drawRightString(480, y, f"$ {s_ant:,.0f}"); y -= 10
         c.drawString(60, y, "Nómina"); c.drawRightString(480, y, f"$ {nom:,.0f}"); y -= 5
@@ -258,6 +240,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica-Bold", 8); c.line(60, y+5, 480, y+5); c.drawRightString(480, y-5, f"Total Otros Ingresos: $ {otr_sum:,.0f}"); y -= 25
         else: y -= 15
         
+        # Relación Gastos
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
         c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
         c.setFont("Helvetica", 8); c.setFillColor(C_NEGRO)
@@ -266,54 +249,39 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65]); c.drawRightString(480, y, f"{row['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
         y -= 20
 
-    # RESUMEN GENERAL FINAL
     if len(meses) > 1:
         if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         y -= 20; c.setFillColor(C_NARANJA); c.setStrokeColor(C_AZUL); c.setLineWidth(2); c.rect(50, y-100, 510, 110, fill=1, stroke=1)
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 12); c.drawString(70, y-5, f"RESUMEN: {titulo.upper()}")
         ing_totales = total_periodo_nomina + total_periodo_otros; saldo_final_periodo = ing_totales - total_periodo_gastos
-        c.setFont("Helvetica", 10); c.setFillColor(C_AZUL)
-        c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
+        c.setFont("Helvetica", 10); c.setFillColor(C_AZUL); c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
         c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}"); c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
-        c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"SALDO TOTAL AL CIERRE: $ {abs(saldo_final_periodo):,.0f}")
-        y -= 120
+        c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"SALDO TOTAL AL CIERRE: $ {abs(saldo_final_periodo):,.0f}"); y -= 150
 
-    # 📊 INFOGRAFÍA HISTÓRICA (ESTILO RECIBO LUZ) 📊
-    if y < 180: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
-    y -= 30
-    c.setStrokeColor(C_AZUL); c.setLineWidth(1); c.line(50, y, 560, y); y -= 20
-    c.setFont("Helvetica-Bold", 10); c.setFillColor(C_AZUL); c.drawString(50, y, "HISTORIAL DE SALDO A FAVOR (Últimos meses registrados)")
-    y -= 70 # Espacio para las barras
-    
-    meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    hist_pdf = []
-    m_idx_ref = meses_lista.index(meses[-1])
-    
+    # 📊 HISTÓRICO ESTILO RECIBO LUZ EN EL PDF
+    if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
+    y -= 30; c.setStrokeColor(C_AZUL); c.setLineWidth(1); c.line(50, y, 560, y); y -= 20
+    c.setFont("Helvetica-Bold", 10); c.setFillColor(C_AZUL); c.drawString(50, y, "TENDENCIA DE AHORRO (Últimos 6 meses)")
+    y -= 70; meses_lista_h = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    hist_pdf = []; m_idx_ref = meses_lista_h.index(meses[-1])
     for i in range(5, -1, -1):
-        idx = m_idx_ref - i
-        a_h = anio
+        idx = m_idx_ref - i; a_h = anio
         if idx < 0: idx += 12; a_h -= 1
-        m_n = meses_lista[idx]
-        i_h = df_i_full[(df_i_full["Periodo"] == m_n) & (df_i_full["Año"] == a_h) & (df_i_full["Usuario"] == u_id)]
+        m_n = meses_lista_h[idx]; i_h = df_i_full[(df_i_full["Periodo"] == m_n) & (df_i_full["Año"] == a_h) & (df_i_full["Usuario"] == u_id)]
         if not i_h.empty:
             g_h = df_g_full[(df_g_full["Periodo"] == m_n) & (df_g_full["Año"] == a_h) & (df_g_full["Usuario"] == u_id)]
             oi_h = df_oi_full[(df_oi_full["Periodo"] == m_n) & (df_oi_full["Año"] == a_h) & (df_oi_full["Usuario"] == u_id)]
             _, _, _, _, bf_h, _ = calcular_metricas(g_h, i_h["Nomina"].iloc[0], oi_h["Monto"].sum() if not oi_h.empty else 0, i_h["SaldoAnterior"].iloc[0])
             hist_pdf.append((f"{m_n[:3]}", bf_h))
-
     if hist_pdf:
         x_bar = 70; max_val = max([abs(v[1]) for v in hist_pdf] + [1])
         for m_n, val in hist_pdf:
             h_bar = (val / max_val) * 60 if val > 0 else 2
             c.setFillColor(C_NARANJA); c.rect(x_bar, y, 35, h_bar, fill=1, stroke=0)
-            c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7)
-            c.drawCentredString(x_bar + 17, y - 12, m_n)
-            c.setFont("Helvetica", 6)
-            c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0s}" if val >= 1000 else f"${val:,.0f}")
+            c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7); c.drawCentredString(x_bar + 17, y - 12, m_n)
+            c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
-
-    c.showPage(); c.save(); buf.seek(0)
-    return buf
+    c.showPage(); c.save(); buf.seek(0); return buf
 # --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE) ---
 if 'autenticado' not in st.session_state: st.session_state.autenticado = False
 if not st.session_state.autenticado:
