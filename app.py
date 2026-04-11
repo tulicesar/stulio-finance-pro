@@ -334,27 +334,41 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# --- 6. CUERPO PRINCIPAL (RESTAURADO COMPLETO) ---
+# --- 6. CUERPO PRINCIPAL (CORREGIDO PARA CRUCE DE AÑOS) ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
+# Intentamos cargar lo que ya existe para este mes y año
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s)].copy()
 
-# Lógica de recurrentes
+# --- NUEVA LÓGICA DE RECURRENTES (SIN FRONTERAS DE AÑO) ---
 if df_mes_g.empty:
     mes_actual_idx = meses_lista.index(mes_s)
-    gastos_previos = df_g_full[df_g_full["Año"] == anio_s].copy()
-    if not gastos_previos.empty:
+    
+    # Tomamos toda la historia de gastos
+    gastos_hist = df_g_full.copy()
+    
+    if not gastos_hist.empty:
+        # Creamos una "Línea de Tiempo" numérica (Año * 12 + Índice de Mes)
         meses_map = {m: i for i, m in enumerate(meses_lista)}
-        gastos_previos["mes_idx"] = gastos_previos["Periodo"].map(meses_map)
-        gastos_previos = gastos_previos[gastos_previos["mes_idx"] < mes_actual_idx]
+        gastos_hist["linea_tiempo"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map)
+        
+        # Punto exacto del mes actual que estamos abriendo
+        punto_actual = (anio_s * 12) + mes_actual_idx
+        
+        # Filtramos TODO lo que ocurrió ANTES de este momento (sin importar el año)
+        # Y ordenamos de lo más reciente a lo más viejo
+        gastos_previos = gastos_hist[gastos_hist["linea_tiempo"] < punto_actual].sort_values(by="linea_tiempo", ascending=False)
+        
         if not gastos_previos.empty:
-            gastos_previos = gastos_previos.sort_values(by="mes_idx", ascending=False)
+            # Quitamos duplicados para tener la última versión de cada gasto
             ultimas_decisiones = gastos_previos.drop_duplicates(subset=["Categoría", "Descripción"])
+            # Filtramos solo los marcados como recurrentes
             activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
+            
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
-                df_mes_g["Pagado"] = False 
+                df_mes_g["Pagado"] = False # En el mes nuevo, nada está pagado aún
 
 config_g = {
     "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
@@ -390,7 +404,7 @@ tarj = [("INGRESOS", it, "black"), ("OBLIG. PAGADAS", vp, "green"), ("OBLIG. PEN
 for i, (l, v, c) in enumerate(tarj): 
     c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
 
-# --- INFOGRAFÍA (GRÁFICOS RESTAURADOS) ---
+# --- INFOGRAFÍA ---
 st.markdown("### 📊 Análisis de Distribución")
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
@@ -423,61 +437,39 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#d4af37">{label_ahorro} Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
-# --- 7. GUARDAR EN SUPABASE (MAPEO SEGURO) ---
+# --- 7. GUARDAR EN SUPABASE ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    # Filtramos filas vacías
     df_g_limpio = df_ed_g.dropna(subset=["Categoría", "Descripción", "Monto"], how="all")
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción", "Monto"], how="all")
 
     if df_g_limpio.empty and df_oi_limpio.empty and n_in == 0:
-        st.error("🛑 No hay datos suficientes para guardar. Evita borrar el mes por error.")
+        st.error("🛑 No hay datos suficientes para guardar.")
     else:
         try:
             with st.spinner("Sincronizando con Supabase..."):
-                # 1. BORRAR DATOS ANTERIORES
                 supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
                 supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
                 supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
-                # 2. GUARDAR GASTOS (Mapeo manual de columnas)
                 if not df_g_limpio.empty:
                     gastos_db = []
                     for _, row in df_g_limpio.iterrows():
                         gastos_db.append({
-                            "anio": int(anio_s),
-                            "periodo": str(mes_s),
-                            "categoria": str(row["Categoría"]),
-                            "descripcion": str(row["Descripción"]),
-                            "monto": float(row["Monto"]),
-                            "valor_referencia": float(row["Valor Referencia"]),
-                            "pagado": bool(row["Pagado"]),
-                            "recurrente": bool(row["Movimiento Recurrente"]),
-                            "usuario_id": str(u_id)
+                            "anio": int(anio_s), "periodo": str(mes_s), "categoria": str(row["Categoría"]),
+                            "descripcion": str(row["Descripción"]), "monto": float(row["Monto"]),
+                            "valor_referencia": float(row["Valor Referencia"]), "pagado": bool(row["Pagado"]),
+                            "recurrente": bool(row["Movimiento Recurrente"]), "usuario_id": str(u_id)
                         })
                     supabase.table("gastos").insert(gastos_db).execute()
 
-                # 3. GUARDAR OTROS INGRESOS
                 if not df_oi_limpio.empty:
-                    otros_db = []
-                    for _, row in df_oi_limpio.iterrows():
-                        otros_db.append({
-                            "anio": int(anio_s),
-                            "periodo": str(mes_s),
-                            "descripcion": str(row["Descripción"]),
-                            "monto": float(row["Monto"]),
-                            "usuario_id": str(u_id)
-                        })
+                    otros_db = [{"anio": int(anio_s), "periodo": str(mes_s), "descripcion": str(row["Descripción"]), "monto": float(row["Monto"]), "usuario_id": str(u_id)} for _, row in df_oi_limpio.iterrows()]
                     supabase.table("otros_ingresos").insert(otros_db).execute()
 
-                # 4. GUARDAR INGRESO BASE
                 supabase.table("ingresos_base").insert({
-                    "anio": int(anio_s),
-                    "periodo": str(mes_s),
-                    "saldo_anterior": float(s_in),
-                    "nomina": float(n_in),
-                    "otros": float(otr_v),
-                    "usuario_id": str(u_id)
+                    "anio": int(anio_s), "periodo": str(mes_s), "saldo_anterior": float(s_in),
+                    "nomina": float(n_in), "otros": float(otr_v), "usuario_id": str(u_id)
                 }).execute()
 
                 st.balloons()
