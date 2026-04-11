@@ -174,7 +174,7 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
-# --- 3. REPORTE PDF (IDENTIDAD BLACK & BOLD - HOJA BLANCA) ---
+# --- 3. REPORTE PDF (IDENTIDAD BLACK & BOLD + HISTÓRICO) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
     from reportlab.pdfgen import canvas
@@ -195,7 +195,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     total_periodo_nomina, total_periodo_otros, total_periodo_gastos = 0, 0, 0
 
     def head(canvas_obj, t, a, user_name):
-        # Mantenemos fondo blanco de la hoja
         canvas_obj.setFillColor(colors.white); canvas_obj.rect(0, 0, 612, 792, fill=1)
         
         # 🌟 LOGO HORIZONTAL 🌟
@@ -209,20 +208,16 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         if logo_encontrado:
             canvas_obj.drawImage(logo_encontrado, 55, 670, width=500, height=100, preserveAspectRatio=True, anchor='c')
 
-        # Info del Usuario y Título en Prussian Blue
         canvas_obj.setFont("Helvetica-BoldOblique", 9); canvas_obj.setFillColor(C_AZUL)
         canvas_obj.drawString(50, 650, f"Usuario: {user_name}")
         canvas_obj.drawRightString(560, 650, f"{t} {a}")
         
-        # Línea decorativa en Orange
         canvas_obj.setStrokeColor(C_NARANJA); canvas_obj.setLineWidth(2)
         canvas_obj.line(50, 645, 560, 645)
         
-        # Pie de página
         tz = pytz.timezone('America/Bogota'); fecha_gen = datetime.now(tz).strftime("%d/%m/%Y %H:%M:%S")
         canvas_obj.setFont("Helvetica", 7); canvas_obj.setFillColor(colors.grey)
         canvas_obj.drawString(50, 30, f"Documento generado el: {fecha_gen}")
-        
         return 620
 
     y = head(c, titulo, anio, nombre_usuario)
@@ -237,19 +232,18 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         otr_sum = oi_m["Monto"].sum() if not oi_m.empty else 0
         
         it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
-        total_periodo_nomina += nom
-        total_periodo_otros += otr_sum
-        total_periodo_gastos += (vp + vpy) # Sincronizado con la App
+        total_periodo_nomina += nom; total_periodo_otros += otr_sum; total_periodo_gastos += (vp + vpy)
         
         if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         
-        # Caja del Mes: Alabaster Grey
         c.setFillColor(C_GRIS); c.rect(50, y-55, 510, 60, fill=1, stroke=0)
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 11); c.drawString(60, y-15, f"MES: {m}")
         c.setFont("Helvetica", 9); c.drawString(60, y-30, f"Ingresos: $ {it:,.0f} | Pagadas: $ {vp:,.0f} | Pendientes: $ {vpy:,.0f}")
         
-        # Saldo Destacado en Orange
-        c.setFillColor(C_NARANJA); c.drawString(60, y-45, f"SALDO A FAVOR FINAL: $ {bf:,.0f}"); y -= 80
+        # 🌟 SALDO EN NEGRITA Y NARANJA 🌟
+        c.setFillColor(C_NARANJA); c.setFont("Helvetica-Bold", 9)
+        c.drawString(60, y-45, f"SALDO A FAVOR FINAL: $ {bf:,.0f}")
+        y -= 80
         
         # Relación de Ingresos
         c.setFont("Helvetica-Bold", 9); c.setFillColor(C_AZUL); c.drawString(60, y, "RELACIÓN DE INGRESOS"); y -= 15
@@ -264,7 +258,6 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica-Bold", 8); c.line(60, y+5, 480, y+5); c.drawRightString(480, y-5, f"Total Otros Ingresos: $ {otr_sum:,.0f}"); y -= 25
         else: y -= 15
         
-        # Relación de Gastos
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
         c.setFont("Helvetica-Bold", 8); c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
         c.setFont("Helvetica", 8); c.setFillColor(C_NEGRO)
@@ -273,22 +266,52 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65]); c.drawRightString(480, y, f"{row['Monto']:,.0f}"); c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
         y -= 20
 
-    # RESUMEN GENERAL FINAL: Caja Orange
+    # RESUMEN GENERAL FINAL
     if len(meses) > 1:
         if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
         y -= 20; c.setFillColor(C_NARANJA); c.setStrokeColor(C_AZUL); c.setLineWidth(2); c.rect(50, y-100, 510, 110, fill=1, stroke=1)
-        
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 12); c.drawString(70, y-5, f"RESUMEN: {titulo.upper()}")
         ing_totales = total_periodo_nomina + total_periodo_otros; saldo_final_periodo = ing_totales - total_periodo_gastos
-        
         c.setFont("Helvetica", 10); c.setFillColor(C_AZUL)
         c.drawString(70, y-25, f"Total Nómina Percibida: $ {total_periodo_nomina:,.0f}")
-        c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}")
-        c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
-        
-        # El saldo final se muestra en azul oscuro sobre el fondo naranja
+        c.drawString(70, y-40, f"Total Ingresos Adicionales: $ {total_periodo_otros:,.0f}"); c.drawString(70, y-55, f"Total Gastos del Periodo: $ {total_periodo_gastos:,.0f}")
         c.setFont("Helvetica-Bold", 12); c.drawString(70, y-85, f"SALDO TOTAL AL CIERRE: $ {abs(saldo_final_periodo):,.0f}")
-        
+        y -= 120
+
+    # 📊 INFOGRAFÍA HISTÓRICA (ESTILO RECIBO LUZ) 📊
+    if y < 180: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
+    y -= 30
+    c.setStrokeColor(C_AZUL); c.setLineWidth(1); c.line(50, y, 560, y); y -= 20
+    c.setFont("Helvetica-Bold", 10); c.setFillColor(C_AZUL); c.drawString(50, y, "HISTORIAL DE SALDO A FAVOR (Últimos meses registrados)")
+    y -= 70 # Espacio para las barras
+    
+    meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    hist_pdf = []
+    m_idx_ref = meses_lista.index(meses[-1])
+    
+    for i in range(5, -1, -1):
+        idx = m_idx_ref - i
+        a_h = anio
+        if idx < 0: idx += 12; a_h -= 1
+        m_n = meses_lista[idx]
+        i_h = df_i_full[(df_i_full["Periodo"] == m_n) & (df_i_full["Año"] == a_h) & (df_i_full["Usuario"] == u_id)]
+        if not i_h.empty:
+            g_h = df_g_full[(df_g_full["Periodo"] == m_n) & (df_g_full["Año"] == a_h) & (df_g_full["Usuario"] == u_id)]
+            oi_h = df_oi_full[(df_oi_full["Periodo"] == m_n) & (df_oi_full["Año"] == a_h) & (df_oi_full["Usuario"] == u_id)]
+            _, _, _, _, bf_h, _ = calcular_metricas(g_h, i_h["Nomina"].iloc[0], oi_h["Monto"].sum() if not oi_h.empty else 0, i_h["SaldoAnterior"].iloc[0])
+            hist_pdf.append((f"{m_n[:3]}", bf_h))
+
+    if hist_pdf:
+        x_bar = 70; max_val = max([abs(v[1]) for v in hist_pdf] + [1])
+        for m_n, val in hist_pdf:
+            h_bar = (val / max_val) * 60 if val > 0 else 2
+            c.setFillColor(C_NARANJA); c.rect(x_bar, y, 35, h_bar, fill=1, stroke=0)
+            c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7)
+            c.drawCentredString(x_bar + 17, y - 12, m_n)
+            c.setFont("Helvetica", 6)
+            c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0s}" if val >= 1000 else f"${val:,.0f}")
+            x_bar += 55
+
     c.showPage(); c.save(); buf.seek(0)
     return buf
 # --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE) ---
@@ -423,108 +446,56 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# --- 6. CUERPO PRINCIPAL (CORREGIDO PARA CRUCE DE AÑOS) ---
-if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
-st.markdown(f"## Gestión de {mes_s} {anio_s}")
-
-# Intentamos cargar lo que ya existe para este mes y año
-df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s)].copy()
-
-# --- NUEVA LÓGICA DE RECURRENTES (SIN FRONTERAS DE AÑO) ---
-if df_mes_g.empty:
-    mes_actual_idx = meses_lista.index(mes_s)
-    
-    # Tomamos toda la historia de gastos
-    gastos_hist = df_g_full.copy()
-    
-    if not gastos_hist.empty:
-        # Creamos una "Línea de Tiempo" numérica (Año * 12 + Índice de Mes)
-        meses_map = {m: i for i, m in enumerate(meses_lista)}
-        gastos_hist["linea_tiempo"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map)
-        
-        # Punto exacto del mes actual que estamos abriendo
-        punto_actual = (anio_s * 12) + mes_actual_idx
-        
-        # Filtramos TODO lo que ocurrió ANTES de este momento (sin importar el año)
-        # Y ordenamos de lo más reciente a lo más viejo
-        gastos_previos = gastos_hist[gastos_hist["linea_tiempo"] < punto_actual].sort_values(by="linea_tiempo", ascending=False)
-        
-        if not gastos_previos.empty:
-            # Quitamos duplicados para tener la última versión de cada gasto
-            ultimas_decisiones = gastos_previos.drop_duplicates(subset=["Categoría", "Descripción"])
-            # Filtramos solo los marcados como recurrentes
-            activos = ultimas_decisiones[ultimas_decisiones["Movimiento Recurrente"] == True].copy()
-            
-            if not activos.empty:
-                df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
-                df_mes_g["Pagado"] = False # En el mes nuevo, nada está pagado aún
-
-config_g = {
-    "Categoría": st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-    "Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f"),
-    "Valor Referencia": st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
-    "Pagado": st.column_config.CheckboxColumn("Pagado", default=False),
-    "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False)
-}
-
-st.markdown("### 📝 Movimiento de Gastos")
-df_ed_g = st.data_editor(df_mes_g.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed")
-
-st.markdown("### 💰 Ingresos Adicionales")
-df_mes_oi = df_oi_full[(df_oi_full["Periodo"] == mes_s) & (df_oi_full["Año"] == anio_s)].copy()
-df_ed_oi = st.data_editor(df_mes_oi.reindex(columns=["Descripción", "Monto"]).reset_index(drop=True), use_container_width=True, num_rows="dynamic", column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")}, key="oi_ed")
-
-# --- LIMPIEZA DE DATOS PARA CÁLCULOS ---
-df_ed_g["Monto"] = pd.to_numeric(df_ed_g["Monto"], errors="coerce").fillna(0)
-df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors="coerce").fillna(0)
-df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
-
-otr_v = float(df_ed_oi["Monto"].sum())
-placeholder_otros.text_input("Otros Ingresos (Total)", value=format_moneda(otr_v), disabled=True)
-
-# CÁLCULOS DE MÉTRICAS
-it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
-label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
-
-# KPIs (Tarjetas blancas)
+# --- 6 HISTÓRICO DE SALDO A FAVOR (ESTILO RECIBO DE LUZ) ---
 st.divider()
-c_kpi = st.columns(5)
-tarj = [("INGRESOS", it, "black"), ("OBLIG. PAGADAS", vp, "green"), ("OBLIG. PENDIENTES", vpy, "red"), ("DINERO DISPONIBLE", fact, "blue"), (label_ahorro, bf, "#d4af37")]
-for i, (l, v, c) in enumerate(tarj): 
-    c_kpi[i].markdown(f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{c}">$ {v:,.0f}</div></div>', unsafe_allow_html=True)
+st.markdown("### 📈 Histórico de Saldo a Favor (Últimos 6 meses)")
 
-# --- INFOGRAFÍA ---
-st.markdown("### 📊 Análisis de Distribución")
-inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
+historico_data = []
+mes_actual_idx = meses_lista.index(mes_s)
 
-with inf1:
-    st.markdown("#### Desglose de Gastos")
-    t_df = df_ed_g.copy()
-    t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
-    if not t_df.empty and t_df['V'].sum() > 0:
-        fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color='Categoría', color_discrete_map=COLOR_MAP)
-        fig1.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
-        st.plotly_chart(fig1, use_container_width=True)
-        res = t_df.groupby("Categoría")['V'].sum().reset_index()
-        for _, r in res.iterrows():
-            col = COLOR_MAP.get(r['Categoría'], "#6c757d")
-            st.markdown(f'<div class="legend-bar" style="background:{col}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
+# Recolectamos datos de los últimos 6 meses (de más antiguo a más reciente)
+for i in range(5, -1, -1):
+    idx = mes_actual_idx - i
+    a_hist = anio_s
+    if idx < 0:
+        idx += 12
+        a_hist -= 1
+    
+    m_nombre = meses_lista[idx]
+    
+    # Filtramos datos históricos del usuario
+    g_h = df_g_full[(df_g_full["Periodo"] == m_nombre) & (df_g_full["Año"] == a_hist)]
+    i_h = df_i_full[(df_i_full["Periodo"] == m_nombre) & (df_i_full["Año"] == a_hist)]
+    oi_h = df_oi_full[(df_oi_full["Periodo"] == m_nombre) & (df_oi_full["Año"] == a_hist)]
+    
+    if not i_h.empty:
+        nom_h = i_h["Nomina"].iloc[0]
+        s_ant_h = i_h["SaldoAnterior"].iloc[0]
+        otr_h = oi_h["Monto"].sum() if not oi_h.empty else 0
+        _, _, _, _, bf_h, _ = calcular_metricas(g_h, nom_h, otr_h, s_ant_h)
+        historico_data.append({"Mes": f"{m_nombre[:3]}", "Saldo": bf_h})
 
-with inf2:
-    st.markdown("#### Eficiencia de Ahorro")
-    v_cl = max(0, min(ahorro_p, 100))
-    fig2 = go.Figure(go.Indicator(mode="gauge+number", value=v_cl, number={'suffix': "%", 'font': {'color': '#d4af37', 'size': 50}, 'valueformat': '.0f'}, gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#d4af37"}, 'bgcolor': "white"}))
-    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
-    st.plotly_chart(fig2, use_container_width=True)
-
-with inf3:
-    st.markdown("#### Estado Real del Dinero")
-    fig3 = go.Figure(data=[go.Pie(labels=['Obligaciones Pagadas', 'Obligaciones Pendientes', 'Ahorro'], values=[vp, vpy, bf if bf > 0 else 0], hole=.7, marker_colors=['#2ecc71', '#e74c3c', '#d4af37'], textinfo='percent')])
-    fig3.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0), annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#d4af37")])
-    st.plotly_chart(fig3, use_container_width=True)
-    st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="legend-bar" style="background:#d4af37">{label_ahorro} Proyectado <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
+if historico_data:
+    df_hist = pd.DataFrame(historico_data)
+    fig_hist = px.bar(
+        df_hist, x='Mes', y='Saldo',
+        text_auto='.2s',
+        color_discrete_sequence=['#fca311'] # El naranja de tu paleta
+    )
+    
+    fig_hist.update_layout(
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        font_color="#ffffff",
+        height=300,
+        margin=dict(t=20, b=20, l=0, r=0),
+        yaxis_title=None, xaxis_title=None
+    )
+    
+    fig_hist.update_traces(marker_line_color='#ffffff', marker_line_width=1, opacity=0.8)
+    st.plotly_chart(fig_hist, use_container_width=True)
+else:
+    st.info("ℹ️ Aún no hay registros históricos para mostrar el gráfico de barras.")
 
 # --- 7. GUARDAR EN SUPABASE ---
 st.markdown("<br><br>", unsafe_allow_html=True)
