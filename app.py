@@ -382,25 +382,39 @@ with st.sidebar:
         st.session_state.autenticado = False
         st.rerun()
 
-# --- 6. CUERPO PRINCIPAL (RESTAURADO COMPLETAMENTE) ---
+# --- 6. CUERPO PRINCIPAL (RESTAURADO Y CON LÓGICA DE COPIA ESTRICTA) ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
-# Carga de datos del mes actual
+# 1. Intentamos cargar los datos que ya existen para este mes
 df_mes_g = df_g_full[(df_g_full["Periodo"] == mes_s) & (df_g_full["Año"] == anio_s)].copy()
 
-# Lógica de Recurrentes (Cruce de Años)
+# 2. LÓGICA DE COPIA INTELIGENTE (Solo si el mes está totalmente vacío)
 if df_mes_g.empty:
     meses_map_r = {m: i for i, m in enumerate(meses_lista)}
     gastos_hist = df_g_full.copy()
+    
     if not gastos_hist.empty:
-        gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
+        # Calculamos la línea de tiempo del mes que queremos abrir
         p_actual = (anio_s * 12) + meses_lista.index(mes_s)
-        g_prev = gastos_hist[gastos_hist["lt"] < p_actual].sort_values(by="lt", ascending=False)
-        if not g_prev.empty:
-            df_mes_g = g_prev.drop_duplicates(subset=["Categoría", "Descripción"])
-            df_mes_g = df_mes_g[df_mes_g["Movimiento Recurrente"] == True].copy()
-            df_mes_g["Pagado"] = False
+        gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
+        
+        # BUSCAMOS ÚNICAMENTE EL MES ANTERIOR MÁS CERCANO QUE TENGA DATOS
+        registros_previos = gastos_hist[gastos_hist["lt"] < p_actual]
+        
+        if not registros_previos.empty:
+            ultimo_mes_con_info_lt = registros_previos["lt"].max()
+            # Tomamos la "foto" exacta de ese último mes
+            foto_ultimo_mes = registros_previos[registros_previos["lt"] == ultimo_mes_con_info_lt]
+            
+            # FILTRO CRÍTICO: Solo traemos lo que esté marcado como RECURRENTE en ESE mes específico.
+            # Si lo borraste en ese mes, no existe en la foto. 
+            # Si le quitaste el check de recurrente, este filtro lo deja fuera.
+            activos = foto_ultimo_mes[foto_ultimo_mes["Movimiento Recurrente"] == True].copy()
+            
+            if not activos.empty:
+                df_mes_g = activos.reindex(columns=["Categoría", "Descripción", "Monto", "Valor Referencia", "Pagado", "Movimiento Recurrente"])
+                df_mes_g["Pagado"] = False # Nada empieza pagado en el mes nuevo
 
 # --- SECCIÓN 1: TABLA DE GASTOS ---
 st.markdown("### 📝 Movimiento de Gastos")
@@ -424,7 +438,6 @@ df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"], errors=
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 
 otr_v = float(df_ed_oi["Monto"].sum())
-# El placeholder_otros debe estar definido arriba en el sidebar
 placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
