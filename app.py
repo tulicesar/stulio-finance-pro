@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (PASO 2: MAPEO DE IDENTIDADES) ---
+# --- 4. ACCESO POR NOMBRES (ADIÓS NÚMEROS) ---
 
 if 'autenticado' not in st.session_state: 
     st.session_state.autenticado = False
@@ -271,51 +271,30 @@ if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
+        u = st.text_input("Usuario", key="login_u") 
+        p = st.text_input("Contraseña", type="password", key="login_p")
         
-        with t_in:
-            u = st.text_input("Usuario", key="login_u") # 'tulicesar' o 'Maria Jose'
-            p = st.text_input("Contraseña", type="password", key="login_p")
-            
-            if st.button("Ingresar", use_container_width=True):
-                try:
-                    # 🪄 MAPEO DE CORREOS: Aquí vinculamos el nombre con el email de Supabase
-                    usuario_input = u.lower().strip()
-                    
-                    # Diccionario de correos según lo que creaste en Supabase
-                    correos_oficiales = {
-                        "tulicesar": "tulicesar@yahoo.com",
-                        "maria jose": "mariaj.torres1215@gmail.com"
-                    }
-                    
-                    # Si el nombre no está en la lista, intenta con @yahoo.com por defecto
-                    u_email = correos_oficiales.get(usuario_input, f"{usuario_input.replace(' ', '')}@yahoo.com")
-                    
-                    # Intentar entrar a Supabase
-                    res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
-                    
-                    # Si llega aquí, el login fue exitoso. Guardamos la sesión:
-                    st.session_state.autenticado = True
-                    st.session_state.usuario_id = res.user.id
-                    st.session_state.token = res.session.access_token
-                    
-                    # 🏷️ NOMBRES COMPLETOS PARA EL TABLERO
-                    nombres_dashboard = {
-                        "tulicesar": "Tulio Cesar Salcedo Otero",
-                        "maria jose": "Maria Jose Torres Posada"
-                    }
-                    st.session_state.u_nombre_completo = nombres_dashboard.get(usuario_input, u.upper())
-                    
-                    # 🔑 ACTIVAMOS LA LLAVE DE SEGURIDAD
-                    supabase.postgrest.auth(st.session_state.token)
-                    
-                    st.success(f"✅ Bienvenido(a), {st.session_state.u_nombre_completo}")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ Error de acceso: {e}")
-        
-        with t_reg:
-            st.info("ℹ️ Para nuevos usuarios, contactar al administrador.")
+        if st.button("Ingresar", use_container_width=True):
+            try:
+                # El disfraz de email sigue funcionando para el Login
+                u_limpio = u.lower().strip().replace(" ", "")
+                correos = {"tulicesar": "tulicesar@yahoo.com", "mariajose": "mariaj.torres1215@gmail.com"}
+                u_email = correos.get(u_limpio, f"{u_limpio}@yahoo.com")
+                
+                # Esto verifica que la clave sea correcta
+                res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
+                
+                # 🔥 LA PARTE CLAVE: Guardamos el nombre (u), NO el ID de números
+                st.session_state.autenticado = True
+                st.session_state.usuario_id = u  # Guardará "tulicesar" o "Maria Jose"
+                
+                nombres_reales = {"tulicesar": "Tulio Cesar Salcedo Otero", "mariajose": "Maria Jose Torres Posada"}
+                st.session_state.u_nombre_completo = nombres_reales.get(u_limpio, u.upper())
+                
+                st.success(f"✅ ¡Hola, {st.session_state.u_nombre_completo}!")
+                st.rerun()
+            except Exception as e:
+                st.error("❌ Usuario o contraseña incorrectos.")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
 if st.session_state.autenticado:
