@@ -84,9 +84,8 @@ st.markdown(f"""
     h2, h3 {{ color: #fca311 !important; font-weight: bold !important; }}
     </style>
     """, unsafe_allow_html=True)
-# --- 2. MOTOR DE DATOS Y FORMATEO ---
+# --- 2. MOTOR DE DATOS Y FORMATEO (REPARADO) ---
 def format_moneda(valor):
-    """Convierte un número a formato string: $ 1.000.000"""
     try:
         n = int(float(valor))
         return f"$ {n:,.0f}".replace(",", ".")
@@ -94,64 +93,60 @@ def format_moneda(valor):
         return "$ 0"
 
 def parse_moneda(texto):
-    """Limpia el string formateado para obtener el número puro"""
     if not texto: return 0.0
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
 
+# 🛡️ CARGAR USUARIOS (Versión Silenciosa)
 def cargar_usuarios():
-    """Carga los usuarios desde la tabla 'usuarios' en Supabase"""
+    """Solo intenta cargar si hay un token, de lo contrario devuelve vacío"""
     try:
-        # 🌟 CONSULTA A SUPABASE 🌟
+        # Si no hay token en la sesión, ni lo intentamos para evitar el error rojo
+        if not st.session_state.get("token"):
+            return {}
+            
         res = supabase.table("usuarios").select("*").execute()
-        # Mapeamos tus columnas: 'usuario_id', 'password' y 'nombre_completo'
-        db_dict = {
-            user['usuario_id']: {
-                "pass": user['password'], 
-                "nombre": user['nombre_completo']
-            } for user in res.data
-        }
-        return db_dict
-    except Exception as e:
-        # Si la tabla está vacía o hay error, devolvemos un diccionario vacío
+        return {user['usuario_id']: {"pass": user['password'], "nombre": user['nombre_completo']} for user in res.data}
+    except Exception:
         return {}
 
-# Nota: La función guardar_usuarios(db) se elimina porque ahora usaremos .upsert() directamente
-
-@st.cache_data(ttl=5) # Cache corto para rapidez con Supabase
+# 📊 CARGAR BASE DE DATOS (Con llave de seguridad)
+@st.cache_data(ttl=5)
 def cargar_bd(u_id):
-    # Consultamos las tablas de movimientos
-    r_g = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
-    r_i = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
-    r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+    # 🔑 LE PRESENTAMOS LA IDENTIDAD A SUPABASE ANTES DE PEDIR DATOS
+    if st.session_state.get("token"):
+        supabase.postgrest.auth(st.session_state.token)
     
-    df_g = pd.DataFrame(r_g.data) if r_g.data else pd.DataFrame(columns=["anio", "periodo", "categoria", "descripcion", "monto", "valor_referencia", "pagado", "recurrente", "usuario_id"])
-    df_i = pd.DataFrame(r_i.data) if r_i.data else pd.DataFrame(columns=["anio", "periodo", "saldo_anterior", "nomina", "otros", "usuario_id"])
-    df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio", "periodo", "descripcion", "monto", "usuario_id"])
-    
-    # Renombramos para compatibilidad con el resto del código
-    df_g = df_g.rename(columns={"anio":"Año", "periodo":"Periodo", "categoria":"Categoría", "descripcion":"Descripción", "monto":"Monto", "valor_referencia":"Valor Referencia", "pagado":"Pagado", "recurrente":"Movimiento Recurrente", "usuario_id":"Usuario"})
-    df_i = df_i.rename(columns={"anio":"Año", "periodo":"Periodo", "saldo_anterior":"SaldoAnterior", "nomina":"Nomina", "otros":"Otros", "usuario_id":"Usuario"})
-    df_oi = df_oi.rename(columns={"anio":"Año", "periodo":"Periodo", "descripcion":"Descripción", "monto":"Monto", "usuario_id":"Usuario"})
-    
-    # Aseguramos que el Año sea entero
-    for df in [df_g, df_i, df_oi]:
-        if "Año" in df.columns:
-            df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
-    
-    return df_g, df_i, df_oi
+    try:
+        r_g = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
+        r_i = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
+        r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+        
+        df_g = pd.DataFrame(r_g.data) if r_g.data else pd.DataFrame(columns=["anio", "periodo", "categoria", "descripcion", "monto", "valor_referencia", "pagado", "recurrente", "usuario_id"])
+        df_i = pd.DataFrame(r_i.data) if r_i.data else pd.DataFrame(columns=["anio", "periodo", "saldo_anterior", "nomina", "otros", "usuario_id"])
+        df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio", "periodo", "descripcion", "monto", "usuario_id"])
+        
+        # Mapeo de nombres para tu interfaz
+        df_g = df_g.rename(columns={"anio":"Año", "periodo":"Periodo", "categoria":"Categoría", "descripcion":"Descripción", "monto":"Monto", "valor_referencia":"Valor Referencia", "pagado":"Pagado", "recurrente":"Movimiento Recurrente", "usuario_id":"Usuario"})
+        df_i = df_i.rename(columns={"anio":"Año", "periodo":"Periodo", "saldo_anterior":"SaldoAnterior", "nomina":"Nomina", "otros":"Otros", "usuario_id":"Usuario"})
+        df_oi = df_oi.rename(columns={"anio":"Año", "periodo":"Periodo", "descripcion":"Descripción", "monto":"Monto", "usuario_id":"Usuario"})
+        
+        for df in [df_g, df_i, df_oi]:
+            if "Año" in df.columns:
+                df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
+        
+        return df_g, df_i, df_oi
+    except Exception as e:
+        st.error(f"Error al cargar datos: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
     vp = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
-    if not df_g.empty:
-        vpy = df_g[df_g["Pagado"] == False].apply(lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1).sum()
-    else:
-        vpy = 0
+    vpy = df_g[df_g["Pagado"] == False].apply(lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1).sum() if not df_g.empty else 0
     bf = it - vp - vpy
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
-
 # --- 3. REPORTE PDF (TOTALMENTE INTEGRADO) ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
     from reportlab.lib.pagesizes import letter
