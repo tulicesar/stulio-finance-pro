@@ -250,56 +250,55 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE) ---
-if 'autenticado' not in st.session_state: st.session_state.autenticado = False
+# --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE OFICIAL) ---
+if 'autenticado' not in st.session_state: 
+    st.session_state.autenticado = False
+
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
-        db_u = cargar_usuarios() # Esta función ahora lee de Supabase (la cambiamos antes)
         
         with t_in:
-            u = st.text_input("Usuario", key="login_u")
-            p = st.text_input("Pass", type="password", key="login_p")
+            u = st.text_input("Email o Usuario", key="login_u")
+            p = st.text_input("Contraseña", type="password", key="login_p")
             if st.button("Ingresar", use_container_width=True):
-                if u in db_u:
-                    u_data = db_u[u]
-                    # Comprobamos la clave (usando el mapeo que hicimos en cargar_usuarios)
-                    password_correcta = (u_data.get("pass") == p)
-                    nombre_final = u_data.get("nombre", u)
+                try:
+                    # 🚀 LOGIN OFICIAL: Esto genera el Token de seguridad
+                    res = supabase.auth.sign_in_with_password({"email": u, "password": p})
                     
-                    if password_correcta:
-                        st.session_state.autenticado, st.session_state.usuario_id, st.session_state.u_nombre_completo = True, u, nombre_final
-                        st.rerun()
-                    else: st.error("❌ Contraseña incorrecta")
-                else: st.error("❌ Usuario no encontrado")
+                    # Guardamos los datos en la sesión
+                    st.session_state.autenticado = True
+                    st.session_state.usuario_id = res.user.id  # <--- Este es el ID real (UUID)
+                    st.session_state.u_nombre_completo = u.split('@')[0]
+                    st.session_state.token = res.session.access_token
+                    
+                    # 🔑 ACTIVAMOS LA PULSERA DE ACCESO
+                    supabase.postgrest.auth(st.session_state.token)
+                    
+                    st.success("✅ ¡Ingreso exitoso!")
+                    st.rerun()
+                except Exception as e:
+                    st.error("❌ Usuario o contraseña incorrectos. (Asegúrate de usar un Email)")
         
         with t_reg:
-            st.markdown("### Registrar / Actualizar")
+            st.markdown("### Registro de Nuevo Usuario")
             rn = st.text_input("Nombre Completo", key="reg_n")
-            ru = st.text_input("ID Usuario", key="reg_u")
-            rp = st.text_input("Pass", type="password", key="reg_p")
+            ru = st.text_input("Email (Obligatorio)", key="reg_u")
+            rp = st.text_input("Contraseña", type="password", key="reg_p")
             
-            if st.button("Crear/Actualizar Cuenta", use_container_width=True):
-                if not ru or not rp or not rn:
-                    st.warning("⚠️ Completa todos los campos para el registro")
+            if st.button("Crear Cuenta", use_container_width=True):
+                if not ru or not rp:
+                    st.warning("⚠️ El Email y la Contraseña son obligatorios")
                 else:
                     try:
-                        # 🚀 ENVIANDO A SUPABASE 🚀
-                        datos_usuario = {
-                            "usuario_id": ru, 
-                            "password": rp,         # Columna de tu tabla
-                            "nombre_completo": rn   # Columna de tu tabla
-                        }
-                        supabase.table("usuarios").upsert(datos_usuario).execute()
-                        
-                        st.success(f"✅ ¡Excelente! '{rn}' ya está en la nube.")
+                        # 🚀 REGISTRO OFICIAL EN SUPABASE AUTH
+                        res = supabase.auth.sign_up({"email": ru, "password": rp})
+                        st.success(f"✅ ¡Registrado! Revisa tu email o intenta loguearte.")
                         st.balloons()
-                        # Limpiamos caché para que el login reconozca al nuevo usuario de inmediato
-                        st.cache_data.clear()
                     except Exception as e:
-                        st.error(f"❌ Error al conectar con Supabase: {e}")
+                        st.error(f"❌ Error al registrar: {e}")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (CONEXIÓN CROSS-YEAR + NOMBRES PROYECTADOS) ---
 u_id = st.session_state.usuario_id
