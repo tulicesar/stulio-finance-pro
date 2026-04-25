@@ -262,50 +262,27 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (SINCRONIZADO CON YAHOO) ---
+# --- 4. ACCESO SIMPLE (VOLVER A LO ANTERIOR) ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
-        if os.path.exists(LOGO_LOGIN): st.image(LOGO_LOGIN, use_container_width=True)
-        t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
+        st.title("🔑 Acceso")
+        u = st.text_input("Usuario")
+        p = st.text_input("Contraseña", type="password")
         
-        with t_in:
-            u = st.text_input("Usuario", key="login_u") # Aquí pones 'tulicesar'
-            p = st.text_input("Contraseña", type="password", key="login_p")
+        if st.button("Entrar"):
+            # Aquí pones tu lógica vieja de usuarios
+            # Por ejemplo, si tenías un diccionario o un archivo JSON:
+            usuarios_validos = {"tulicesar": "Thulli.07", "mariajose": "clave123"}
             
-            if st.button("Ingresar", use_container_width=True):
-                try:
-                    # 🪄 EL TRUCO: Ahora coincide con lo que creaste en Supabase
-                    u_email = f"{u.lower().strip()}@yahoo.com"
-                    
-                    res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
-                    
-                    st.session_state.autenticado = True
-                    st.session_state.token = res.session.access_token
-                    st.session_state.usuario_id = res.user.id
-                    st.session_state.u_nombre_completo = u.upper()
-                    
-                    supabase.postgrest.auth(st.session_state.token)
-                    st.success(f"✅ ¡Hola de nuevo, {u}!")
-                    st.rerun()
-                except Exception as e:
-                    # He quitado el mensaje genérico para que veas el error real si falla
-                    st.error(f"❌ Error de acceso: {e}")
-        
-        with t_reg:
-            st.markdown("### Crear Nuevo Acceso")
-            new_u = st.text_input("Elige tu Usuario", key="reg_u")
-            new_p = st.text_input("Crea tu Contraseña", type="password", key="reg_p")
-            
-            if st.button("Registrarme", use_container_width=True):
-                try:
-                    # 🪄 También sincronizamos el registro
-                    u_email_reg = f"{new_u.lower().strip()}@yahoo.com"
-                    supabase.auth.sign_up({"email": u_email_reg, "password": new_p})
-                    st.success("✅ ¡Usuario creado! Ya puedes ingresar.")
-                    st.balloons()
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
+            if u in usuarios_validos and p == usuarios_validos[u]:
+                st.session_state.autenticado = True
+                st.session_state.usuario_id = u  # Guardamos el nombre tal cual
+                st.session_state.u_nombre_completo = u.upper()
+                st.success(f"¡Hola {u}!")
+                st.rerun()
+            else:
+                st.error("Usuario o contraseña incorrectos")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
 if st.session_state.autenticado:
