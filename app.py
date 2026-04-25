@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE + TRUCO DE USUARIO) ---
+# --- 4. ACCESO BLINDADO (VERSIÓN CON NOMBRES COMPLETOS) ---
 
 if 'autenticado' not in st.session_state: 
     st.session_state.autenticado = False
@@ -274,48 +274,51 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         
         with t_in:
-            u = st.text_input("Usuario", key="login_u") # Aquí pones 'tulicesar'
+            u = st.text_input("Usuario", key="login_u") # 'tulicesar' o 'mariajose'
             p = st.text_input("Contraseña", type="password", key="login_p")
             
             if st.button("Ingresar", use_container_width=True):
                 try:
-                    # 🪄 EL TRUCO: Convertimos tu usuario en el email de Yahoo que creamos
+                    # 🪄 El disfraz de email
                     u_email = f"{u.lower().strip()}@yahoo.com"
-                    
-                    # 🚀 LOGIN OFICIAL: Supabase recibe el email, pero tú solo viste tu nombre
                     res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
                     
-                    # Guardamos los datos en la sesión
                     st.session_state.autenticado = True
-                    st.session_state.usuario_id = res.user.id  # El UUID profesional
-                    st.session_state.u_nombre_completo = u.upper()
+                    st.session_state.usuario_id = res.user.id
                     st.session_state.token = res.session.access_token
                     
-                    # 🔑 ACTIVAMOS LA PULSERA DE ACCESO PARA RLS
+                    # 🏷️ MAPEO DE NOMBRES PARA EL TABLERO
+                    nombres = {
+                        "tulicesar": "Tulio Cesar Salcedo Otero",
+                        "mariajose": "Maria Jose" # Puedes poner su nombre completo aquí
+                    }
+                    # Si el usuario está en la lista, usa el nombre completo, si no, usa el usuario en mayúsculas
+                    st.session_state.u_nombre_completo = nombres.get(u.lower().strip(), u.upper())
+                    
+                    # 🔑 ACTIVAMOS LA SEGURIDAD RLS
                     supabase.postgrest.auth(st.session_state.token)
                     
-                    st.success(f"✅ ¡Hola de nuevo, {u}!")
+                    st.success(f"✅ ¡Bienvenido, {st.session_state.u_nombre_completo}!")
                     st.rerun()
                 except Exception as e:
                     st.error("❌ Usuario o contraseña incorrectos.")
         
         with t_reg:
             st.markdown("### Registro de Nuevo Usuario")
-            ru = st.text_input("Elige tu Usuario (ej: mariajose)", key="reg_u")
-            rp = st.text_input("Contraseña", type="password", key="reg_p")
+            ru = st.text_input("Elige tu Usuario", key="reg_u")
+            rp = st.text_input("Crea tu Contraseña", type="password", key="reg_p")
             
             if st.button("Crear Cuenta", use_container_width=True):
                 if not ru or not rp:
                     st.warning("⚠️ El Usuario y la Contraseña son obligatorios")
                 else:
                     try:
-                        # 🪄 También registramos con el disfraz de Yahoo
                         u_email_reg = f"{ru.lower().strip()}@yahoo.com"
-                        res = supabase.auth.sign_up({"email": u_email_reg, "password": rp})
-                        st.success(f"✅ ¡Usuario '{ru}' creado! Ya puedes ingresar.")
+                        supabase.auth.sign_up({"email": u_email_reg, "password": rp})
+                        st.success(f"✅ Usuario '{ru}' creado. ¡Ya puedes ingresar!")
                         st.balloons()
                     except Exception as e:
-                        st.error(f"❌ Error al registrar: {e}")
+                        st.error(f"❌ Error: {e}")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
 if st.session_state.autenticado:
