@@ -10,7 +10,13 @@ from datetime import datetime
 import math
 import pytz 
 from supabase import create_client, Client
-
+# --- JUSTO DEBAJO DE LOS IMPORT ---
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "token" not in st.session_state:
+    st.session_state.token = None
+if "usuario_id" not in st.session_state:
+    st.session_state.usuario_id = None
 # --- 1. CONFIGURACIÓN Y ESTILO (REPARADO) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
