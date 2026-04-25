@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (IDENTIDAD PERSONALIZADA) ---
+# --- 4. ACCESO BLINDADO (PASO 2: MAPEO DE IDENTIDADES) ---
 
 if 'autenticado' not in st.session_state: 
     st.session_state.autenticado = False
@@ -274,56 +274,48 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         
         with t_in:
-            u = st.text_input("Usuario", key="login_u") 
+            u = st.text_input("Usuario", key="login_u") # 'tulicesar' o 'Maria Jose'
             p = st.text_input("Contraseña", type="password", key="login_p")
             
             if st.button("Ingresar", use_container_width=True):
                 try:
-                    # 🪄 El truco del email automático
-                    # Convertimos "Maria Jose" en "maria jose@yahoo.com"
-                    u_email = f"{u.lower().strip()}@yahoo.com"
+                    # 🪄 MAPEO DE CORREOS: Aquí vinculamos el nombre con el email de Supabase
+                    usuario_input = u.lower().strip()
                     
+                    # Diccionario de correos según lo que creaste en Supabase
+                    correos_oficiales = {
+                        "tulicesar": "tulicesar@yahoo.com",
+                        "maria jose": "mariaj.torres1215@gmail.com"
+                    }
+                    
+                    # Si el nombre no está en la lista, intenta con @yahoo.com por defecto
+                    u_email = correos_oficiales.get(usuario_input, f"{usuario_input.replace(' ', '')}@yahoo.com")
+                    
+                    # Intentar entrar a Supabase
                     res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
                     
-                    # Guardamos la sesión
+                    # Si llega aquí, el login fue exitoso. Guardamos la sesión:
                     st.session_state.autenticado = True
                     st.session_state.usuario_id = res.user.id
                     st.session_state.token = res.session.access_token
                     
-                    # 🏷️ MAPEO DE NOMBRES COMPLETOS
-                    nombres_reales = {
+                    # 🏷️ NOMBRES COMPLETOS PARA EL TABLERO
+                    nombres_dashboard = {
                         "tulicesar": "Tulio Cesar Salcedo Otero",
                         "maria jose": "Maria Jose Torres Posada"
                     }
+                    st.session_state.u_nombre_completo = nombres_dashboard.get(usuario_input, u.upper())
                     
-                    # Si el usuario coincide, muestra el nombre completo; si no, el usuario en mayúsculas
-                    usuario_key = u.lower().strip()
-                    st.session_state.u_nombre_completo = nombres_reales.get(usuario_key, u.upper())
-                    
-                    # Conectamos con la seguridad de la base de datos
+                    # 🔑 ACTIVAMOS LA LLAVE DE SEGURIDAD
                     supabase.postgrest.auth(st.session_state.token)
                     
-                    st.success(f"✅ ¡Bienvenido(a), {st.session_state.u_nombre_completo}!")
+                    st.success(f"✅ Bienvenido(a), {st.session_state.u_nombre_completo}")
                     st.rerun()
                 except Exception as e:
-                    st.error("❌ Usuario o contraseña incorrectos.")
+                    st.error(f"❌ Error de acceso: {e}")
         
         with t_reg:
-            st.markdown("### Registro de Nuevo Usuario")
-            ru = st.text_input("Nuevo Usuario (ej: maria jose)", key="reg_u")
-            rp = st.text_input("Contraseña", type="password", key="reg_p")
-            
-            if st.button("Crear Cuenta", use_container_width=True):
-                if not ru or not rp:
-                    st.warning("⚠️ Ambos campos son obligatorios")
-                else:
-                    try:
-                        u_email_reg = f"{ru.lower().strip()}@yahoo.com"
-                        supabase.auth.sign_up({"email": u_email_reg, "password": rp})
-                        st.success(f"✅ Usuario '{ru}' creado. Ya puede ingresar.")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"❌ Error: {e}")
+            st.info("ℹ️ Para nuevos usuarios, contactar al administrador.")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
 if st.session_state.autenticado:
