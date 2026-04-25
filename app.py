@@ -305,86 +305,96 @@ if not st.session_state.autenticado:
                     except Exception as e:
                         st.error(f"❌ Error al registrar: {e}")
     st.stop()
-# --- 5. LÓGICA SIDEBAR (CONEXIÓN CROSS-YEAR + NOMBRES PROYECTADOS) ---
-u_id = st.session_state.usuario_id
-df_g_full, df_i_full, df_oi_full = cargar_bd(u_id)
+# --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
+if st.session_state.autenticado:
+    u_id = st.session_state.usuario_id
+    
+    # 🔑 PASO MAESTRO: Inyectamos el token de seguridad antes de llamar a la base de datos
+    if st.session_state.token:
+        supabase.postgrest.auth(st.session_state.token)
+    
+    # Ahora sí cargamos los datos con la "pulsera de acceso" puesta
+    df_g_full, df_i_full, df_oi_full = cargar_bd(u_id)
 
-with st.sidebar:
-    if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
-    st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
-    
-    # Selector de Año y Mes
-    anio_s = st.selectbox("Año", [2026, 2027, 2028], index=0)
-    meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
-    mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
-    
-    # 1. Buscamos el mes actual en la BD
-    i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
-    
-    # 2. Lógica para detectar el MES y AÑO anterior
-    idx = meses_lista.index(mes_s)
-    if idx > 0:
-        m_ant = meses_lista[idx-1]
-        a_ant = anio_s
-    else:
-        m_ant = "Diciembre"
-        a_ant = anio_s - 1
-    
-    # 3. Traemos los datos de ese mes anterior
-    i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant)]
-    g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant)]
-    oi_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant)]
-    
-    # 4. Calculamos cuánto sobró el mes pasado
-    s_sug = 0.0
-    if not i_ant.empty:
-        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
-        s_sug = float(bf_a)
-    
-    st.divider()
-    # Toggle activado por defecto (Misión cumplida ✅)
-    arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
-    
-    # 5. Definimos los valores iniciales de los inputs
-    val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
-    s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
-    s_in = parse_moneda(s_txt)
-    
-    val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
-    n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
-    n_in = parse_moneda(n_txt)
-    
-    placeholder_otros = st.empty()
-    
-    # --- BOTONES DE ACCIÓN ---
-    st.divider(); st.subheader("📑 Extractos")
-    c_pdf, c_xls = st.columns(2)
-    with c_pdf:
-        if st.button("📄 PDF"):
-            pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
-            st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
-    with c_xls:
-        buf_xls = BytesIO()
-        with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
-            df_g_full[df_g_full["Periodo"]==mes_s].to_excel(writer, sheet_name='Gastos', index=False)
-            df_oi_full[df_oi_full["Periodo"]==mes_s].to_excel(writer, sheet_name='OtrosIngresos', index=False)
-        st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
-    
-    # --- PROYECCIONES CON NOMBRES LARGOS ---
-    st.subheader("⚖️ Proyecciones")
-    if st.button("📥 Semestre 1"):
-        titulo_s1 = "Balance Proyectado Enero - Junio"
-        p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], titulo_s1, anio_s, u_id)
-        st.download_button(f"Descargar {titulo_s1}", p1, f"Balance_S1_{anio_s}.pdf")
+    with st.sidebar:
+        if os.path.exists(LOGO_SIDEBAR): st.image(LOGO_SIDEBAR, use_container_width=True)
+        st.markdown(f"### 👤 {st.session_state.u_nombre_completo}")
+        
+        # Selector de Año y Mes
+        anio_s = st.selectbox("Año", [2026, 2027, 2028], index=0)
+        meses_lista = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+        mes_s = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month-1)
+        
+        # 1. Buscamos el mes actual en la BD
+        i_m_act = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
+        
+        # 2. Lógica para detectar el MES y AÑO anterior
+        idx = meses_lista.index(mes_s)
+        if idx > 0:
+            m_ant = meses_lista[idx-1]
+            a_ant = anio_s
+        else:
+            m_ant = "Diciembre"
+            a_ant = anio_s - 1
+        
+        # 3. Traemos los datos de ese mes anterior
+        i_ant = df_i_full[(df_i_full["Periodo"] == m_ant) & (df_i_full["Año"] == a_ant)]
+        g_ant = df_g_full[(df_g_full["Periodo"] == m_ant) & (df_g_full["Año"] == a_ant)]
+        oi_ant = df_oi_full[(df_oi_full["Periodo"] == m_ant) & (df_oi_full["Año"] == a_ant)]
+        
+        # 4. Calculamos cuánto sobró el mes pasado
+        s_sug = 0.0
+        if not i_ant.empty:
+            # Usamos la función de métricas que ya tienes definida
+            _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
+            s_sug = float(bf_a)
+        
+        st.divider()
+        arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
+        
+        # 5. Definimos los valores iniciales de los inputs
+        val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
+        s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
+        s_in = parse_moneda(s_txt)
+        
+        val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
+        n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
+        n_in = parse_moneda(n_txt)
+        
+        placeholder_otros = st.empty()
+        
+        # --- BOTONES DE ACCIÓN ---
+        st.divider(); st.subheader("📑 Extractos")
+        c_pdf, c_xls = st.columns(2)
+        with c_pdf:
+            if st.button("📄 PDF"):
+                pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
+                st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
+        with c_xls:
+            buf_xls = BytesIO()
+            with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
+                df_g_full[df_g_full["Periodo"]==mes_s].to_excel(writer, sheet_name='Gastos', index=False)
+                df_oi_full[df_oi_full["Periodo"]==mes_s].to_excel(writer, sheet_name='OtrosIngresos', index=False)
+            st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
+        
+        st.subheader("⚖️ Proyecciones")
+        if st.button("📥 Semestre 1"):
+            titulo_s1 = "Balance Proyectado Enero - Junio"
+            p1 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[0:6], titulo_s1, anio_s, u_id)
+            st.download_button(f"Descargar {titulo_s1}", p1, f"Balance_S1_{anio_s}.pdf")
 
-    if st.button("📥 Semestre 2"):
-        titulo_s2 = "Balance Proyectado Julio - Diciembre"
-        p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], titulo_s2, anio_s, u_id)
-        st.download_button(f"Descargar {titulo_s2}", p2, f"Balance_S2_{anio_s}.pdf")
-    
-    if st.button("🚪 Salir"): 
-        st.session_state.autenticado = False
-        st.rerun()
+        if st.button("📥 Semestre 2"):
+            titulo_s2 = "Balance Proyectado Julio - Diciembre"
+            p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], titulo_s2, anio_s, u_id)
+            st.download_button(f"Descargar {titulo_s2}", p2, f"Balance_S2_{anio_s}.pdf")
+        
+        if st.button("🚪 Salir"): 
+            st.session_state.autenticado = False
+            st.rerun()
+else:
+    # Si no está autenticado, simplemente no hacemos nada aquí
+    # El Bloque 4 se encargará de mostrar el login y detener la ejecución.
+    st.stop()
 
 # --- 6. CUERPO PRINCIPAL (RESTAURADO Y CON LÓGICA DE COPIA ESTRICTA) ---
 if os.path.exists(LOGO_APP_H): st.image(LOGO_APP_H, use_container_width=True)
