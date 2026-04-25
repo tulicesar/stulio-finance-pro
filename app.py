@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (VERSIÓN IDENTIDAD COMPLETA) ---
+# --- 4. ACCESO BLINDADO (IDENTIDAD PERSONALIZADA) ---
 
 if 'autenticado' not in st.session_state: 
     st.session_state.autenticado = False
@@ -274,45 +274,48 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         
         with t_in:
-            u = st.text_input("Usuario", key="login_u") # 'tulicesar' o 'mariajose'
+            u = st.text_input("Usuario", key="login_u") 
             p = st.text_input("Contraseña", type="password", key="login_p")
             
             if st.button("Ingresar", use_container_width=True):
                 try:
-                    # 🪄 El disfraz de email que configuramos en Supabase
+                    # 🪄 El truco del email automático
+                    # Convertimos "Maria Jose" en "maria jose@yahoo.com"
                     u_email = f"{u.lower().strip()}@yahoo.com"
+                    
                     res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
                     
+                    # Guardamos la sesión
                     st.session_state.autenticado = True
                     st.session_state.usuario_id = res.user.id
                     st.session_state.token = res.session.access_token
                     
-                    # 🏷️ MAPEO DE NOMBRES PARA EL TABLERO
-                    # Aquí definimos cómo quieres que se vea cada usuario
-                    nombres_mapeo = {
+                    # 🏷️ MAPEO DE NOMBRES COMPLETOS
+                    nombres_reales = {
                         "tulicesar": "Tulio Cesar Salcedo Otero",
-                        "mariajose": "Maria Jose"
+                        "maria jose": "Maria Jose Torres Posada"
                     }
                     
-                    user_key = u.lower().strip()
-                    st.session_state.u_nombre_completo = nombres_mapeo.get(user_key, u.upper())
+                    # Si el usuario coincide, muestra el nombre completo; si no, el usuario en mayúsculas
+                    usuario_key = u.lower().strip()
+                    st.session_state.u_nombre_completo = nombres_reales.get(usuario_key, u.upper())
                     
-                    # 🔑 ACTIVAMOS LA SEGURIDAD PROFESIONAL
+                    # Conectamos con la seguridad de la base de datos
                     supabase.postgrest.auth(st.session_state.token)
                     
-                    st.success(f"✅ Bienvenido, {st.session_state.u_nombre_completo}")
+                    st.success(f"✅ ¡Bienvenido(a), {st.session_state.u_nombre_completo}!")
                     st.rerun()
                 except Exception as e:
                     st.error("❌ Usuario o contraseña incorrectos.")
         
         with t_reg:
             st.markdown("### Registro de Nuevo Usuario")
-            ru = st.text_input("Usuario (ej: mariajose)", key="reg_u")
+            ru = st.text_input("Nuevo Usuario (ej: maria jose)", key="reg_u")
             rp = st.text_input("Contraseña", type="password", key="reg_p")
             
             if st.button("Crear Cuenta", use_container_width=True):
                 if not ru or not rp:
-                    st.warning("⚠️ El Usuario y la Contraseña son obligatorios")
+                    st.warning("⚠️ Ambos campos son obligatorios")
                 else:
                     try:
                         u_email_reg = f"{ru.lower().strip()}@yahoo.com"
