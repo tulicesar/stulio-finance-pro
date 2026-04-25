@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (MODO USUARIO PERSONALIZADO) ---
+# --- 4. ACCESO BLINDADO (SINCRONIZADO CON YAHOO) ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -275,8 +275,8 @@ if not st.session_state.autenticado:
             
             if st.button("Ingresar", use_container_width=True):
                 try:
-                    # 🪄 EL TRUCO: Convertimos tu usuario en un "Email Ficticio" para Supabase
-                    u_email = f"{u.lower().strip()}@stulio.finance"
+                    # 🪄 EL TRUCO: Ahora coincide con lo que creaste en Supabase
+                    u_email = f"{u.lower().strip()}@yahoo.com"
                     
                     res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
                     
@@ -289,7 +289,8 @@ if not st.session_state.autenticado:
                     st.success(f"✅ ¡Hola de nuevo, {u}!")
                     st.rerun()
                 except Exception as e:
-                    st.error("❌ Usuario o contraseña incorrectos.")
+                    # He quitado el mensaje genérico para que veas el error real si falla
+                    st.error(f"❌ Error de acceso: {e}")
         
         with t_reg:
             st.markdown("### Crear Nuevo Acceso")
@@ -298,8 +299,8 @@ if not st.session_state.autenticado:
             
             if st.button("Registrarme", use_container_width=True):
                 try:
-                    # También lo registramos con el email ficticio
-                    u_email_reg = f"{new_u.lower().strip()}@stulio.finance"
+                    # 🪄 También sincronizamos el registro
+                    u_email_reg = f"{new_u.lower().strip()}@yahoo.com"
                     supabase.auth.sign_up({"email": u_email_reg, "password": new_p})
                     st.success("✅ ¡Usuario creado! Ya puedes ingresar.")
                     st.balloons()
