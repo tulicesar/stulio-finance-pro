@@ -498,7 +498,7 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>', unsafe_allow_html=True)
 
-# --- 7. GUARDAR EN SUPABASE ---
+# --- 7. GUARDAR EN SUPABASE (VERSIÓN REPARADA CON TOKEN) ---
 st.markdown("<br><br>", unsafe_allow_html=True)
 if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     df_g_limpio = df_ed_g.dropna(subset=["Categoría", "Descripción", "Monto"], how="all")
@@ -509,10 +509,15 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     else:
         try:
             with st.spinner("Sincronizando con Supabase..."):
+                # 🔑 LA LLAVE MAESTRA: Sin esta línea, Supabase da error 42501
+                supabase.postgrest.auth(st.session_state.token) 
+                
+                # 1. Limpiamos datos viejos para evitar duplicados
                 supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
                 supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
                 supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
+                # 2. Insertamos los nuevos Gastos
                 if not df_g_limpio.empty:
                     gastos_db = []
                     for _, row in df_g_limpio.iterrows():
@@ -524,10 +529,12 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                         })
                     supabase.table("gastos").insert(gastos_db).execute()
 
+                # 3. Insertamos Ingresos Adicionales
                 if not df_oi_limpio.empty:
                     otros_db = [{"anio": int(anio_s), "periodo": str(mes_s), "descripcion": str(row["Descripción"]), "monto": float(row["Monto"]), "usuario_id": str(u_id)} for _, row in df_oi_limpio.iterrows()]
                     supabase.table("otros_ingresos").insert(otros_db).execute()
 
+                # 4. Insertamos Ingreso Base
                 supabase.table("ingresos_base").insert({
                     "anio": int(anio_s), "periodo": str(mes_s), "saldo_anterior": float(s_in),
                     "nomina": float(n_in), "otros": float(otr_v), "usuario_id": str(u_id)
@@ -535,7 +542,7 @@ if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
 
                 st.balloons()
                 st.cache_data.clear()
-                st.success("✅ ¡Todo guardado y sincronizado!")
+                st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
                 st.rerun()
         except Exception as e:
-            st.error(f"❌ Error crítico: {e}")
+            st.error(f"❌ Error de Seguridad/Conexión: {e}")
