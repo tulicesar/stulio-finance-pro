@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO POR NOMBRES (ADIÓS NÚMEROS) ---
+# --- 4. ACCESO POR NOMBRES (CON LLAVE DE CONEXIÓN) ---
 
 if 'autenticado' not in st.session_state: 
     st.session_state.autenticado = False
@@ -276,17 +276,19 @@ if not st.session_state.autenticado:
         
         if st.button("Ingresar", use_container_width=True):
             try:
-                # El disfraz de email sigue funcionando para el Login
                 u_limpio = u.lower().strip().replace(" ", "")
                 correos = {"tulicesar": "tulicesar@yahoo.com", "mariajose": "mariaj.torres1215@gmail.com"}
                 u_email = correos.get(u_limpio, f"{u_limpio}@yahoo.com")
                 
-                # Esto verifica que la clave sea correcta
+                # 🚀 Login oficial para obtener la llave (Token)
                 res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
                 
-                # 🔥 LA PARTE CLAVE: Guardamos el nombre (u), NO el ID de números
+                # Guardamos el Token y se lo mostramos a la base de datos
+                st.session_state.token = res.session.access_token
+                supabase.postgrest.auth(st.session_state.token) # <--- ¡ESTA ES LA LÍNEA MÁGICA!
+                
                 st.session_state.autenticado = True
-                st.session_state.usuario_id = u  # Guardará "tulicesar" o "Maria Jose"
+                st.session_state.usuario_id = u  # Guardamos el nombre (tulicesar / Maria Jose)
                 
                 nombres_reales = {"tulicesar": "Tulio Cesar Salcedo Otero", "mariajose": "Maria Jose Torres Posada"}
                 st.session_state.u_nombre_completo = nombres_reales.get(u_limpio, u.upper())
@@ -294,7 +296,7 @@ if not st.session_state.autenticado:
                 st.success(f"✅ ¡Hola, {st.session_state.u_nombre_completo}!")
                 st.rerun()
             except Exception as e:
-                st.error("❌ Usuario o contraseña incorrectos.")
+                st.error(f"❌ Error de acceso: {e}")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
 if st.session_state.autenticado:
