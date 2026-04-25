@@ -11,8 +11,17 @@ import math
 import pytz 
 from supabase import create_client, Client
 
-# --- 1. CONFIGURACIÓN Y ESTILO (GRIS NEUTRO, CHARCOAL SIDEBAR & MULTICOLOR) ---
+# --- 1. CONFIGURACIÓN Y ESTILO (REPARADO) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
+
+# 🔑 INICIALIZACIÓN DE MEMORIA (Session State)
+# Esto evita que la app diga que no encuentra el "token"
+if "autenticado" not in st.session_state:
+    st.session_state.autenticado = False
+if "token" not in st.session_state:
+    st.session_state.token = None
+if "usuario_id" not in st.session_state:
+    st.session_state.usuario_id = None
 
 # Conexión a Supabase
 try:
@@ -28,7 +37,7 @@ LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
-# --- CATEGORÍAS CON VARIEDAD DE COLORES ---
+# --- CATEGORÍAS Y COLORES (Mantenemos tu estilo) ---
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación", 
@@ -47,6 +56,7 @@ COLOR_MAP = {
     "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
 }
 
+# (Tu bloque de st.markdown con CSS sigue aquí igual...)
 st.markdown(f"""
     <style>
     header {{ background-color: rgba(0,0,0,0) !important; }}
