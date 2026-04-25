@@ -17,11 +17,10 @@ if "token" not in st.session_state:
     st.session_state.token = None
 if "usuario_id" not in st.session_state:
     st.session_state.usuario_id = None
-# --- 1. CONFIGURACIÓN Y ESTILO (REPARADO) ---
+# --- 1. CONFIGURACIÓN Y ESTILO (REPARADO Y CON PUENTE) ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 # 🔑 INICIALIZACIÓN DE MEMORIA (Session State)
-# Esto evita que la app diga que no encuentra el "token"
 if "autenticado" not in st.session_state:
     st.session_state.autenticado = False
 if "token" not in st.session_state:
@@ -34,16 +33,22 @@ try:
     url = st.secrets["supabase"]["url"]
     key = st.secrets["supabase"]["key"]
     supabase: Client = create_client(url, key)
+    
+    # 🌉 PUENTE DE SEGURIDAD GLOBAL
+    # Si ya iniciaste sesión antes, le recordamos a Supabase tu identidad en cada recarga
+    if st.session_state.autenticado and st.session_state.token:
+        supabase.postgrest.auth(st.session_state.token)
+        
 except Exception as e:
     st.error(f"Error conectando a Supabase. Revisa los Secrets.")
     st.stop()
 
+# --- CONSTANTES Y ESTILO (Tu código original) ---
 LOGO_LOGIN = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png" 
 LOGO_APP_H = "LOGOapp horizontal.png" 
 USER_DB = "usuarios.json"
 
-# --- CATEGORÍAS Y COLORES (Mantenemos tu estilo) ---
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación", 
@@ -62,14 +67,12 @@ COLOR_MAP = {
     "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
 }
 
-# (Tu bloque de st.markdown con CSS sigue aquí igual...)
 st.markdown(f"""
     <style>
     header {{ background-color: rgba(0,0,0,0) !important; }}
     .stApp {{ background: #495057; color: #ffffff; }}
     [data-testid="stDataEditor"] div {{ font-size: 2.0rem !important; }}
     .stTabs [aria-selected="true"] {{ color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }}
-    
     .card {{
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -78,13 +81,11 @@ st.markdown(f"""
     }}
     .card-label {{ font-size: 0.8rem; color: #495057; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }}
     .card-value {{ font-size: 1.6rem; font-weight: 800; color: #495057; margin: 3px 0; }}
-    
     .legend-bar {{
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px; 
         font-size: 0.9rem; font-weight: bold; color: #1a1d21; 
         display: flex; justify-content: space-between; align-items: center;
     }}
-    
     section[data-testid="stSidebar"] {{ background-color: #212529 !important; border-right: 1px solid #495057; }}
     .stButton>button {{ border-radius: 10px; font-weight: bold; width: 100%; background-color: #fca311; color: #212529; border: none; }}
     h2, h3 {{ color: #fca311 !important; font-weight: bold !important; }}
