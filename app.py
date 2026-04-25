@@ -262,10 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (VERSIÓN SUPABASE OFICIAL) ---
-if 'autenticado' not in st.session_state: 
-    st.session_state.autenticado = False
-
+# --- 4. ACCESO BLINDADO (MODO USUARIO PERSONALIZADO) ---
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
@@ -273,44 +270,41 @@ if not st.session_state.autenticado:
         t_in, t_reg = st.tabs(["🔑 Login", "📝 Registro"])
         
         with t_in:
-            u = st.text_input("Email o Usuario", key="login_u")
+            u = st.text_input("Usuario", key="login_u") # Aquí pones 'tulicesar'
             p = st.text_input("Contraseña", type="password", key="login_p")
+            
             if st.button("Ingresar", use_container_width=True):
                 try:
-                    # 🚀 LOGIN OFICIAL: Esto genera el Token de seguridad
-                    res = supabase.auth.sign_in_with_password({"email": u, "password": p})
+                    # 🪄 EL TRUCO: Convertimos tu usuario en un "Email Ficticio" para Supabase
+                    u_email = f"{u.lower().strip()}@stulio.finance"
                     
-                    # Guardamos los datos en la sesión
+                    res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
+                    
                     st.session_state.autenticado = True
-                    st.session_state.usuario_id = res.user.id  # <--- Este es el ID real (UUID)
-                    st.session_state.u_nombre_completo = u.split('@')[0]
                     st.session_state.token = res.session.access_token
+                    st.session_state.usuario_id = res.user.id
+                    st.session_state.u_nombre_completo = u.upper()
                     
-                    # 🔑 ACTIVAMOS LA PULSERA DE ACCESO
                     supabase.postgrest.auth(st.session_state.token)
-                    
-                    st.success("✅ ¡Ingreso exitoso!")
+                    st.success(f"✅ ¡Hola de nuevo, {u}!")
                     st.rerun()
                 except Exception as e:
-                    st.error("❌ Usuario o contraseña incorrectos. (Asegúrate de usar un Email)")
+                    st.error("❌ Usuario o contraseña incorrectos.")
         
         with t_reg:
-            st.markdown("### Registro de Nuevo Usuario")
-            rn = st.text_input("Nombre Completo", key="reg_n")
-            ru = st.text_input("Email (Obligatorio)", key="reg_u")
-            rp = st.text_input("Contraseña", type="password", key="reg_p")
+            st.markdown("### Crear Nuevo Acceso")
+            new_u = st.text_input("Elige tu Usuario", key="reg_u")
+            new_p = st.text_input("Crea tu Contraseña", type="password", key="reg_p")
             
-            if st.button("Crear Cuenta", use_container_width=True):
-                if not ru or not rp:
-                    st.warning("⚠️ El Email y la Contraseña son obligatorios")
-                else:
-                    try:
-                        # 🚀 REGISTRO OFICIAL EN SUPABASE AUTH
-                        res = supabase.auth.sign_up({"email": ru, "password": rp})
-                        st.success(f"✅ ¡Registrado! Revisa tu email o intenta loguearte.")
-                        st.balloons()
-                    except Exception as e:
-                        st.error(f"❌ Error al registrar: {e}")
+            if st.button("Registrarme", use_container_width=True):
+                try:
+                    # También lo registramos con el email ficticio
+                    u_email_reg = f"{new_u.lower().strip()}@stulio.finance"
+                    supabase.auth.sign_up({"email": u_email_reg, "password": new_p})
+                    st.success("✅ ¡Usuario creado! Ya puedes ingresar.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"❌ Error: {e}")
     st.stop()
 # --- 5. LÓGICA SIDEBAR (VERSIÓN SEGURA Y BLINDADA) ---
 if st.session_state.autenticado:
