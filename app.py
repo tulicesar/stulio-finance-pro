@@ -262,7 +262,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             c.setFont("Helvetica", 6); c.drawCentredString(x_bar + 17, y + h_bar + 5, f"${val:,.0f}")
             x_bar += 55
     c.showPage(); c.save(); buf.seek(0); return buf
-# --- 4. ACCESO BLINDADO (VERSIÓN CON NOMBRES COMPLETOS) ---
+# --- 4. ACCESO BLINDADO (VERSIÓN IDENTIDAD COMPLETA) ---
 
 if 'autenticado' not in st.session_state: 
     st.session_state.autenticado = False
@@ -279,7 +279,7 @@ if not st.session_state.autenticado:
             
             if st.button("Ingresar", use_container_width=True):
                 try:
-                    # 🪄 El disfraz de email
+                    # 🪄 El disfraz de email que configuramos en Supabase
                     u_email = f"{u.lower().strip()}@yahoo.com"
                     res = supabase.auth.sign_in_with_password({"email": u_email, "password": p})
                     
@@ -288,25 +288,27 @@ if not st.session_state.autenticado:
                     st.session_state.token = res.session.access_token
                     
                     # 🏷️ MAPEO DE NOMBRES PARA EL TABLERO
-                    nombres = {
+                    # Aquí definimos cómo quieres que se vea cada usuario
+                    nombres_mapeo = {
                         "tulicesar": "Tulio Cesar Salcedo Otero",
-                        "mariajose": "Maria Jose" # Puedes poner su nombre completo aquí
+                        "mariajose": "Maria Jose"
                     }
-                    # Si el usuario está en la lista, usa el nombre completo, si no, usa el usuario en mayúsculas
-                    st.session_state.u_nombre_completo = nombres.get(u.lower().strip(), u.upper())
                     
-                    # 🔑 ACTIVAMOS LA SEGURIDAD RLS
+                    user_key = u.lower().strip()
+                    st.session_state.u_nombre_completo = nombres_mapeo.get(user_key, u.upper())
+                    
+                    # 🔑 ACTIVAMOS LA SEGURIDAD PROFESIONAL
                     supabase.postgrest.auth(st.session_state.token)
                     
-                    st.success(f"✅ ¡Bienvenido, {st.session_state.u_nombre_completo}!")
+                    st.success(f"✅ Bienvenido, {st.session_state.u_nombre_completo}")
                     st.rerun()
                 except Exception as e:
                     st.error("❌ Usuario o contraseña incorrectos.")
         
         with t_reg:
             st.markdown("### Registro de Nuevo Usuario")
-            ru = st.text_input("Elige tu Usuario", key="reg_u")
-            rp = st.text_input("Crea tu Contraseña", type="password", key="reg_p")
+            ru = st.text_input("Usuario (ej: mariajose)", key="reg_u")
+            rp = st.text_input("Contraseña", type="password", key="reg_p")
             
             if st.button("Crear Cuenta", use_container_width=True):
                 if not ru or not rp:
@@ -315,7 +317,7 @@ if not st.session_state.autenticado:
                     try:
                         u_email_reg = f"{ru.lower().strip()}@yahoo.com"
                         supabase.auth.sign_up({"email": u_email_reg, "password": rp})
-                        st.success(f"✅ Usuario '{ru}' creado. ¡Ya puedes ingresar!")
+                        st.success(f"✅ Usuario '{ru}' creado. Ya puede ingresar.")
                         st.balloons()
                     except Exception as e:
                         st.error(f"❌ Error: {e}")
