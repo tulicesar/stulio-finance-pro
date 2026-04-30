@@ -65,13 +65,12 @@ st.markdown("""
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #495057; color: #ffffff; }
 
-    /* ── TABLAS más legibles ── */
+    /* ── TABLAS — filas alternas forzadas ── */
     [data-testid="stDataEditor"] { border-radius: 10px; overflow: hidden; }
     [data-testid="stDataEditor"] div { font-size: 0.85rem !important; }
-    [data-testid="stDataEditor"] [data-testid="glideDataEditor"] {
-        background-color: #ffffff !important;
-        color: #212529 !important;
-    }
+    [data-testid="stDataEditor"] tr:nth-child(even) td { background-color: #3a3f44 !important; }
+    [data-testid="stDataEditor"] tr:nth-child(odd)  td { background-color: #2d3238 !important; }
+    [data-testid="stDataEditor"] th { background-color: #14213d !important; color: #fca311 !important; font-weight: 700 !important; }
 
     /* ── TABS ── */
     .stTabs [aria-selected="true"] { color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }
@@ -256,7 +255,7 @@ def cargar_bd(u_id, token):
         df_oi= pd.DataFrame(r_oi.data)  if r_oi.data else pd.DataFrame(columns=["anio","periodo","descripcion","monto","usuario_id"])
 
         # Renombrar columnas para la interfaz
-        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría","descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia","pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario"})
+        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría","descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia","pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario","fecha_pago":"Fecha Pago"})
         df_i  = df_i.rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"})
         df_oi = df_oi.rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripción","monto":"Monto","usuario_id":"Usuario"})
 
@@ -1000,19 +999,35 @@ if df_mes_g.empty:
             activos     = foto[foto["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente"])
-                df_mes_g["Pagado"] = False
+                df_mes_g["Pagado"]     = False
+                df_mes_g["Fecha Pago"] = None
+                df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 # Tabla de gastos
 st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span></div>', unsafe_allow_html=True)
+
+# ✅ Ordenar A-Z por Categoría y Descripción
+if not df_mes_g.empty:
+    df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
+
+# ✅ Agregar columna Fecha Pago si no existe
+if "Fecha Pago" not in df_mes_g.columns:
+    df_mes_g["Fecha Pago"] = None
+
+# ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
+descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
+
 config_g = {
     "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+    "Descripción":          st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
     "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f"),
     "Valor Referencia":     st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
     "Pagado":               st.column_config.CheckboxColumn("Pagado", default=False),
-    "Movimiento Recurrente":st.column_config.CheckboxColumn("Recurrente", default=False)
+    "Movimiento Recurrente":st.column_config.CheckboxColumn("Recurrente", default=False),
+    "Fecha Pago":           st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
 }
 df_ed_g = st.data_editor(
-    df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente"]).reset_index(drop=True),
+    df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
     use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
 )
 
@@ -1170,13 +1185,25 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
 
                 # Insertar gastos
                 if not df_g_limpio.empty:
-                    gastos_db = [{
-                        "anio": int(anio_s), "periodo": str(mes_s),
-                        "categoria": str(row["Categoría"]), "descripcion": str(row["Descripción"]),
-                        "monto": float(row["Monto"]), "valor_referencia": float(row["Valor Referencia"]),
-                        "pagado": bool(row["Pagado"]), "recurrente": bool(row["Movimiento Recurrente"]),
-                        "usuario_id": str(u_id)
-                    } for _, row in df_g_limpio.iterrows()]
+                    gastos_db = []
+                    for _, row in df_g_limpio.iterrows():
+                        # Fecha pago: solo si está marcado como pagado
+                        fecha_p = None
+                        if bool(row["Pagado"]):
+                            fp = row.get("Fecha Pago", None)
+                            if fp is not None and str(fp) not in ["None","NaT",""]:
+                                try:
+                                    fecha_p = str(fp)[:10]
+                                except:
+                                    fecha_p = None
+                        gastos_db.append({
+                            "anio": int(anio_s), "periodo": str(mes_s),
+                            "categoria": str(row["Categoría"]), "descripcion": str(row["Descripción"]),
+                            "monto": float(row["Monto"]), "valor_referencia": float(row["Valor Referencia"]),
+                            "pagado": bool(row["Pagado"]), "recurrente": bool(row["Movimiento Recurrente"]),
+                            "fecha_pago": fecha_p,
+                            "usuario_id": str(u_id)
+                        })
                     supabase.table("gastos").insert(gastos_db).execute()
 
                 # Insertar otros ingresos
