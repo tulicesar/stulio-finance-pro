@@ -478,7 +478,15 @@ with inf1:
     t_df = df_ed_g.copy()
     t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not t_df.empty and t_df['V'].sum() > 0:
+        total_v = t_df['V'].sum()
+        # ✅ MEJORA 1: Ocultamos etiquetas de categorías menores al 3% para evitar amontonamiento
+        t_df['pct'] = t_df['V'] / total_v * 100
+        t_df['label'] = t_df.apply(lambda r: r['Categoría'] if r['pct'] >= 3 else '', axis=1)
         fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color='Categoría', color_discrete_map=COLOR_MAP)
+        fig1.update_traces(
+            textinfo='none',          # Sin texto dentro de la dona
+            hovertemplate='<b>%{label}</b><br>$ %{value:,.0f}<br>%{percent}<extra></extra>'
+        )
         fig1.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
         st.plotly_chart(fig1, use_container_width=True)
         res = t_df.groupby("Categoría")['V'].sum().reset_index()
@@ -489,27 +497,61 @@ with inf1:
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
     v_cl = max(0, min(ahorro_p, 100))
+    META = 20  # Meta recomendada de ahorro
+
+    # ✅ MEJORA 2: Gauge con zona de meta y mensaje contextual
     fig2 = go.Figure(go.Indicator(
-        mode="gauge+number", value=v_cl,
+        mode="gauge+number",
+        value=v_cl,
         number={'suffix': "%", 'font': {'color': '#fca311', 'size': 50}, 'valueformat': '.0f'},
-        gauge={'axis': {'range': [0, 100]}, 'bar': {'color': "#fca311"}, 'bgcolor': "white"}
+        gauge={
+            'axis': {'range': [0, 100]},
+            'bar': {'color': "#fca311"},
+            'bgcolor': "white",
+            'steps': [
+                {'range': [0, META],  'color': '#f8d7da'},   # Zona roja: bajo la meta
+                {'range': [META, 100],'color': '#d4edda'},   # Zona verde: sobre la meta
+            ],
+            'threshold': {
+                'line': {'color': "#2ecc71", 'width': 3},
+                'thickness': 0.85,
+                'value': META
+            }
+        }
     ))
     fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
     st.plotly_chart(fig2, use_container_width=True)
 
+    # Mensaje contextual debajo del gauge
+    if v_cl >= META:
+        st.markdown(f'<div style="text-align:center;color:#2ecc71;font-weight:bold;font-size:0.85rem">✅ ¡Meta alcanzada! Ahorraste {v_cl:.0f}% (Meta: {META}%)</div>', unsafe_allow_html=True)
+    else:
+        falta = META - v_cl
+        st.markdown(f'<div style="text-align:center;color:#e74c3c;font-weight:bold;font-size:0.85rem">⚠️ Te falta {falta:.0f}% para la meta recomendada del {META}%</div>', unsafe_allow_html=True)
+
 with inf3:
     st.markdown("#### Estado Real del Dinero")
+
+    # ✅ MEJORA 3: Dona con saldo a favor en el centro en lugar de solo "Estado"
+    centro_valor = format_moneda(bf)
+    centro_label = "FAVOR" if bf >= 0 else "DÉFICIT"
+    centro_color = "#fca311" if bf >= 0 else "#e74c3c"
+
     fig3 = go.Figure(data=[go.Pie(
         labels=['Pagado','Pendiente','Ahorro'],
         values=[vp, vpy, bf if bf > 0 else 0],
         hole=.7,
         marker_colors=['#2ecc71','#e74c3c','#fca311'],
-        textinfo='percent'
+        textinfo='none',
+        hovertemplate='<b>%{label}</b><br>$ %{value:,.0f}<br>%{percent}<extra></extra>'
     )])
     fig3.update_layout(
         showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250,
         margin=dict(t=0,b=0,l=0,r=0),
-        annotations=[dict(text='Estado', x=0.5, y=0.5, font_size=20, showarrow=False, font_color="#fca311")]
+        annotations=[
+            dict(text=centro_label,  x=0.5, y=0.58, font_size=13, showarrow=False, font_color="#495057", font=dict(family="Arial Black")),
+            dict(text=centro_valor,  x=0.5, y=0.42, font_size=15, showarrow=False, font_color=centro_color, font=dict(family="Arial Black")),
+        ]
     )
     st.plotly_chart(fig3, use_container_width=True)
     st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>',    unsafe_allow_html=True)
