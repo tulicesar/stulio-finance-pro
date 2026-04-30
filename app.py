@@ -1123,10 +1123,18 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False),
         "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
     }
-    # Preparar df base — aplicar copia pendiente desde session_state
+    # Preparar df base
     df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
 
-    # Aplicar copia guardada antes de mostrar el editor
+    # ✅ Restaurar TODO el estado del editor antes del rerun (preserva Pagado, etc.)
+    if st.session_state.get("editor_estado_previo") is not None:
+        estado = st.session_state["editor_estado_previo"]
+        for col in ["Monto","Pagado","Movimiento Recurrente","Valor Referencia","Es Proyectado","Presupuesto Asociado","Fecha Pago"]:
+            if col in estado.columns and col in df_base.columns:
+                df_base[col] = estado[col].values if len(estado) == len(df_base) else df_base[col]
+        del st.session_state["editor_estado_previo"]
+
+    # Aplicar copia Ref → Monto pendiente
     if st.session_state.get("aplicar_copia_ref"):
         for idx, val_ref in st.session_state["aplicar_copia_ref"].items():
             if idx < len(df_base):
@@ -1139,7 +1147,7 @@ if True:  # bloque siempre activo (reemplaza el expander)
         use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
     )
 
-    # Detectar 📋 marcado → guardar en session_state y rerun para aplicar
+    # Detectar 📋 marcado → preservar estado actual + aplicar copia en siguiente render
     if "📋" in df_ed_g.columns:
         mask_copy = df_ed_g["📋"] == True
         if mask_copy.any():
@@ -1147,7 +1155,9 @@ if True:  # bloque siempre activo (reemplaza el expander)
                      for idx in df_ed_g[mask_copy].index
                      if float(df_ed_g.loc[idx,"Valor Referencia"] or 0) > 0}
             if copia:
-                st.session_state["aplicar_copia_ref"] = copia
+                # ✅ Guardamos TODO el estado actual del editor para restaurarlo después del rerun
+                st.session_state["editor_estado_previo"] = df_ed_g.copy()
+                st.session_state["aplicar_copia_ref"]    = copia
                 st.rerun()
 
 # Tabla de ingresos adicionales
