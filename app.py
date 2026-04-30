@@ -1173,10 +1173,15 @@ st.markdown('<div class="section-header"><span>📊 Presupuesto vs Ejecución po
 df_proyectados = df_ed_g[df_ed_g["Es Proyectado"] == True].copy() if "Es Proyectado" in df_ed_g.columns else pd.DataFrame()
 
 # Gastos reales asociados a cada proyectado
-df_asociados = df_ed_g[
-    df_ed_g.get("Presupuesto Asociado", pd.Series(dtype=str)).notna() &
-    (df_ed_g.get("Presupuesto Asociado", pd.Series(dtype=str)) != "")
-].copy() if "Presupuesto Asociado" in df_ed_g.columns else pd.DataFrame()
+# ✅ Gastos reales asociados a un ítem proyectado
+if "Presupuesto Asociado" in df_ed_g.columns:
+    df_asociados = df_ed_g[
+        df_ed_g["Presupuesto Asociado"].notna() &
+        (df_ed_g["Presupuesto Asociado"].astype(str).str.strip() != "") &
+        (df_ed_g["Presupuesto Asociado"].astype(str) != "None")
+    ].copy()
+else:
+    df_asociados = pd.DataFrame()
 
 # Para la vista por categoría: presupuesto = suma Valor Referencia de proyectados
 # ✅ Presupuesto = suma de TODOS los Valor Referencia por categoría
