@@ -1135,19 +1135,19 @@ if True:  # bloque siempre activo (reemplaza el expander)
     items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
 
     config_g = {
-        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-        "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-        "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f"),
-        "Valor Referencia":      st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
-        "📋":                    st.column_config.CheckboxColumn("📋 Ref", default=False,
-                                     help="Activa para copiar el Valor Referencia al Monto"),
-        "Es Proyectado":         st.column_config.CheckboxColumn("💰 Proyectado", default=False,
-                                     help="Marca si este ítem es un presupuesto proyectado (ej: GASOLINA PROYECTADA)"),
+        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="small"),
+        "Descripción":           st.column_config.TextColumn("Descripción", width="medium"),
+        "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
+        "Valor Referencia":      st.column_config.NumberColumn("Val.Ref", format="$ %,.0f", width="small"),
+        "📋":                    st.column_config.CheckboxColumn("📋", default=False, width="small",
+                                     help="Copia Valor Referencia → Monto"),
+        "Es Proyectado":         st.column_config.CheckboxColumn("Proy.", default=False, width="small",
+                                     help="Ítem proyectado"),
         "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="medium",
-                                     help="Selecciona el ítem proyectado al que pertenece este gasto real"),
-        "Pagado":                st.column_config.CheckboxColumn("Pagado", default=False),
-        "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False),
-        "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
+                                     help="Ítem proyectado al que pertenece este gasto"),
+        "Pagado":                st.column_config.CheckboxColumn("✅", default=False, width="small"),
+        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁", default=False, width="small"),
+        "Fecha Pago":            st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
     }
     # Preparar df base — sin rerun, sin session_state complejo
     df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
