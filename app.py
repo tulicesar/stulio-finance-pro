@@ -1264,7 +1264,6 @@ if not df_proyectados.empty:
         if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
             match = df_asociados[df_asociados["Presupuesto Asociado"].astype(str).str.strip() == nombre_proy.strip()]
             gastos_item = float(pd.to_numeric(match["Monto"], errors="coerce").fillna(0).sum())
-            st.write(f"DEBUG {nombre_proy}: match={len(match)} filas, gastos={gastos_item}, presup={presup_item}")
         else:
             gastos_item = 0.0
 
