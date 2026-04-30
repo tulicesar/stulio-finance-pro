@@ -1129,11 +1129,13 @@ if True:  # bloque siempre activo (reemplaza el expander)
     )
 
     # ✅ Botón para aplicar la copia Ref → Monto en filas marcadas
-    # ✅ Copiar automáticamente Ref → Monto en filas donde "📋" está marcado
+    # ✅ Copiar Ref → Monto en filas marcadas con 📋
     if "📋" in df_ed_g.columns:
         mask_copy = df_ed_g["📋"] == True
         if mask_copy.any():
             df_ed_g.loc[mask_copy, "Monto"] = df_ed_g.loc[mask_copy, "Valor Referencia"]
+            n_cop = int(mask_copy.sum())
+            st.info(f"📋 Se copió Valor Referencia → Monto en {n_cop} fila(s). Presiona **GUARDAR** para confirmar.", icon="💡")
 
 # Tabla de ingresos adicionales
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
