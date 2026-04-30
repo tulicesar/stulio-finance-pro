@@ -1135,7 +1135,7 @@ if True:  # bloque siempre activo (reemplaza el expander)
     items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
 
     config_g = {
-        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="small"),
+        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
         "Descripción":           st.column_config.TextColumn("Descripción", width="medium"),
         "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
         "Valor Referencia":      st.column_config.NumberColumn("Val.Ref", format="$ %,.0f", width="small"),
@@ -1143,7 +1143,7 @@ if True:  # bloque siempre activo (reemplaza el expander)
                                      help="Copia Valor Referencia → Monto"),
         "Es Proyectado":         st.column_config.CheckboxColumn("Proy.", default=False, width="small",
                                      help="Ítem proyectado"),
-        "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="medium",
+        "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="small",
                                      help="Ítem proyectado al que pertenece este gasto"),
         "Pagado":                st.column_config.CheckboxColumn("✅", default=False, width="small"),
         "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁", default=False, width="small"),
