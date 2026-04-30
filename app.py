@@ -117,50 +117,76 @@ st.markdown("""
     /* ── SIDEBAR ── */
     section[data-testid="stSidebar"] { background-color: #212529 !important; border-right: 1px solid #495057; }
 
-    /* ── BOTONES — gradiente naranja a dorado ── */
-    .stButton>button {
-        border-radius: 10px;
-        font-weight: 700;
-        font-size: 0.88rem;
-        letter-spacing: 0.04em;
-        width: 100%;
-        border: none;
-        background: linear-gradient(135deg, #fca311 0%, #d4910a 60%, #b87d00 100%);
+    /* ── BOTÓN CERRAR SIDEBAR MÓVIL ── */
+    #close-sidebar-btn {
+        display: none;
+        position: fixed;
+        bottom: 24px;
+        left: 16px;
+        z-index: 99999;
+        background: #fca311;
         color: #14213d;
-        box-shadow: 0 4px 14px rgba(252,163,17,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
-        transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+        border: none;
+        border-radius: 50px;
+        padding: 12px 20px;
+        font-weight: 800;
+        font-size: 0.85rem;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
+        box-shadow: 0 4px 0 #9a6c00;
+        cursor: pointer;
     }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 22px rgba(252,163,17,0.55), inset 0 1px 0 rgba(255,255,255,0.2);
-        filter: brightness(1.08);
-    }
-    .stButton>button:active {
-        transform: translateY(0px);
-        box-shadow: 0 2px 8px rgba(252,163,17,0.3);
-        filter: brightness(0.95);
+    @media (max-width: 768px) {
+        #close-sidebar-btn { display: block; }
     }
 
-    /* ── BOTÓN GUARDAR — más grande y llamativo ── */
-    .save-btn button {
-        background: linear-gradient(135deg, #fca311 0%, #d4910a 50%, #b87d00 100%) !important;
-        color: #14213d !important;
-        font-size: 1.05rem !important;
-        font-weight: 800 !important;
-        letter-spacing: 0.08em !important;
-        padding: 16px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 8px 28px rgba(252,163,17,0.55),
-                    inset 0 1px 0 rgba(255,255,255,0.2) !important;
+    /* ── BOTONES — Pill con sombra sólida (Opción D) ── */
+    .stButton>button {
+        border-radius: 50px !important;
+        font-weight: 700 !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.05em !important;
         text-transform: uppercase !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
+        width: 100% !important;
+        border: none !important;
+        background: #fca311 !important;
+        color: #14213d !important;
+        box-shadow: 0 4px 0 #9a6c00 !important;
+        transition: transform 0.1s ease, box-shadow 0.1s ease !important;
+        padding: 10px 20px !important;
+    }
+    .stButton>button:hover {
+        filter: brightness(1.06) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 5px 0 #9a6c00 !important;
+    }
+    .stButton>button:active {
+        transform: translateY(3px) !important;
+        box-shadow: none !important;
+    }
+
+    /* ── BOTÓN GUARDAR — Pill grande ── */
+    .save-btn button {
+        border-radius: 50px !important;
+        font-weight: 800 !important;
+        font-size: 1.05rem !important;
+        letter-spacing: 0.08em !important;
+        text-transform: uppercase !important;
+        background: #fca311 !important;
+        color: #14213d !important;
+        border: none !important;
+        box-shadow: 0 6px 0 #9a6c00 !important;
+        padding: 16px !important;
+        transition: transform 0.1s ease, box-shadow 0.1s ease !important;
     }
     .save-btn button:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0 12px 36px rgba(252,163,17,0.65),
-                    inset 0 1px 0 rgba(255,255,255,0.25) !important;
-        filter: brightness(1.1) !important;
+        filter: brightness(1.06) !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 7px 0 #9a6c00 !important;
+    }
+    .save-btn button:active {
+        transform: translateY(5px) !important;
+        box-shadow: none !important;
     }
 
     /* ── JERARQUÍA DE TÍTULOS ── */
@@ -173,6 +199,32 @@ st.markdown("""
     hr { border-color: rgba(252,163,17,0.3) !important; }
     </style>
     """, unsafe_allow_html=True)
+
+# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL ---
+st.markdown("""
+<button id="close-sidebar-btn" onclick="closeSidebar()">✕ Cerrar menú</button>
+<script>
+function closeSidebar() {
+    // Busca el botón de colapsar el sidebar de Streamlit y lo clickea
+    var btns = window.parent.document.querySelectorAll('[data-testid="collapsedControl"], button[kind="header"]');
+    btns.forEach(function(btn){ btn.click(); });
+    // Alternativa: busca el botón «
+    var chevron = window.parent.document.querySelector('button[aria-label="Close sidebar"], [data-testid="baseButton-header"]');
+    if (chevron) chevron.click();
+}
+// Mostrar solo cuando el sidebar está abierto
+var observer = new MutationObserver(function() {
+    var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+    var btn = document.getElementById("close-sidebar-btn");
+    if (sidebar && btn) {
+        var isOpen = window.parent.innerWidth <= 768 && 
+                     sidebar.getBoundingClientRect().left >= 0;
+        btn.style.display = isOpen ? "block" : "none";
+    }
+});
+observer.observe(window.parent.document.body, { attributes: true, subtree: true, attributeFilter: ["class", "style"] });
+</script>
+""", unsafe_allow_html=True)
 
 # --- 6. FUNCIONES DE FORMATO ---
 def format_moneda(valor):
