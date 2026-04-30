@@ -1091,8 +1091,9 @@ def render_tabla_gastos(df):
 # Mostrar tabla visual
 render_tabla_gastos(df_mes_g)
 
-# Editor oculto bajo un expander para agregar/editar
-with st.expander("✏️ Editar / Agregar movimientos"):
+# Editor: abierto por defecto si el mes está vacío, colapsado si ya tiene datos
+editor_abierto = df_mes_g.empty
+with st.expander("✏️ Editar / Agregar movimientos — los cambios se reflejan al GUARDAR", expanded=editor_abierto):
     config_g = {
         "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
         "Descripción":          st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
