@@ -1129,6 +1129,68 @@ placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", 
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
+# ══════════════════════════════════════════════
+# PRESUPUESTO VS EJECUCIÓN POR CATEGORÍA
+# ══════════════════════════════════════════════
+st.markdown('<div class="section-header"><span>📊 Presupuesto vs Ejecución por Categoría</span></div>', unsafe_allow_html=True)
+
+cats_con_ref  = df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
+cats_ejecutado= df_ed_g.groupby("Categoría")["Monto"].sum()
+todas_cats    = sorted(set(cats_con_ref.index.tolist() + cats_ejecutado.index.tolist()))
+
+if todas_cats:
+    tarjetas_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">'
+
+    for cat in todas_cats:
+        presup    = float(cats_con_ref.get(cat, 0))
+        ejecutado = float(cats_ejecutado.get(cat, 0))
+        color     = COLOR_MAP.get(cat, "#aaaaaa")
+
+        if presup > 0:
+            disponible = presup - ejecutado
+            pct        = min((ejecutado / presup * 100), 100) if presup > 0 else 0
+            excedido   = ejecutado > presup
+            bar_color  = "#e74c3c" if excedido else color
+            disp_color = "#e74c3c" if excedido else "#2ecc71"
+            disp_label = "Excedido"  if excedido else "Disponible"
+            disp_val   = abs(disponible)
+            pct_txt    = f"⚠️ {ejecutado/presup*100:.0f}% — Excedido" if excedido else f"{pct:.0f}% usado"
+            pct_color  = "#e74c3c" if excedido else color
+            tarjetas_html += f"""
+            <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:8px">{cat}</div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ {presup:,.0f}</div></div>
+                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#ffffff">$ {ejecutado:,.0f}</div></div>
+                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">{disp_label}</div><div style="font-size:13px;font-weight:700;color:{disp_color}">$ {disp_val:,.0f}</div></div>
+              </div>
+              <div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden;margin-top:4px">
+                <div style="width:{pct:.0f}%;height:8px;border-radius:20px;background:{bar_color}"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px">
+                <span style="font-size:10px;color:#adb5bd">0%</span>
+                <span style="font-size:10px;font-weight:700;color:{pct_color}">{pct_txt}</span>
+                <span style="font-size:10px;color:#adb5bd">100%</span>
+              </div>
+            </div>"""
+        else:
+            tarjetas_html += f"""
+            <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
+              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:8px">{cat}</div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:12px;font-weight:700;color:#6c757d">Sin definir</div></div>
+                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#ffffff">$ {ejecutado:,.0f}</div></div>
+                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Disponible</div><div style="font-size:12px;font-weight:700;color:#6c757d">—</div></div>
+              </div>
+              <div style="background:#2d3238;border-radius:20px;height:8px;margin-top:4px"></div>
+              <div style="text-align:center;margin-top:4px"><span style="font-size:10px;color:#6c757d">Sin presupuesto asignado</span></div>
+            </div>"""
+
+    tarjetas_html += '</div>'
+    st.markdown(tarjetas_html, unsafe_allow_html=True)
+else:
+    st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
+
 # KPIs
 st.divider()
 c_kpi = st.columns(5)
