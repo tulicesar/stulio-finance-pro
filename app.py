@@ -146,6 +146,7 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     from reportlab.pdfgen import canvas
     from reportlab.lib import colors
     from reportlab.lib.colors import HexColor
+    import math
 
     nombre_usuario = st.session_state.get("u_nombre_completo", u_id)
     buf = BytesIO()
@@ -155,8 +156,15 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     C_NARANJA= HexColor("#fca311")
     C_GRIS   = HexColor("#e5e5e5")
     C_NEGRO  = HexColor("#000000")
+    C_VERDE  = HexColor("#2ecc71")
+    C_ROJO   = HexColor("#e74c3c")
+    C_OSCURO = HexColor("#2d3238")
 
     total_periodo_nomina = total_periodo_otros = total_periodo_gastos = 0
+
+    # Guardamos datos del último mes para la página 2
+    ultimo_g_m  = None
+    ultimo_it   = ultimo_vp = ultimo_vpy = ultimo_bf = ultimo_ahorro_p = 0
 
     def head(canvas_obj, t, a, user_name):
         canvas_obj.setFillColor(colors.white)
@@ -185,10 +193,14 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         nom     = float(i_m["Nomina"].iloc[0])        if not i_m.empty else 0
         otr_sum = float(oi_m["Monto"].sum())          if not oi_m.empty else 0
 
-        it, vp, vpy, _, bf, _ = calcular_metricas(g_m, nom, otr_sum, s_ant)
+        it, vp, vpy, _, bf, ahorro_p = calcular_metricas(g_m, nom, otr_sum, s_ant)
         total_periodo_nomina  += nom
         total_periodo_otros   += otr_sum
         total_periodo_gastos  += (vp + vpy)
+
+        # Guardamos el último mes para página 2
+        ultimo_g_m = g_m; ultimo_it = it; ultimo_vp = vp
+        ultimo_vpy = vpy; ultimo_bf = bf; ultimo_ahorro_p = ahorro_p
 
         if y < 250: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
 
@@ -216,16 +228,27 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         else:
             y -= 15
 
+        # ✅ MEJORA: $ en montos de gastos + total al pie
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 9); c.drawString(60, y, "RELACIÓN DE GASTOS"); y -= 15
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(480, y, "MONTO"); c.drawRightString(540, y, "PAGADO"); y -= 12
+        c.drawString(60, y, "CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(490, y, "MONTO"); c.drawRightString(545, y, "PAGADO"); y -= 12
+        c.setStrokeColor(C_GRIS); c.setLineWidth(0.5); c.line(60, y+8, 545, y+8)
         c.setFont("Helvetica", 8); c.setFillColor(C_NEGRO)
+        total_gastos_mes = 0
         for _, row in g_m.iterrows():
-            if y < 60: c.showPage(); y = head(c, titulo, anio, nombre_usuario); c.setFont("Helvetica", 8)
+            if y < 80: c.showPage(); y = head(c, titulo, anio, nombre_usuario); c.setFont("Helvetica", 8)
+            monto_fila = float(row['Monto'])
+            total_gastos_mes += monto_fila
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65])
-            c.drawRightString(480, y, f"{row['Monto']:,.0f}")
-            c.drawRightString(540, y, "SI" if row["Pagado"] else "NO"); y -= 12
-        y -= 20
+            c.drawRightString(490, y, f"$ {monto_fila:,.0f}")
+            c.drawRightString(545, y, "SI" if row["Pagado"] else "NO"); y -= 12
+
+        # ✅ TOTAL AL PIE DE LA TABLA
+        c.setStrokeColor(C_AZUL); c.setLineWidth(1); c.line(60, y+8, 545, y+8)
+        c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 9)
+        c.drawString(60, y-2, "TOTAL GASTOS DEL MES:")
+        c.drawRightString(490, y-2, f"$ {total_gastos_mes:,.0f}")
+        y -= 25
 
     if len(meses) > 1:
         if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
@@ -234,8 +257,8 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.rect(50, y-100, 510, 110, fill=1, stroke=1)
         c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 12)
         c.drawString(70, y-5, f"RESUMEN: {titulo.upper()}")
-        ing_totales        = total_periodo_nomina + total_periodo_otros
-        saldo_final_periodo= ing_totales - total_periodo_gastos
+        ing_totales         = total_periodo_nomina + total_periodo_otros
+        saldo_final_periodo = ing_totales - total_periodo_gastos
         c.setFont("Helvetica", 10)
         c.drawString(70, y-25, f"Total Nómina Percibida:       $ {total_periodo_nomina:,.0f}")
         c.drawString(70, y-40, f"Total Ingresos Adicionales:   $ {total_periodo_otros:,.0f}")
@@ -243,12 +266,154 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         c.setFont("Helvetica-Bold", 12)
         c.drawString(70, y-85, f"SALDO TOTAL AL CIERRE: $ {abs(saldo_final_periodo):,.0f}"); y -= 150
 
-    # Tendencia histórica
-    if y < 150: c.showPage(); y = head(c, titulo, anio, nombre_usuario)
-    y -= 30
-    c.setStrokeColor(C_AZUL); c.setLineWidth(1); c.line(50, y, 560, y); y -= 20
-    c.setFont("Helvetica-Bold", 10); c.setFillColor(C_AZUL)
-    c.drawString(50, y, "TENDENCIA DE AHORRO (Últimos 6 meses)"); y -= 70
+    # ============================================================
+    # PÁGINA 2: ANÁLISIS VISUAL
+    # ============================================================
+    c.showPage()
+    y = head(c, titulo, anio, nombre_usuario)
+
+    # --- TÍTULO PÁGINA 2 ---
+    c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 13)
+    c.drawString(50, y, "ANÁLISIS VISUAL DEL MES"); y -= 8
+    c.setStrokeColor(C_NARANJA); c.setLineWidth(2); c.line(50, y, 560, y); y -= 25
+
+    # ============================================================
+    # SECCIÓN 1: BARRAS DE CATEGORÍAS (columna izquierda)
+    # ============================================================
+    if ultimo_g_m is not None and not ultimo_g_m.empty:
+        t_pdf = ultimo_g_m.copy()
+        t_pdf['V'] = t_pdf.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
+        total_v = t_pdf['V'].sum()
+
+        if total_v > 0:
+            res_cat = t_pdf.groupby("Categoría")['V'].sum().reset_index()
+            res_cat['pct'] = res_cat['V'] / total_v * 100
+            res_cat = res_cat.sort_values('V', ascending=False)
+
+            c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 10)
+            c.drawString(50, y, "DESGLOSE POR CATEGORÍA"); y -= 18
+
+            BAR_X     = 50
+            BAR_W     = 300   # ancho máximo de la barra
+            ROW_H     = 18    # altura de cada fila
+            y_cat     = y
+
+            for _, r in res_cat.iterrows():
+                if y_cat < 180: break   # dejamos espacio para el gauge
+                color_hex = COLOR_MAP.get(r['Categoría'], "#6c757d")
+                pct       = r['pct']
+                monto     = r['V']
+                bar_len   = (pct / 100) * BAR_W
+
+                # Fondo gris
+                c.setFillColor(C_OSCURO)
+                c.roundRect(BAR_X, y_cat - ROW_H + 4, BAR_W, ROW_H - 6, 3, fill=1, stroke=0)
+                # Barra de color
+                c.setFillColor(HexColor(color_hex))
+                if bar_len > 3:
+                    c.roundRect(BAR_X, y_cat - ROW_H + 4, bar_len, ROW_H - 6, 3, fill=1, stroke=0)
+                # Texto categoría
+                c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7)
+                c.drawString(BAR_X + 4, y_cat - 8, r['Categoría'][:22])
+                # Monto y porcentaje a la derecha
+                c.setFont("Helvetica", 7)
+                c.drawString(BAR_X + BAR_W + 5, y_cat - 8, f"$ {monto:,.0f}  {pct:.1f}%")
+                y_cat -= ROW_H
+
+    # ============================================================
+    # SECCIÓN 2: GAUGE DE EFICIENCIA (columna derecha, parte superior)
+    # ============================================================
+    META    = 20
+    v_cl    = max(0, min(ultimo_ahorro_p, 100))
+    CX      = 460   # centro X del gauge
+    CY      = y - 60  # centro Y
+    R_OUT   = 60    # radio exterior
+    R_IN    = 42    # radio interior (hueco)
+
+    c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(CX, CY + R_OUT + 15, "EFICIENCIA DE AHORRO")
+
+    # Dibujamos el semicírculo del gauge con arcos
+    import math
+    def draw_arc_filled(canvas_obj, cx, cy, r_out, r_in, angle_start, angle_end, fill_color):
+        """Dibuja un arco relleno como segmento de anillo usando líneas."""
+        steps = max(int(abs(angle_end - angle_start) / 2), 1)
+        points_out = []
+        points_in  = []
+        for i in range(steps + 1):
+            angle = math.radians(angle_start + (angle_end - angle_start) * i / steps)
+            points_out.append((cx + r_out * math.cos(angle), cy + r_out * math.sin(angle)))
+            points_in.append( (cx + r_in  * math.cos(angle), cy + r_in  * math.sin(angle)))
+        path = canvas_obj.beginPath()
+        path.moveTo(*points_out[0])
+        for pt in points_out[1:]: path.lineTo(*pt)
+        for pt in reversed(points_in): path.lineTo(*pt)
+        path.close()
+        canvas_obj.setFillColor(fill_color)
+        canvas_obj.drawPath(path, fill=1, stroke=0)
+
+    # Zona roja (0 a META%) → ángulo 180 a 180-(META/100*180)
+    ang_meta = 180 - (META / 100 * 180)
+    draw_arc_filled(c, CX, CY, R_OUT, R_IN, ang_meta, 180, HexColor("#f8d7da"))
+    # Zona verde (META% a 100%) → ángulo 0 a ang_meta
+    draw_arc_filled(c, CX, CY, R_OUT, R_IN, 0, ang_meta, HexColor("#d4edda"))
+    # Barra del valor actual
+    ang_val = 180 - (v_cl / 100 * 180)
+    draw_arc_filled(c, CX, CY, R_OUT, R_IN, ang_val, 180, HexColor("#fca311"))
+
+    # Línea de meta
+    ang_meta_r = math.radians(ang_meta)
+    c.setStrokeColor(C_VERDE); c.setLineWidth(2)
+    c.line(CX + R_IN * math.cos(ang_meta_r), CY + R_IN * math.sin(ang_meta_r),
+           CX + (R_OUT+5) * math.cos(ang_meta_r), CY + (R_OUT+5) * math.sin(ang_meta_r))
+
+    # Valor central
+    c.setFillColor(C_NARANJA); c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(CX, CY - 10, f"{v_cl:.0f}%")
+    c.setFont("Helvetica", 7); c.setFillColor(C_NEGRO)
+    c.drawCentredString(CX, CY - 22, f"Meta recomendada: {META}%")
+
+    # Mensaje
+    if v_cl >= META:
+        c.setFillColor(C_VERDE); c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(CX, CY - 35, f"¡Meta alcanzada!")
+    else:
+        c.setFillColor(C_ROJO); c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(CX, CY - 35, f"Falta {META - v_cl:.0f}% para la meta")
+
+    # ============================================================
+    # SECCIÓN 3: ESTADO REAL (columna derecha, parte inferior)
+    # ============================================================
+    y_est = CY - 65
+    c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(CX, y_est, "ESTADO REAL DEL DINERO"); y_est -= 15
+
+    # Mini barras de estado
+    total_est = ultimo_vp + ultimo_vpy + (ultimo_bf if ultimo_bf > 0 else 0)
+    if total_est > 0:
+        items_estado = [
+            ("Obligaciones Pagadas", ultimo_vp,  "#2ecc71"),
+            ("Oblig. Pendientes",    ultimo_vpy, "#e74c3c"),
+            ("Saldo a Favor",        ultimo_bf if ultimo_bf > 0 else 0, "#fca311"),
+        ]
+        for label, val, hex_col in items_estado:
+            pct_e   = (val / total_est * 100) if total_est > 0 else 0
+            bar_e   = (pct_e / 100) * 140
+            c.setFillColor(HexColor(hex_col))
+            c.roundRect(360, y_est - 10, bar_e if bar_e > 2 else 2, 10, 3, fill=1, stroke=0)
+            c.setFillColor(C_NEGRO); c.setFont("Helvetica", 7)
+            c.drawString(360, y_est - 20, f"{label}: $ {val:,.0f} ({pct_e:.1f}%)")
+            y_est -= 28
+
+    # ============================================================
+    # SECCIÓN 4: TENDENCIA DE AHORRO (parte inferior, ancho completo)
+    # ============================================================
+    y_tend = min(y_cat if ultimo_g_m is not None else y - 200, y_est) - 30
+    if y_tend < 120: y_tend = 120
+
+    c.setStrokeColor(C_AZUL); c.setLineWidth(1); c.line(50, y_tend + 20, 560, y_tend + 20)
+    c.setFillColor(C_AZUL); c.setFont("Helvetica-Bold", 10)
+    c.drawString(50, y_tend + 5, "TENDENCIA DE AHORRO (Últimos 6 meses)"); y_tend -= 10
 
     meses_lista_h = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
     hist_pdf = []; m_idx_ref = meses_lista_h.index(meses[-1])
@@ -264,16 +429,20 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
             hist_pdf.append((f"{m_n[:3]}", bf_h))
 
     if hist_pdf:
-        x_bar   = 70
         max_val = max([abs(v[1]) for v in hist_pdf] + [1])
+        bar_w   = 55
+        x_bar   = 80
+        bar_h_max = 60
         for m_n, val in hist_pdf:
-            h_bar = (val / max_val) * 60 if val > 0 else 2
-            c.setFillColor(C_NARANJA); c.rect(x_bar, y, 35, h_bar, fill=1, stroke=0)
+            h_bar = (val / max_val) * bar_h_max if val > 0 else 3
+            color_b = C_NARANJA if val >= 0 else C_ROJO
+            c.setFillColor(color_b)
+            c.roundRect(x_bar, y_tend - bar_h_max, bar_w - 8, h_bar, 3, fill=1, stroke=0)
             c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7)
-            c.drawCentredString(x_bar+17, y-12, m_n)
+            c.drawCentredString(x_bar + (bar_w-8)//2, y_tend - bar_h_max - 12, m_n)
             c.setFont("Helvetica", 6)
-            c.drawCentredString(x_bar+17, y+h_bar+5, f"${val:,.0f}")
-            x_bar += 55
+            c.drawCentredString(x_bar + (bar_w-8)//2, y_tend - bar_h_max + h_bar + 4, f"${val:,.0f}")
+            x_bar += bar_w
 
     c.showPage(); c.save(); buf.seek(0)
     return buf
