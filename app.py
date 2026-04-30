@@ -461,7 +461,259 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     return buf
 
 # ============================================================
-# --- 10. PANTALLA DE LOGIN ---
+# --- 10. GENERADOR DE EXCEL ESTILIZADO ---
+def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nomina, otros, saldo_ant):
+    buf = BytesIO()
+
+    # Filtrar datos del mes/año/usuario
+    df_g  = df_g_full[(df_g_full["Periodo"]==mes) & (df_g_full["Año"]==anio)].copy()
+    df_i  = df_i_full[(df_i_full["Periodo"]==mes) & (df_i_full["Año"]==anio)].copy()
+    df_oi = df_oi_full[(df_oi_full["Periodo"]==mes) & (df_oi_full["Año"]==anio)].copy()
+
+    # Calcular métricas
+    it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_g, nomina, otros, saldo_ant)
+
+    # Traducir TRUE/FALSE → SI/NO
+    if not df_g.empty:
+        df_g["Pagado"]               = df_g["Pagado"].map({True:"SI", False:"NO"})
+        df_g["Movimiento Recurrente"]= df_g["Movimiento Recurrente"].map({True:"SI", False:"NO"})
+
+    with pd.ExcelWriter(buf, engine="xlsxwriter") as writer:
+        wb = writer.book
+
+        # ── COLORES Y FORMATOS ──────────────────────────────────
+        AZUL    = "#14213d"
+        NARANJA = "#fca311"
+        GRIS1   = "#f2f2f2"
+        GRIS2   = "#ffffff"
+        VERDE   = "#2ecc71"
+        ROJO    = "#e74c3c"
+
+        def fmt(bg, font_color="#000000", bold=False, num_fmt=None, border=False, align="left"):
+            d = {"bg_color": bg, "font_color": font_color, "bold": bold,
+                 "valign": "vcenter", "align": align}
+            if num_fmt: d["num_format"] = num_fmt
+            if border:  d.update({"border": 1, "border_color": "#cccccc"})
+            return wb.add_format(d)
+
+        f_title      = fmt(AZUL,    "#ffffff", bold=True,  align="center")
+        f_subtitle   = fmt(NARANJA, AZUL,      bold=True,  align="center")
+        f_header     = fmt(AZUL,    "#ffffff", bold=True,  border=True, align="center")
+        f_row1       = fmt(GRIS1,   "#000000", border=True)
+        f_row2       = fmt(GRIS2,   "#000000", border=True)
+        f_row1_money = fmt(GRIS1,   "#000000", border=True, num_fmt='$ #,##0', align="right")
+        f_row2_money = fmt(GRIS2,   "#000000", border=True, num_fmt='$ #,##0', align="right")
+        f_total      = fmt(NARANJA, AZUL,      bold=True,  num_fmt='$ #,##0', border=True, align="right")
+        f_total_lbl  = fmt(NARANJA, AZUL,      bold=True,  border=True)
+        f_kpi_lbl    = fmt(AZUL,    "#ffffff", bold=True,  align="center")
+        f_kpi_val    = fmt(NARANJA, AZUL,      bold=True,  num_fmt='$ #,##0', align="center")
+        f_kpi_verde  = fmt(VERDE,   "#ffffff", bold=True,  num_fmt='$ #,##0', align="center")
+        f_kpi_rojo   = fmt(ROJO,    "#ffffff", bold=True,  num_fmt='$ #,##0', align="center")
+        f_si         = fmt(GRIS1,   VERDE,     bold=True,  border=True, align="center")
+        f_no         = fmt(GRIS1,   ROJO,      bold=True,  border=True, align="center")
+        f_si2        = fmt(GRIS2,   VERDE,     bold=True,  border=True, align="center")
+        f_no2        = fmt(GRIS2,   ROJO,      bold=True,  border=True, align="center")
+
+        nombre_usuario = st.session_state.get("u_nombre_completo", u_id)
+
+        # ══════════════════════════════════════════════════════
+        # HOJA 1 — GASTOS
+        # ══════════════════════════════════════════════════════
+        ws_g = wb.add_worksheet("📋 Gastos")
+        writer.sheets["📋 Gastos"] = ws_g
+        ws_g.set_zoom(85)
+        ws_g.hide_gridlines(2)
+
+        # Anchos de columna
+        ws_g.set_column("A:A", 22)
+        ws_g.set_column("B:B", 30)
+        ws_g.set_column("C:C", 16)
+        ws_g.set_column("D:D", 16)
+        ws_g.set_column("E:E", 10)
+        ws_g.set_column("F:F", 12)
+
+        # Título
+        ws_g.merge_range("A1:F1", f"MY FINANCEAPP — REPORTE DE GASTOS", f_title)
+        ws_g.merge_range("A2:F2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
+        ws_g.set_row(0, 28); ws_g.set_row(1, 22)
+
+        # Encabezados tabla
+        headers_g = ["CATEGORÍA", "DESCRIPCIÓN", "MONTO", "VALOR REF.", "PAGADO", "RECURRENTE"]
+        for col, h in enumerate(headers_g):
+            ws_g.write(3, col, h, f_header)
+        ws_g.set_row(3, 20)
+
+        # Filas de datos
+        for i, (_, row) in enumerate(df_g.iterrows()):
+            r = i + 4
+            is_odd = i % 2 == 0
+            fm      = f_row1       if is_odd else f_row2
+            fm_mon  = f_row1_money if is_odd else f_row2_money
+            ws_g.set_row(r, 16)
+
+            ws_g.write(r, 0, str(row.get("Categoría","")),    fm)
+            ws_g.write(r, 1, str(row.get("Descripción","")),  fm)
+            ws_g.write(r, 2, float(row.get("Monto", 0)),      fm_mon)
+            ws_g.write(r, 3, float(row.get("Valor Referencia", 0)), fm_mon)
+
+            # Pagado con color
+            pag = str(row.get("Pagado","NO"))
+            ws_g.write(r, 4, pag, (f_si if is_odd else f_si2) if pag=="SI" else (f_no if is_odd else f_no2))
+
+            rec = str(row.get("Movimiento Recurrente","NO"))
+            ws_g.write(r, 5, rec, (f_si if is_odd else f_si2) if rec=="SI" else (f_no if is_odd else f_no2))
+
+        # Fila total
+        last = len(df_g) + 4
+        ws_g.set_row(last, 20)
+        ws_g.merge_range(last, 0, last, 1, "TOTAL GASTOS DEL MES", f_total_lbl)
+        ws_g.write(last, 2, float(df_g["Monto"].apply(pd.to_numeric, errors="coerce").fillna(0).sum()), f_total)
+        ws_g.write(last, 3, "", f_total)
+        ws_g.write(last, 4, "", f_total)
+        ws_g.write(last, 5, "", f_total)
+
+        # ══════════════════════════════════════════════════════
+        # HOJA 2 — INGRESOS
+        # ══════════════════════════════════════════════════════
+        ws_i = wb.add_worksheet("💰 Ingresos")
+        writer.sheets["💰 Ingresos"] = ws_i
+        ws_i.set_zoom(85)
+        ws_i.hide_gridlines(2)
+        ws_i.set_column("A:A", 30)
+        ws_i.set_column("B:B", 20)
+
+        ws_i.merge_range("A1:B1", "MY FINANCEAPP — INGRESOS DEL MES", f_title)
+        ws_i.merge_range("A2:B2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
+        ws_i.set_row(0, 28); ws_i.set_row(1, 22)
+
+        ws_i.write(3, 0, "CONCEPTO",  f_header)
+        ws_i.write(3, 1, "MONTO",     f_header)
+        ws_i.set_row(3, 20)
+
+        ingresos_base = [
+            ("Saldo Anterior",  saldo_ant),
+            ("Nómina / Ingreso Fijo", nomina),
+        ]
+        for i, (label, val) in enumerate(ingresos_base):
+            r = i + 4
+            fm = f_row1 if i % 2 == 0 else f_row2
+            fm_m = f_row1_money if i % 2 == 0 else f_row2_money
+            ws_i.write(r, 0, label, fm)
+            ws_i.write(r, 1, float(val), fm_m)
+            ws_i.set_row(r, 16)
+
+        # Otros ingresos
+        row_start = 7
+        if not df_oi.empty:
+            ws_i.merge_range(row_start, 0, row_start, 1, "INGRESOS ADICIONALES", f_header)
+            ws_i.set_row(row_start, 18); row_start += 1
+            for i, (_, row) in enumerate(df_oi.iterrows()):
+                r = row_start + i
+                fm = f_row1 if i % 2 == 0 else f_row2
+                fm_m = f_row1_money if i % 2 == 0 else f_row2_money
+                ws_i.write(r, 0, str(row.get("Descripción","")), fm)
+                ws_i.write(r, 1, float(row.get("Monto", 0)),     fm_m)
+                ws_i.set_row(r, 16)
+            row_start += len(df_oi) + 1
+        else:
+            row_start += 1
+
+        # Total ingresos
+        ws_i.set_row(row_start, 20)
+        ws_i.write(row_start, 0, "TOTAL INGRESOS", f_total_lbl)
+        ws_i.write(row_start, 1, float(it),         f_total)
+
+        # ══════════════════════════════════════════════════════
+        # HOJA 3 — RESUMEN
+        # ══════════════════════════════════════════════════════
+        ws_r = wb.add_worksheet("📊 Resumen")
+        writer.sheets["📊 Resumen"] = ws_r
+        ws_r.set_zoom(85)
+        ws_r.hide_gridlines(2)
+        ws_r.set_column("A:A", 28)
+        ws_r.set_column("B:B", 20)
+        ws_r.set_column("C:C", 5)
+        ws_r.set_column("D:D", 28)
+        ws_r.set_column("E:E", 20)
+
+        ws_r.merge_range("A1:E1", "MY FINANCEAPP — RESUMEN FINANCIERO", f_title)
+        ws_r.merge_range("A2:E2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
+        ws_r.set_row(0, 28); ws_r.set_row(1, 22)
+
+        # KPIs en 2 columnas
+        kpis = [
+            ("INGRESOS TOTALES",       it,   f_kpi_val),
+            ("OBLIGACIONES PAGADAS",   vp,   f_kpi_verde),
+            ("OBLIGACIONES PENDIENTES",vpy,  f_kpi_rojo),
+            ("DINERO DISPONIBLE",      fact, f_kpi_val),
+            ("SALDO A FAVOR" if bf >= 0 else "DÉFICIT", bf, f_kpi_verde if bf >= 0 else f_kpi_rojo),
+            ("EFICIENCIA DE AHORRO",   ahorro_p, fmt(NARANJA, AZUL, bold=True, num_fmt='0.0"%"', align="center")),
+        ]
+
+        row = 4
+        for i, (label, val, fmt_val) in enumerate(kpis):
+            col_l = 0 if i % 2 == 0 else 3
+            col_v = 1 if i % 2 == 0 else 4
+            if i % 2 == 0 and i > 0: row += 3
+            ws_r.set_row(row,   18)
+            ws_r.set_row(row+1, 22)
+            ws_r.write(row,   col_l, label, f_kpi_lbl)
+            ws_r.write(row,   col_v, "",    f_kpi_lbl)
+            ws_r.write(row+1, col_l, "",    fmt_val)
+            ws_r.write(row+1, col_v, val,   fmt_val)
+
+        # Tabla resumen categorías
+        row_cat = row + 6
+        ws_r.merge_range(row_cat, 0, row_cat, 4, "DESGLOSE POR CATEGORÍA", f_header)
+        ws_r.set_row(row_cat, 20); row_cat += 1
+
+        ws_r.write(row_cat, 0, "CATEGORÍA",  f_header)
+        ws_r.write(row_cat, 1, "MONTO",      f_header)
+        ws_r.write(row_cat, 2, "%",          f_header)
+        ws_r.write(row_cat, 3, "PAGADO",     f_header)
+        ws_r.write(row_cat, 4, "PENDIENTE",  f_header)
+        ws_r.set_row(row_cat, 18); row_cat += 1
+
+        if not df_g.empty:
+            df_g_num = df_g_full[(df_g_full["Periodo"]==mes) & (df_g_full["Año"]==anio)].copy()
+            df_g_num["Monto"] = pd.to_numeric(df_g_num["Monto"], errors="coerce").fillna(0)
+            df_g_num["Pagado"] = df_g_num["Pagado"].astype(bool) if df_g_num["Pagado"].dtype != bool else df_g_num["Pagado"]
+            total_g = df_g_num["Monto"].sum()
+            cat_res = df_g_num.groupby("Categoría").agg(
+                Monto=("Monto","sum"),
+                Pagado=("Monto", lambda x: x[df_g_num.loc[x.index,"Pagado"]==True].sum()),
+            ).reset_index()
+            cat_res["Pendiente"] = cat_res["Monto"] - cat_res["Pagado"]
+            cat_res["Pct"] = cat_res["Monto"] / total_g * 100 if total_g > 0 else 0
+            cat_res = cat_res.sort_values("Monto", ascending=False)
+
+            f_pct = wb.add_format({"num_format": "0.0%", "align":"center", "border":1,
+                                   "border_color":"#cccccc", "valign":"vcenter"})
+            for i, (_, row_d) in enumerate(cat_res.iterrows()):
+                r = row_cat + i
+                fm = f_row1 if i % 2 == 0 else f_row2
+                fm_m = f_row1_money if i % 2 == 0 else f_row2_money
+                ws_r.set_row(r, 16)
+                ws_r.write(r, 0, str(row_d["Categoría"]),     fm)
+                ws_r.write(r, 1, float(row_d["Monto"]),       fm_m)
+                ws_r.write(r, 2, float(row_d["Pct"]/100),     f_pct)
+                ws_r.write(r, 3, float(row_d["Pagado"]),      fm_m)
+                ws_r.write(r, 4, float(row_d["Pendiente"]),   fm_m)
+
+            # Total categorías
+            last_cat = row_cat + len(cat_res)
+            ws_r.set_row(last_cat, 20)
+            ws_r.write(last_cat, 0, "TOTAL", f_total_lbl)
+            ws_r.write(last_cat, 1, float(total_g), f_total)
+            ws_r.write(last_cat, 2, "",  f_total)
+            ws_r.write(last_cat, 3, float(vp),  f_total)
+            ws_r.write(last_cat, 4, float(vpy), f_total)
+
+    buf.seek(0)
+    return buf.getvalue()
+
+
+# --- 11. PANTALLA DE LOGIN ---
 # ============================================================
 if not st.session_state.autenticado:
     col1, col2, col3 = st.columns([1, 1.5, 1])
@@ -500,7 +752,7 @@ if not st.session_state.autenticado:
     st.stop()
 
 # ============================================================
-# --- 11. APP PRINCIPAL (solo si está autenticado) ---
+# --- 12. APP PRINCIPAL (solo si está autenticado) ---
 # ============================================================
 u_id  = st.session_state.usuario_id
 token = st.session_state.token
@@ -557,11 +809,14 @@ with st.sidebar:
             pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
             st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with c_xls:
-        buf_xls = BytesIO()
-        with pd.ExcelWriter(buf_xls, engine='xlsxwriter') as writer:
-            df_g_full[df_g_full["Periodo"]==mes_s].to_excel(writer, sheet_name='Gastos', index=False)
-            df_oi_full[df_oi_full["Periodo"]==mes_s].to_excel(writer, sheet_name='OtrosIngresos', index=False)
-        st.download_button("📊 Excel", buf_xls.getvalue(), f"Reporte_{mes_s}.xlsx")
+        if st.button("📊 Excel"):
+            buf_xls = generar_excel_reporte(
+                df_g_full, df_i_full, df_oi_full,
+                mes_s, anio_s, u_id,
+                n_in, otr_v, s_in
+            )
+            st.download_button("Descargar Excel", buf_xls, f"Reporte_{mes_s}_{anio_s}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
     st.subheader("⚖️ Proyecciones")
     if st.button("📥 Semestre 1"):
