@@ -1098,9 +1098,25 @@ def render_tabla_gastos(df):
 # Mostrar tabla visual
 render_tabla_gastos(df_mes_g)
 
-# Editor: abierto por defecto si el mes está vacío, colapsado si ya tiene datos
-editor_abierto = df_mes_g.empty
-with st.expander("✏️ Editar / Agregar movimientos — los cambios se reflejan al GUARDAR", expanded=editor_abierto):
+# ── EDITOR SIEMPRE VISIBLE ──────────────────────────────
+st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
+st.caption("Los cambios se aplican al presionar 💾 GUARDAR CAMBIOS DEFINITIVOS")
+if True:  # bloque siempre activo (reemplaza el expander)
+    # ── COPIAR VALOR REFERENCIA → MONTO ─────────────────────
+    col_copy1, col_copy2 = st.columns([3,1])
+    with col_copy1:
+        st.markdown('<div style="color:#adb5bd;font-size:0.85rem;padding-top:8px">💡 Activa el interruptor para copiar el <b>Valor Referencia</b> al <b>Monto</b> en todas las filas donde el Monto sea 0</div>', unsafe_allow_html=True)
+    with col_copy2:
+        copiar_ref = st.toggle("Copiar Ref → Monto", value=False, key="copiar_ref_toggle")
+
+    if copiar_ref:
+        mask = (df_mes_g["Valor Referencia"] > 0) & (df_mes_g["Monto"] == 0)
+        if mask.any():
+            df_mes_g.loc[mask, "Monto"] = df_mes_g.loc[mask, "Valor Referencia"]
+            st.success(f"✅ Se copiaron {mask.sum()} valores de referencia al monto.")
+        else:
+            st.info("No hay filas con Valor Referencia > 0 y Monto = 0.")
+
     # Items proyectados disponibles para asociar
     items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
 
@@ -1158,9 +1174,13 @@ df_asociados = df_ed_g[
 ].copy() if "Presupuesto Asociado" in df_ed_g.columns else pd.DataFrame()
 
 # Para la vista por categoría: presupuesto = suma Valor Referencia de proyectados
-cats_con_ref  = df_proyectados.groupby("Categoría")["Valor Referencia"].sum() if not df_proyectados.empty else df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
-cats_ejecutado= df_ed_g.groupby("Categoría")["Monto"].sum()
-todas_cats    = sorted(set(cats_con_ref.index.tolist() + cats_ejecutado.index.tolist()))
+# ✅ Presupuesto = suma de TODOS los Valor Referencia por categoría
+cats_con_ref   = df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
+# ✅ Ejecutado = suma de Monto donde Pagado = True
+df_pagados     = df_ed_g[df_ed_g["Pagado"] == True] if "Pagado" in df_ed_g.columns else pd.DataFrame()
+cats_ejecutado = df_pagados.groupby("Categoría")["Monto"].sum() if not df_pagados.empty else pd.Series(dtype=float)
+# ✅ Todas las categorías con al menos un valor de referencia
+todas_cats     = sorted(cats_con_ref.index.tolist())
 
 if todas_cats:
     tarjetas_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">'
