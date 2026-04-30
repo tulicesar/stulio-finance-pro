@@ -117,21 +117,50 @@ st.markdown("""
     /* ── SIDEBAR ── */
     section[data-testid="stSidebar"] { background-color: #212529 !important; border-right: 1px solid #495057; }
 
-    /* ── BOTONES ── */
+    /* ── BOTONES — gradiente naranja a dorado ── */
     .stButton>button {
-        border-radius: 10px; font-weight: bold; width: 100%;
-        background-color: #fca311; color: #212529; border: none;
-        transition: transform 0.1s ease, box-shadow 0.1s ease;
+        border-radius: 10px;
+        font-weight: 700;
+        font-size: 0.88rem;
+        letter-spacing: 0.04em;
+        width: 100%;
+        border: none;
+        background: linear-gradient(135deg, #fca311 0%, #d4910a 60%, #b87d00 100%);
+        color: #14213d;
+        box-shadow: 0 4px 14px rgba(252,163,17,0.35), inset 0 1px 0 rgba(255,255,255,0.15);
+        transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+        text-transform: uppercase;
     }
-    .stButton>button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(252,163,17,0.4); }
+    .stButton>button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 22px rgba(252,163,17,0.55), inset 0 1px 0 rgba(255,255,255,0.2);
+        filter: brightness(1.08);
+    }
+    .stButton>button:active {
+        transform: translateY(0px);
+        box-shadow: 0 2px 8px rgba(252,163,17,0.3);
+        filter: brightness(0.95);
+    }
 
-    /* ── BOTÓN GUARDAR especial ── */
+    /* ── BOTÓN GUARDAR — más grande y llamativo ── */
     .save-btn button {
-        background: linear-gradient(135deg, #fca311 0%, #e08e00 100%) !important;
-        color: #14213d !important; font-size: 1.1rem !important;
-        padding: 14px !important; border-radius: 12px !important;
-        box-shadow: 0 6px 20px rgba(252,163,17,0.5) !important;
-        letter-spacing: 0.05em !important;
+        background: linear-gradient(135deg, #fca311 0%, #d4910a 50%, #b87d00 100%) !important;
+        color: #14213d !important;
+        font-size: 1.05rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.08em !important;
+        padding: 16px !important;
+        border-radius: 12px !important;
+        box-shadow: 0 8px 28px rgba(252,163,17,0.55),
+                    inset 0 1px 0 rgba(255,255,255,0.2) !important;
+        text-transform: uppercase !important;
+        border: 1px solid rgba(255,255,255,0.1) !important;
+    }
+    .save-btn button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 12px 36px rgba(252,163,17,0.65),
+                    inset 0 1px 0 rgba(255,255,255,0.25) !important;
+        filter: brightness(1.1) !important;
     }
 
     /* ── JERARQUÍA DE TÍTULOS ── */
