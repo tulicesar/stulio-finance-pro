@@ -532,17 +532,17 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
         ws_g.set_column("E:E", 10)
         ws_g.set_column("F:F", 12)
 
-        # ✅ LOGO + Título
-        ws_g.set_row(0, 60)   # fila 1 alta para el logo
-        ws_g.set_row(1, 22)
-        ws_g.set_row(2, 20)
-        # Logo centrado en fila 1 (columnas A:F)
+        # ✅ LOGO pequeño en esquina + Título al lado
+        ws_g.set_row(0, 45); ws_g.set_row(1, 20); ws_g.set_row(2, 18)
+        ws_g.merge_range("A1:F1", "", f_title)
+        ws_g.merge_range("A2:F2", f"REPORTE DE GASTOS  —  {mes.upper()} {anio}", f_subtitle)
+        ws_g.merge_range("A3:F3", nombre_usuario, f_title)
         if os.path.exists(LOGO_APP_H):
-            ws_g.insert_image("A1", LOGO_APP_H, {"x_scale": 0.45, "y_scale": 0.45,
-                "x_offset": 5, "y_offset": 5, "object_position": 1})
-        ws_g.merge_range("A1:F1", "", f_title)   # fondo azul detrás del logo
-        ws_g.merge_range("A2:F2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
-        ws_g.merge_range("A3:F3", "REPORTE DE GASTOS", f_title)
+            ws_g.insert_image("A1", LOGO_APP_H, {
+                "x_scale": 0.28, "y_scale": 0.28,
+                "x_offset": 8, "y_offset": 6,
+                "object_position": 1
+            })
 
         # Encabezados tabla
         headers_g = ["CATEGORÍA", "DESCRIPCIÓN", "MONTO", "VALOR REF.", "PAGADO", "RECURRENTE"]
@@ -589,13 +589,16 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
         ws_i.set_column("A:A", 30)
         ws_i.set_column("B:B", 20)
 
-        ws_i.set_row(0, 60); ws_i.set_row(1, 22); ws_i.set_row(2, 20)
-        if os.path.exists(LOGO_APP_H):
-            ws_i.insert_image("A1", LOGO_APP_H, {"x_scale": 0.45, "y_scale": 0.45,
-                "x_offset": 5, "y_offset": 5, "object_position": 1})
+        ws_i.set_row(0, 45); ws_i.set_row(1, 20); ws_i.set_row(2, 18)
         ws_i.merge_range("A1:B1", "", f_title)
-        ws_i.merge_range("A2:B2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
-        ws_i.merge_range("A3:B3", "INGRESOS DEL MES", f_title)
+        ws_i.merge_range("A2:B2", f"INGRESOS DEL MES  —  {mes.upper()} {anio}", f_subtitle)
+        ws_i.merge_range("A3:B3", nombre_usuario, f_title)
+        if os.path.exists(LOGO_APP_H):
+            ws_i.insert_image("A1", LOGO_APP_H, {
+                "x_scale": 0.28, "y_scale": 0.28,
+                "x_offset": 8, "y_offset": 6,
+                "object_position": 1
+            })
 
         ws_i.write(4, 0, "CONCEPTO",  f_header)
         ws_i.write(4, 1, "MONTO",     f_header)
@@ -647,13 +650,16 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
         ws_r.set_column("D:D", 28)
         ws_r.set_column("E:E", 20)
 
-        ws_r.set_row(0, 60); ws_r.set_row(1, 22); ws_r.set_row(2, 20)
-        if os.path.exists(LOGO_APP_H):
-            ws_r.insert_image("A1", LOGO_APP_H, {"x_scale": 0.45, "y_scale": 0.45,
-                "x_offset": 5, "y_offset": 5, "object_position": 1})
+        ws_r.set_row(0, 45); ws_r.set_row(1, 20); ws_r.set_row(2, 18)
         ws_r.merge_range("A1:E1", "", f_title)
-        ws_r.merge_range("A2:E2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
-        ws_r.merge_range("A3:E3", "RESUMEN FINANCIERO", f_title)
+        ws_r.merge_range("A2:E2", f"RESUMEN FINANCIERO  —  {mes.upper()} {anio}", f_subtitle)
+        ws_r.merge_range("A3:E3", nombre_usuario, f_title)
+        if os.path.exists(LOGO_APP_H):
+            ws_r.insert_image("A1", LOGO_APP_H, {
+                "x_scale": 0.28, "y_scale": 0.28,
+                "x_offset": 8, "y_offset": 6,
+                "object_position": 1
+            })
 
         # KPIs en 2 columnas
         kpis = [
