@@ -1248,25 +1248,27 @@ if not df_proyectados.empty:
             for _, ag in assoc.iterrows():
                 gastos_lista += f'<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #495057"><span style="font-size:10px;color:#adb5bd">{ag["Descripción"]}</span><span style="font-size:10px;color:#fff">$ {float(ag["Monto"]):,.0f}</span></div>'
 
-        items_html += f"""
-        <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
-          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:6px">💰 {nombre_proy}</div>
-          <div style="font-size:9px;color:#adb5bd;margin-bottom:8px">{cat}</div>
-          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
-            <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ {presup_item:,.0f}</div></div>
-            <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#fff">$ {gastos_item:,.0f}</div></div>
-            <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">{disp_label}</div><div style="font-size:13px;font-weight:700;color:{disp_color}">$ {abs(disponible):,.0f}</div></div>
-          </div>
-          <div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden">
-            <div style="width:{pct:.0f}%;height:8px;border-radius:20px;background:{bar_color}"></div>
-          </div>
-          <div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:8px">
-            <span style="font-size:10px;color:#adb5bd">0%</span>
-            <span style="font-size:10px;font-weight:700;color:{bar_color}">{pct_txt}</span>
-            <span style="font-size:10px;color:#adb5bd">100%</span>
-          </div>
-          {f'<div style="border-top:1px solid #495057;padding-top:6px">{gastos_lista}</div>' if gastos_lista else ''}
-        </div>"""
+        # Construir tarjeta sin f-strings anidados
+        bloque_gastos = ""
+        if gastos_lista:
+            bloque_gastos = '<div style="border-top:1px solid #495057;padding-top:6px">' + gastos_lista + '</div>'
+
+        card  = '<div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid ' + color + '">'
+        card += '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:' + color + ';margin-bottom:6px">💰 ' + nombre_proy + '</div>'
+        card += '<div style="font-size:9px;color:#adb5bd;margin-bottom:8px">' + cat + '</div>'
+        card += '<div style="display:flex;justify-content:space-between;margin-bottom:8px">'
+        card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ ' + f"{presup_item:,.0f}" + '</div></div>'
+        card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#fff">$ ' + f"{gastos_item:,.0f}" + '</div></div>'
+        card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">' + disp_label + '</div><div style="font-size:13px;font-weight:700;color:' + disp_color + '">$ ' + f"{abs(disponible):,.0f}" + '</div></div>'
+        card += '</div>'
+        card += '<div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden">'
+        card += '<div style="width:' + f"{pct:.0f}" + '%;height:8px;border-radius:20px;background:' + bar_color + '"></div></div>'
+        card += '<div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:8px">'
+        card += '<span style="font-size:10px;color:#adb5bd">0%</span>'
+        card += '<span style="font-size:10px;font-weight:700;color:' + bar_color + '">' + pct_txt + '</span>'
+        card += '<span style="font-size:10px;color:#adb5bd">100%</span></div>'
+        card += bloque_gastos + '</div>'
+        items_html += card
 
     items_html += '</div>'
     st.markdown(items_html, unsafe_allow_html=True)
