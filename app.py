@@ -810,10 +810,16 @@ with st.sidebar:
             st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
     with c_xls:
         if st.button("📊 Excel"):
+            # Tomamos valores de ingresos directo de la BD para evitar variables no definidas
+            i_m_xls  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
+            oi_m_xls = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)]
+            n_xls = float(i_m_xls["Nomina"].iloc[0])        if not i_m_xls.empty else 0.0
+            s_xls = float(i_m_xls["SaldoAnterior"].iloc[0]) if not i_m_xls.empty else 0.0
+            o_xls = float(oi_m_xls["Monto"].sum())          if not oi_m_xls.empty else 0.0
             buf_xls = generar_excel_reporte(
                 df_g_full, df_i_full, df_oi_full,
                 mes_s, anio_s, u_id,
-                n_in, otr_v, s_in
+                n_xls, o_xls, s_xls
             )
             st.download_button("Descargar Excel", buf_xls, f"Reporte_{mes_s}_{anio_s}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
