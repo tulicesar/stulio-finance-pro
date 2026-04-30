@@ -1038,6 +1038,27 @@ if df_mes_g.empty:
                 df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 # Tabla de gastos
+# ✅ Fecha Pago: siempre como datetime, NaT para vacíos
+if "Fecha Pago" not in df_mes_g.columns:
+    df_mes_g["Fecha Pago"] = pd.NaT
+else:
+    df_mes_g["Fecha Pago"] = pd.to_datetime(df_mes_g["Fecha Pago"], errors="coerce")
+df_mes_g["Fecha Pago"] = df_mes_g["Fecha Pago"].where(df_mes_g["Fecha Pago"].notna(), other=pd.NaT)
+
+# ✅ Nuevas columnas de presupuesto proyectado
+if "Es Proyectado" not in df_mes_g.columns:
+    df_mes_g["Es Proyectado"] = False
+else:
+    df_mes_g["Es Proyectado"] = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
+if "Presupuesto Asociado" not in df_mes_g.columns:
+    df_mes_g["Presupuesto Asociado"] = None
+
+# ✅ Columna temporal para copiar Ref → Monto por fila
+df_mes_g["📋"] = False
+
+# ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
+descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
+
 # ── EDITOR SIEMPRE VISIBLE ──────────────────────────────
 st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
 st.caption("Los cambios se aplican al presionar 💾 GUARDAR CAMBIOS DEFINITIVOS")
@@ -1098,26 +1119,6 @@ st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span><
 if not df_mes_g.empty:
     df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
-# ✅ Fecha Pago: siempre como datetime, NaT para vacíos
-if "Fecha Pago" not in df_mes_g.columns:
-    df_mes_g["Fecha Pago"] = pd.NaT
-else:
-    df_mes_g["Fecha Pago"] = pd.to_datetime(df_mes_g["Fecha Pago"], errors="coerce")
-df_mes_g["Fecha Pago"] = df_mes_g["Fecha Pago"].where(df_mes_g["Fecha Pago"].notna(), other=pd.NaT)
-
-# ✅ Nuevas columnas de presupuesto proyectado
-if "Es Proyectado" not in df_mes_g.columns:
-    df_mes_g["Es Proyectado"] = False
-else:
-    df_mes_g["Es Proyectado"] = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
-if "Presupuesto Asociado" not in df_mes_g.columns:
-    df_mes_g["Presupuesto Asociado"] = None
-
-# ✅ Columna temporal para copiar Ref → Monto por fila
-df_mes_g["📋"] = False
-
-# ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
-descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
 # ── TABLA VISUAL con colores por categoría ──────────────────
 def render_resumen_gastos(df):
