@@ -1175,10 +1175,13 @@ df_proyectados = df_ed_g[df_ed_g["Es Proyectado"] == True].copy() if "Es Proyect
 # Gastos reales asociados a cada proyectado
 # ✅ Gastos reales asociados a un ítem proyectado
 if "Presupuesto Asociado" in df_ed_g.columns:
+    _pa = df_ed_g["Presupuesto Asociado"].astype(str).str.strip()
     df_asociados = df_ed_g[
-        df_ed_g["Presupuesto Asociado"].notna() &
-        (df_ed_g["Presupuesto Asociado"].astype(str).str.strip() != "") &
-        (df_ed_g["Presupuesto Asociado"].astype(str) != "None")
+        _pa.notna() &
+        (_pa != "") &
+        (_pa != "None") &
+        (_pa != "nan") &
+        (_pa != "NaN")
     ].copy()
 else:
     df_asociados = pd.DataFrame()
@@ -1244,10 +1247,6 @@ if todas_cats:
     st.markdown(tarjetas_html, unsafe_allow_html=True)
 else:
     st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
-
-# ── DEBUG TEMPORAL ──────────────────────────────────────
-st.write("df_proyectados:", df_proyectados[["Descripción","Valor Referencia","Es Proyectado"]].to_dict() if not df_proyectados.empty else "VACÍO")
-st.write("df_asociados:", df_asociados[["Descripción","Monto","Presupuesto Asociado"]].to_dict() if not df_asociados.empty else "VACÍO")
 
 # ── SEGUIMIENTO POR ÍTEM PROYECTADO ──────────────────────
 if not df_proyectados.empty:
