@@ -255,7 +255,7 @@ def cargar_bd(u_id, token):
         df_oi= pd.DataFrame(r_oi.data)  if r_oi.data else pd.DataFrame(columns=["anio","periodo","descripcion","monto","usuario_id"])
 
         # Renombrar columnas para la interfaz
-        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría","descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia","pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario","fecha_pago":"Fecha Pago"})
+        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría","descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia","pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario","fecha_pago":"Fecha Pago","es_proyectado":"Es Proyectado","presupuesto_asociado":"Presupuesto Asociado"})
         df_i  = df_i.rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"})
         df_oi = df_oi.rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripción","monto":"Monto","usuario_id":"Usuario"})
 
@@ -1003,8 +1003,10 @@ if df_mes_g.empty:
             activos     = foto[foto["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente"])
-                df_mes_g["Pagado"]     = False
-                df_mes_g["Fecha Pago"] = pd.NaT
+                df_mes_g["Pagado"]               = False
+                df_mes_g["Fecha Pago"]           = pd.NaT
+                df_mes_g["Es Proyectado"]        = df_mes_g.get("Es Proyectado", False)
+                df_mes_g["Presupuesto Asociado"] = df_mes_g.get("Presupuesto Asociado", None)
                 df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 # Tabla de gastos
@@ -1019,10 +1021,15 @@ if "Fecha Pago" not in df_mes_g.columns:
     df_mes_g["Fecha Pago"] = pd.NaT
 else:
     df_mes_g["Fecha Pago"] = pd.to_datetime(df_mes_g["Fecha Pago"], errors="coerce")
-# Reemplazar cualquier None/NaN residual por NaT
-df_mes_g["Fecha Pago"] = df_mes_g["Fecha Pago"].where(
-    df_mes_g["Fecha Pago"].notna(), other=pd.NaT
-)
+df_mes_g["Fecha Pago"] = df_mes_g["Fecha Pago"].where(df_mes_g["Fecha Pago"].notna(), other=pd.NaT)
+
+# ✅ Nuevas columnas de presupuesto proyectado
+if "Es Proyectado" not in df_mes_g.columns:
+    df_mes_g["Es Proyectado"] = False
+else:
+    df_mes_g["Es Proyectado"] = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
+if "Presupuesto Asociado" not in df_mes_g.columns:
+    df_mes_g["Presupuesto Asociado"] = None
 
 # ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
@@ -1094,17 +1101,24 @@ render_tabla_gastos(df_mes_g)
 # Editor: abierto por defecto si el mes está vacío, colapsado si ya tiene datos
 editor_abierto = df_mes_g.empty
 with st.expander("✏️ Editar / Agregar movimientos — los cambios se reflejan al GUARDAR", expanded=editor_abierto):
+    # Items proyectados disponibles para asociar
+    items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
+
     config_g = {
-        "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-        "Descripción":          st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
-        "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f"),
-        "Valor Referencia":     st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
-        "Pagado":               st.column_config.CheckboxColumn("Pagado", default=False),
-        "Movimiento Recurrente":st.column_config.CheckboxColumn("Recurrente", default=False),
-        "Fecha Pago":           st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
+        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+        "Descripción":           st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
+        "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+        "Valor Referencia":      st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
+        "Es Proyectado":         st.column_config.CheckboxColumn("💰 Proyectado", default=False,
+                                     help="Marca si este ítem es un presupuesto proyectado (ej: GASOLINA PROYECTADA)"),
+        "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="medium",
+                                     help="Selecciona el ítem proyectado al que pertenece este gasto real"),
+        "Pagado":                st.column_config.CheckboxColumn("Pagado", default=False),
+        "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False),
+        "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
     }
     df_ed_g = st.data_editor(
-        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
+        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
         use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
     )
 
@@ -1134,7 +1148,17 @@ label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 # ══════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>📊 Presupuesto vs Ejecución por Categoría</span></div>', unsafe_allow_html=True)
 
-cats_con_ref  = df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
+# Items proyectados (tienen check Es Proyectado)
+df_proyectados = df_ed_g[df_ed_g["Es Proyectado"] == True].copy() if "Es Proyectado" in df_ed_g.columns else pd.DataFrame()
+
+# Gastos reales asociados a cada proyectado
+df_asociados = df_ed_g[
+    df_ed_g.get("Presupuesto Asociado", pd.Series(dtype=str)).notna() &
+    (df_ed_g.get("Presupuesto Asociado", pd.Series(dtype=str)) != "")
+].copy() if "Presupuesto Asociado" in df_ed_g.columns else pd.DataFrame()
+
+# Para la vista por categoría: presupuesto = suma Valor Referencia de proyectados
+cats_con_ref  = df_proyectados.groupby("Categoría")["Valor Referencia"].sum() if not df_proyectados.empty else df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
 cats_ejecutado= df_ed_g.groupby("Categoría")["Monto"].sum()
 todas_cats    = sorted(set(cats_con_ref.index.tolist() + cats_ejecutado.index.tolist()))
 
@@ -1190,6 +1214,62 @@ if todas_cats:
     st.markdown(tarjetas_html, unsafe_allow_html=True)
 else:
     st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
+
+# ── SEGUIMIENTO POR ÍTEM PROYECTADO ──────────────────────
+if not df_proyectados.empty:
+    st.markdown('<div class="section-header"><span>🎯 Seguimiento de Ítems Proyectados</span></div>', unsafe_allow_html=True)
+
+    items_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px;">'
+
+    for _, proy in df_proyectados.iterrows():
+        nombre_proy = str(proy["Descripción"])
+        presup_item = float(proy.get("Valor Referencia", 0) or 0)
+        cat         = str(proy.get("Categoría",""))
+        color       = COLOR_MAP.get(cat, "#aaaaaa")
+
+        # Gastos reales asociados a este ítem
+        if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
+            gastos_item = df_asociados[df_asociados["Presupuesto Asociado"] == nombre_proy]["Monto"].sum()
+        else:
+            gastos_item = 0.0
+
+        disponible = presup_item - gastos_item
+        excedido   = gastos_item > presup_item
+        pct        = min((gastos_item / presup_item * 100), 100) if presup_item > 0 else 0
+        bar_color  = "#e74c3c" if excedido else color
+        disp_color = "#e74c3c" if excedido else "#2ecc71"
+        disp_label = "Excedido" if excedido else "Disponible"
+        pct_txt    = f"⚠️ {gastos_item/presup_item*100:.0f}% — Excedido" if excedido else f"{pct:.0f}% ejecutado"
+
+        # Lista de gastos asociados
+        gastos_lista = ""
+        if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
+            assoc = df_asociados[df_asociados["Presupuesto Asociado"] == nombre_proy]
+            for _, ag in assoc.iterrows():
+                gastos_lista += f'<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #495057"><span style="font-size:10px;color:#adb5bd">{ag["Descripción"]}</span><span style="font-size:10px;color:#fff">$ {float(ag["Monto"]):,.0f}</span></div>'
+
+        items_html += f"""
+        <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
+          <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:6px">💰 {nombre_proy}</div>
+          <div style="font-size:9px;color:#adb5bd;margin-bottom:8px">{cat}</div>
+          <div style="display:flex;justify-content:space-between;margin-bottom:8px">
+            <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ {presup_item:,.0f}</div></div>
+            <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#fff">$ {gastos_item:,.0f}</div></div>
+            <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">{disp_label}</div><div style="font-size:13px;font-weight:700;color:{disp_color}">$ {abs(disponible):,.0f}</div></div>
+          </div>
+          <div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden">
+            <div style="width:{pct:.0f}%;height:8px;border-radius:20px;background:{bar_color}"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:8px">
+            <span style="font-size:10px;color:#adb5bd">0%</span>
+            <span style="font-size:10px;font-weight:700;color:{bar_color}">{pct_txt}</span>
+            <span style="font-size:10px;color:#adb5bd">100%</span>
+          </div>
+          {f'<div style="border-top:1px solid #495057;padding-top:6px">{gastos_lista}</div>' if gastos_lista else ''}
+        </div>"""
+
+    items_html += '</div>'
+    st.markdown(items_html, unsafe_allow_html=True)
 
 # KPIs
 st.divider()
@@ -1341,6 +1421,8 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                             "monto": float(row["Monto"]), "valor_referencia": float(row["Valor Referencia"]),
                             "pagado": bool(row["Pagado"]), "recurrente": bool(row["Movimiento Recurrente"]),
                             "fecha_pago": fecha_p,
+                            "es_proyectado": bool(row.get("Es Proyectado", False)),
+                            "presupuesto_asociado": str(row["Presupuesto Asociado"]) if row.get("Presupuesto Asociado") not in [None, "None", ""] else None,
                             "usuario_id": str(u_id)
                         })
                     supabase.table("gastos").insert(gastos_db).execute()
