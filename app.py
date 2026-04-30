@@ -1123,19 +1123,32 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False),
         "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
     }
+    # Preparar df base — aplicar copia pendiente desde session_state
+    df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
+
+    # Aplicar copia guardada antes de mostrar el editor
+    if st.session_state.get("aplicar_copia_ref"):
+        for idx, val_ref in st.session_state["aplicar_copia_ref"].items():
+            if idx < len(df_base):
+                df_base.loc[idx, "Monto"] = val_ref
+                df_base.loc[idx, "📋"]   = False
+        del st.session_state["aplicar_copia_ref"]
+
     df_ed_g = st.data_editor(
-        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
+        df_base,
         use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
     )
 
-    # ✅ Botón para aplicar la copia Ref → Monto en filas marcadas
-    # ✅ Copiar Ref → Monto en filas marcadas con 📋
+    # Detectar 📋 marcado → guardar en session_state y rerun para aplicar
     if "📋" in df_ed_g.columns:
         mask_copy = df_ed_g["📋"] == True
         if mask_copy.any():
-            df_ed_g.loc[mask_copy, "Monto"] = df_ed_g.loc[mask_copy, "Valor Referencia"]
-            n_cop = int(mask_copy.sum())
-            st.info(f"📋 Se copió Valor Referencia → Monto en {n_cop} fila(s). Presiona **GUARDAR** para confirmar.", icon="💡")
+            copia = {int(idx): float(df_ed_g.loc[idx,"Valor Referencia"] or 0)
+                     for idx in df_ed_g[mask_copy].index
+                     if float(df_ed_g.loc[idx,"Valor Referencia"] or 0) > 0}
+            if copia:
+                st.session_state["aplicar_copia_ref"] = copia
+                st.rerun()
 
 # Tabla de ingresos adicionales
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
