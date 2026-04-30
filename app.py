@@ -1064,68 +1064,70 @@ df_mes_g["📋"] = False
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
 # ── TABLA VISUAL con colores por categoría ──────────────────
-def render_tabla_gastos(df):
+def render_resumen_gastos(df):
     if df.empty:
         st.info("No hay gastos registrados para este mes.")
         return
 
-    filas_html = ""
-    for i, (_, row) in enumerate(df.iterrows()):
-        bg  = "#2d3238" if i % 2 == 0 else "#3a3f44"
-        cat = str(row.get("Categoría", ""))
-        col = COLOR_MAP.get(cat, "#aaaaaa")
-        # Badge de categoría
-        badge = f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:{col}22;color:{col}">{cat}</span>'
-        # Monto
-        monto = float(row.get("Monto", 0) or 0)
-        vref  = float(row.get("Valor Referencia", 0) or 0)
-        monto_str = f"$ {monto:,.0f}" if monto else f'<span style="color:#6c757d">$ {vref:,.0f}</span>'
-        # Pagado / Recurrente
-        pagado = row.get("Pagado", False)
-        recur  = row.get("Movimiento Recurrente", False)
-        chk_p  = '<span style="color:#2ecc71;font-size:16px">✓</span>' if pagado else '<span style="color:#6c757d">—</span>'
-        chk_r  = '<span style="color:#2ecc71;font-size:16px">✓</span>' if recur  else '<span style="color:#6c757d">—</span>'
-        # Fecha pago
-        fp = row.get("Fecha Pago", None)
-        if fp is not None and str(fp) not in ["NaT","None",""]:
-            try:
-                fecha_str = pd.to_datetime(fp).strftime("%d/%m/%Y")
-            except:
-                fecha_str = '<span style="color:#6c757d">—</span>'
-        else:
-            fecha_str = '<span style="color:#6c757d">—</span>'
+    def make_tabla(df_sub, titulo, color_header, col_extra_label, es_pagado):
+        if df_sub.empty:
+            return ""
+        filas = ""
+        total = 0
+        for i, (_, row) in enumerate(df_sub.iterrows()):
+            bg    = "#2d3238" if i % 2 == 0 else "#3a3f44"
+            cat   = str(row.get("Categoría",""))
+            col   = COLOR_MAP.get(cat, "#aaaaaa")
+            badge = f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:{col}22;color:{col}">{cat}</span>'
+            desc  = str(row.get("Descripción",""))
+            monto = float(row.get("Monto",0) or 0)
+            vref  = float(row.get("Valor Referencia",0) or 0)
+            val   = monto if monto > 0 else vref
+            total += val
+            recur = row.get("Movimiento Recurrente", False)
+            recur_str = ' <span style="color:#2ecc71">🔁</span>' if recur else ""
+            if es_pagado:
+                fp = row.get("Fecha Pago", None)
+                if fp is not None and str(fp) not in ["NaT","None",""]:
+                    try: extra = pd.to_datetime(fp).strftime("%d/%m/%Y")
+                    except: extra = "—"
+                else: extra = "—"
+            else:
+                extra = f"$ {vref:,.0f}" if vref > 0 else "—"
+            filas += f'<tr style="background:{bg}">'
+            filas += f'<td style="padding:6px 10px">{badge}</td>'
+            filas += f'<td style="padding:6px 10px;color:#fff;font-size:12px">{desc}{recur_str}</td>'
+            filas += f'<td style="padding:6px 10px;color:#fff;font-size:12px;text-align:right">$ {val:,.0f}</td>'
+            filas += f'<td style="padding:6px 10px;color:#adb5bd;font-size:11px;text-align:right">{extra}</td>'
+            filas += '</tr>'
+        filas += f'<tr style="background:{color_header}"><td colspan="2" style="padding:8px 10px;font-weight:800;font-size:12px;color:#14213d;text-transform:uppercase">TOTAL {titulo}</td><td style="padding:8px 10px;font-weight:800;font-size:13px;color:#14213d;text-align:right">$ {total:,.0f}</td><td></td></tr>'
+        th = f'<th style="padding:9px 10px;color:{color_header};font-size:11px;text-transform:uppercase;font-weight:700'
+        html  = '<div style="border-radius:10px;overflow:hidden;margin-bottom:12px"><table style="width:100%;border-collapse:collapse;font-family:sans-serif"><thead><tr style="background:#14213d">'
+        html += th + ';text-align:left">Categoría</th>'
+        html += th + ';text-align:left">Descripción</th>'
+        html += th + ';text-align:right">Monto</th>'
+        html += th + f';text-align:right">{col_extra_label}</th>'
+        html += f'</tr></thead><tbody>{filas}</tbody></table></div>'
+        return html
 
-        desc = str(row.get("Descripción",""))
-        filas_html += f"""
-        <tr style="background:{bg}">
-            <td style="padding:7px 10px">{badge}</td>
-            <td style="padding:7px 10px;color:#fff;font-size:12px">{desc}</td>
-            <td style="padding:7px 10px;color:#fff;font-size:12px;text-align:right">{monto_str}</td>
-            <td style="padding:7px 10px;text-align:center">{chk_p}</td>
-            <td style="padding:7px 10px;text-align:center">{chk_r}</td>
-            <td style="padding:7px 10px;color:#adb5bd;font-size:11px">{fecha_str}</td>
-        </tr>"""
+    df_pagados    = df[df["Pagado"] == True].copy()
+    df_pendientes = df[df["Pagado"] == False].copy()
 
-    tabla_html = f"""
-    <div style="border-radius:10px;overflow:hidden;margin-bottom:8px">
-    <table style="width:100%;border-collapse:collapse;font-family:sans-serif">
-        <thead>
-            <tr style="background:#14213d">
-                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:left;font-weight:700">Categoría</th>
-                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:left;font-weight:700">Descripción</th>
-                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:right;font-weight:700">Monto</th>
-                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:center;font-weight:700">Pagado</th>
-                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:center;font-weight:700">Recurrente</th>
-                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:left;font-weight:700">Fecha Pago</th>
-            </tr>
-        </thead>
-        <tbody>{filas_html}</tbody>
-    </table>
-    </div>"""
-    st.markdown(tabla_html, unsafe_allow_html=True)
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown('<div style="color:#2ecc71;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">✅ Obligaciones Pagadas</div>', unsafe_allow_html=True)
+        html_p = make_tabla(df_pagados, "PAGADO", "#2ecc71", "Fecha Pago", True)
+        if html_p: st.markdown(html_p, unsafe_allow_html=True)
+        else: st.info("Sin pagos registrados.")
+    with col2:
+        st.markdown('<div style="color:#e74c3c;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⏳ Obligaciones Pendientes</div>', unsafe_allow_html=True)
+        html_n = make_tabla(df_pendientes, "PENDIENTE", "#fca311", "Val.Ref", False)
+        if html_n: st.markdown(html_n, unsafe_allow_html=True)
+        else: st.success("¡Sin obligaciones pendientes!")
 
-# Mostrar tabla visual
-render_tabla_gastos(df_mes_g)
+
+render_resumen_gastos(df_mes_g)
+
 
 # ── EDITOR SIEMPRE VISIBLE ──────────────────────────────
 st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
