@@ -1031,6 +1031,9 @@ else:
 if "Presupuesto Asociado" not in df_mes_g.columns:
     df_mes_g["Presupuesto Asociado"] = None
 
+# ✅ Columna temporal para copiar Ref → Monto por fila
+df_mes_g["📋 Copiar Ref"] = False
+
 # ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
@@ -1102,21 +1105,6 @@ render_tabla_gastos(df_mes_g)
 st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
 st.caption("Los cambios se aplican al presionar 💾 GUARDAR CAMBIOS DEFINITIVOS")
 if True:  # bloque siempre activo (reemplaza el expander)
-    # ── COPIAR VALOR REFERENCIA → MONTO ─────────────────────
-    col_copy1, col_copy2 = st.columns([3,1])
-    with col_copy1:
-        st.markdown('<div style="color:#adb5bd;font-size:0.85rem;padding-top:8px">💡 Activa el interruptor para copiar el <b>Valor Referencia</b> al <b>Monto</b> en todas las filas donde el Monto sea 0</div>', unsafe_allow_html=True)
-    with col_copy2:
-        copiar_ref = st.toggle("Copiar Ref → Monto", value=False, key="copiar_ref_toggle")
-
-    if copiar_ref:
-        mask = (df_mes_g["Valor Referencia"] > 0) & (df_mes_g["Monto"] == 0)
-        if mask.any():
-            df_mes_g.loc[mask, "Monto"] = df_mes_g.loc[mask, "Valor Referencia"]
-            st.success(f"✅ Se copiaron {mask.sum()} valores de referencia al monto.")
-        else:
-            st.info("No hay filas con Valor Referencia > 0 y Monto = 0.")
-
     # Items proyectados disponibles para asociar
     items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
 
@@ -1125,6 +1113,8 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Descripción":           st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
         "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f"),
         "Valor Referencia":      st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
+        "📋 Copiar Ref":         st.column_config.CheckboxColumn("📋 = Monto", default=False,
+                                     help="Marca para copiar el Valor Referencia al Monto en esta fila"),
         "Es Proyectado":         st.column_config.CheckboxColumn("💰 Proyectado", default=False,
                                      help="Marca si este ítem es un presupuesto proyectado (ej: GASOLINA PROYECTADA)"),
         "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="medium",
@@ -1134,9 +1124,15 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
     }
     df_ed_g = st.data_editor(
-        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
+        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋 Copiar Ref","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
         use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
     )
+
+    # ✅ Aplicar copia Ref → Monto solo en filas marcadas
+    if "📋 Copiar Ref" in df_ed_g.columns:
+        mask_copy = df_ed_g["📋 Copiar Ref"] == True
+        if mask_copy.any():
+            df_ed_g.loc[mask_copy, "Monto"] = df_ed_g.loc[mask_copy, "Valor Referencia"]
 
 # Tabla de ingresos adicionales
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
