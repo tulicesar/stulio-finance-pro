@@ -1245,6 +1245,10 @@ if todas_cats:
 else:
     st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
 
+# ── DEBUG TEMPORAL ──────────────────────────────────────
+st.write("df_proyectados:", df_proyectados[["Descripción","Valor Referencia","Es Proyectado"]].to_dict() if not df_proyectados.empty else "VACÍO")
+st.write("df_asociados:", df_asociados[["Descripción","Monto","Presupuesto Asociado"]].to_dict() if not df_asociados.empty else "VACÍO")
+
 # ── SEGUIMIENTO POR ÍTEM PROYECTADO ──────────────────────
 if not df_proyectados.empty:
     st.markdown('<div class="section-header"><span>🎯 Seguimiento de Ítems Proyectados</span></div>', unsafe_allow_html=True)
