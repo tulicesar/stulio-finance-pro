@@ -408,7 +408,9 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         for _, row in g_m.iterrows():
             if y < 80: c.showPage(); y = head(c, titulo, anio, nombre_usuario); c.setFont("Helvetica", 8)
             monto_fila = float(row['Monto'])
-            total_gastos_mes += monto_fila
+            # ✅ Solo sumar al total los gastos pagados
+            if bool(row.get("Pagado", False)):
+                total_gastos_mes += monto_fila
             c.drawString(60, y, f"{row['Categoría']} - {row['Descripción']}"[:65])
             c.drawRightString(490, y, f"$ {monto_fila:,.0f}")
             c.drawRightString(545, y, "SI" if row["Pagado"] else "NO"); y -= 12
@@ -1036,6 +1038,60 @@ if df_mes_g.empty:
                 df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 # Tabla de gastos
+# ── EDITOR SIEMPRE VISIBLE ──────────────────────────────
+st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
+st.caption("Los cambios se aplican al presionar 💾 GUARDAR CAMBIOS DEFINITIVOS")
+if True:  # bloque siempre activo (reemplaza el expander)
+    # Items proyectados disponibles para asociar
+    items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
+
+    config_g = {
+        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+        "Descripción":           st.column_config.TextColumn("Descripción", width="medium"),
+        "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
+        "Valor Referencia":      st.column_config.NumberColumn("Val.Ref", format="$ %,.0f", width="small"),
+        "📋":                    st.column_config.CheckboxColumn("📋", default=False, width="small",
+                                     help="Copia Valor Referencia → Monto"),
+        "Es Proyectado":         st.column_config.CheckboxColumn("Proy.", default=False, width="small",
+                                     help="Ítem proyectado"),
+        "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="small",
+                                     help="Ítem proyectado al que pertenece este gasto"),
+        "Pagado":                st.column_config.CheckboxColumn("✅", default=False, width="small"),
+        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁", default=False, width="small"),
+        "Fecha Pago":            st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
+    }
+    # Preparar df base — sin rerun, sin session_state complejo
+    df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
+
+    df_ed_g = st.data_editor(
+        df_base,
+        use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
+    )
+
+    # ✅ Aplicar copia silenciosa: si 📋 está marcado, copiar Ref → Monto
+    # Esto ocurre DESPUÉS de leer df_ed_g, sin rerun, preservando todos los demás valores
+    if "📋" in df_ed_g.columns:
+        mask_copy = df_ed_g["📋"] == True
+        if mask_copy.any():
+            df_ed_g.loc[mask_copy, "Monto"] = pd.to_numeric(
+                df_ed_g.loc[mask_copy, "Valor Referencia"], errors="coerce"
+            ).fillna(0)
+            # Desmarcar el check después de copiar
+            df_ed_g.loc[mask_copy, "📋"] = False
+
+
+
+# Tabla de ingresos adicionales
+st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
+df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+df_ed_oi  = st.data_editor(
+    df_mes_oi.reindex(columns=["Descripción","Monto"]).reset_index(drop=True),
+    use_container_width=True, num_rows="dynamic",
+    column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")},
+    key="oi_ed"
+)
+
+
 st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span></div>', unsafe_allow_html=True)
 
 # ✅ Ordenar A-Z por Categoría y Descripción
@@ -1121,65 +1177,26 @@ def render_resumen_gastos(df):
         else: st.info("Sin pagos registrados.")
     with col2:
         st.markdown('<div style="color:#e74c3c;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⏳ Obligaciones Pendientes</div>', unsafe_allow_html=True)
-        html_n = make_tabla(df_pendientes, "PENDIENTE", "#fca311", "Val.Ref", False)
+        # ✅ Para ítems proyectados, ajustar Val.Ref descontando asociados pagados
+        df_pend_adj = df_pendientes.copy()
+        if "Es Proyectado" in df_pend_adj.columns and "Presupuesto Asociado" in df.columns:
+            for idx, row in df_pend_adj.iterrows():
+                if bool(row.get("Es Proyectado", False)):
+                    nombre = str(row.get("Descripción",""))
+                    _pa = df["Presupuesto Asociado"].astype(str).str.strip()
+                    asociados_monto = df[
+                        (_pa == nombre.strip()) &
+                        (_pa != "nan") & (_pa != "None") & (_pa != "")
+                    ]["Monto"].apply(pd.to_numeric, errors="coerce").fillna(0).sum()
+                    vref_orig = float(row.get("Valor Referencia", 0) or 0)
+                    df_pend_adj.loc[idx, "Valor Referencia"] = max(vref_orig - asociados_monto, 0)
+        html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Val.Ref", False)
         if html_n: st.markdown(html_n, unsafe_allow_html=True)
         else: st.success("¡Sin obligaciones pendientes!")
 
 
 render_resumen_gastos(df_mes_g)
 
-
-# ── EDITOR SIEMPRE VISIBLE ──────────────────────────────
-st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
-st.caption("Los cambios se aplican al presionar 💾 GUARDAR CAMBIOS DEFINITIVOS")
-if True:  # bloque siempre activo (reemplaza el expander)
-    # Items proyectados disponibles para asociar
-    items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
-
-    config_g = {
-        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-        "Descripción":           st.column_config.TextColumn("Descripción", width="medium"),
-        "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
-        "Valor Referencia":      st.column_config.NumberColumn("Val.Ref", format="$ %,.0f", width="small"),
-        "📋":                    st.column_config.CheckboxColumn("📋", default=False, width="small",
-                                     help="Copia Valor Referencia → Monto"),
-        "Es Proyectado":         st.column_config.CheckboxColumn("Proy.", default=False, width="small",
-                                     help="Ítem proyectado"),
-        "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="small",
-                                     help="Ítem proyectado al que pertenece este gasto"),
-        "Pagado":                st.column_config.CheckboxColumn("✅", default=False, width="small"),
-        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁", default=False, width="small"),
-        "Fecha Pago":            st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
-    }
-    # Preparar df base — sin rerun, sin session_state complejo
-    df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
-
-    df_ed_g = st.data_editor(
-        df_base,
-        use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
-    )
-
-    # ✅ Aplicar copia silenciosa: si 📋 está marcado, copiar Ref → Monto
-    # Esto ocurre DESPUÉS de leer df_ed_g, sin rerun, preservando todos los demás valores
-    if "📋" in df_ed_g.columns:
-        mask_copy = df_ed_g["📋"] == True
-        if mask_copy.any():
-            df_ed_g.loc[mask_copy, "Monto"] = pd.to_numeric(
-                df_ed_g.loc[mask_copy, "Valor Referencia"], errors="coerce"
-            ).fillna(0)
-            # Desmarcar el check después de copiar
-            df_ed_g.loc[mask_copy, "📋"] = False
-
-
-# Tabla de ingresos adicionales
-st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
-df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-df_ed_oi  = st.data_editor(
-    df_mes_oi.reindex(columns=["Descripción","Monto"]).reset_index(drop=True),
-    use_container_width=True, num_rows="dynamic",
-    column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")},
-    key="oi_ed"
-)
 
 # Cálculos
 df_ed_g["Monto"]            = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
