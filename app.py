@@ -479,20 +479,27 @@ with inf1:
     t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not t_df.empty and t_df['V'].sum() > 0:
         total_v = t_df['V'].sum()
-        # ✅ MEJORA 1: Ocultamos etiquetas de categorías menores al 3% para evitar amontonamiento
-        t_df['pct'] = t_df['V'] / total_v * 100
-        t_df['label'] = t_df.apply(lambda r: r['Categoría'] if r['pct'] >= 3 else '', axis=1)
-        fig1 = px.pie(t_df, values='V', names='Categoría', hole=0.7, color='Categoría', color_discrete_map=COLOR_MAP)
-        fig1.update_traces(
-            textinfo='none',          # Sin texto dentro de la dona
-            hovertemplate='<b>%{label}</b><br>$ %{value:,.0f}<br>%{percent}<extra></extra>'
-        )
-        fig1.update_layout(showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250, margin=dict(t=0,b=0,l=0,r=0))
-        st.plotly_chart(fig1, use_container_width=True)
         res = t_df.groupby("Categoría")['V'].sum().reset_index()
+        res['pct'] = res['V'] / total_v * 100
+        res = res.sort_values('V', ascending=False)
+
+        barras_html = ""
         for _, r in res.iterrows():
             c_cat = COLOR_MAP.get(r['Categoría'], "#6c757d")
-            st.markdown(f'<div class="legend-bar" style="background:{c_cat}">{r["Categoría"]} <span>$ {r["V"]:,.0f}</span></div>', unsafe_allow_html=True)
+            pct   = r['pct']
+            monto = r['V']
+            barras_html += f"""
+            <div style="margin-bottom:6px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                <span style="font-size:0.78rem; font-weight:700; color:#ffffff;">{r['Categoría']}</span>
+                <span style="font-size:0.78rem; color:#ffffff;">$ {monto:,.0f} &nbsp;<b style="color:{c_cat};">{pct:.1f}%</b></span>
+              </div>
+              <div style="background:#2d3238; border-radius:6px; height:10px; width:100%;">
+                <div style="background:{c_cat}; width:{pct:.1f}%; height:10px; border-radius:6px;"></div>
+              </div>
+            </div>
+            """
+        st.markdown(barras_html, unsafe_allow_html=True)
 
 with inf2:
     st.markdown("#### Eficiencia de Ahorro")
