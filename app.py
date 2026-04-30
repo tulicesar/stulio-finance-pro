@@ -1169,14 +1169,19 @@ label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 # ══════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>📊 Presupuesto vs Ejecución por Categoría</span></div>', unsafe_allow_html=True)
 
-# Items proyectados (tienen check Es Proyectado)
-df_proyectados = df_ed_g[df_ed_g["Es Proyectado"] == True].copy() if "Es Proyectado" in df_ed_g.columns else pd.DataFrame()
+# ✅ Usar datos de BD para seguimiento (más confiable que el editor)
+df_mes_bd = df_g_full[
+    (df_g_full["Periodo"] == mes_s) &
+    (df_g_full["Año"] == anio_s)
+].copy()
 
-# Gastos reales asociados a cada proyectado
-# ✅ Gastos reales asociados a un ítem proyectado
-if "Presupuesto Asociado" in df_ed_g.columns:
-    _pa = df_ed_g["Presupuesto Asociado"].astype(str).str.strip()
-    df_asociados = df_ed_g[
+# Items proyectados desde BD
+df_proyectados = df_mes_bd[df_mes_bd["Es Proyectado"] == True].copy() if "Es Proyectado" in df_mes_bd.columns else pd.DataFrame()
+
+# Gastos asociados desde BD
+if "Presupuesto Asociado" in df_mes_bd.columns:
+    _pa = df_mes_bd["Presupuesto Asociado"].astype(str).str.strip()
+    df_asociados = df_mes_bd[
         _pa.notna() &
         (_pa != "") &
         (_pa != "None") &
@@ -1185,6 +1190,7 @@ if "Presupuesto Asociado" in df_ed_g.columns:
     ].copy()
 else:
     df_asociados = pd.DataFrame()
+
 
 # Para la vista por categoría: presupuesto = suma Valor Referencia de proyectados
 # ✅ Presupuesto = suma de TODOS los Valor Referencia por categoría
