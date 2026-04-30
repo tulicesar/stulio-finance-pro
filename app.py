@@ -273,42 +273,70 @@ def cargar_bd(u_id, token):
         st.error(f"Error al cargar datos: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# --- 8. CALCULAR MÉTRICAS ---
+# --- 8. CALCULAR MÉTRICAS (vectorizado con pandas) ---
 def calcular_metricas(df_g, nom, otr, s_ant):
-    it  = float(s_ant) + float(nom) + float(otr)
-    vp  = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
+    it = float(s_ant) + float(nom) + float(otr)
 
-    if not df_g.empty:
-        vpy = 0
-        for _, row in df_g[df_g["Pagado"] == False].iterrows():
-            monto = float(row["Monto"] or 0)
-            vref  = float(row["Valor Referencia"] or 0)
-            nombre = str(row.get("Descripción", ""))
+    if df_g.empty:
+        return it, 0.0, 0.0, it, it, 100.0
 
-            # Si es un ítem proyectado, descontar los montos ya ejecutados asociados
-            es_proy = bool(row.get("Es Proyectado", False))
-            if es_proy and vref > 0:
-                # Sumar montos asociados a este ítem proyectado
-                if "Presupuesto Asociado" in df_g.columns:
-                    _pa = df_g["Presupuesto Asociado"].astype(str).str.strip()
-                    asociados = df_g[
-                        (_pa == nombre.strip()) &
-                        (_pa != "nan") & (_pa != "None") & (_pa != "")
-                    ]["Monto"].apply(pd.to_numeric, errors="coerce").fillna(0).sum()
-                else:
-                    asociados = 0
-                # Pendiente real = Valor Referencia - ya ejecutado
-                pendiente = max(vref - asociados, 0)
-                vpy += pendiente
-            else:
-                # Gasto normal: usar Monto si > 0, sino Valor Referencia
-                vpy += monto if monto > 0 else vref
+    # Asegurar tipos numéricos
+    df = df_g.copy()
+    df["Monto"]           = pd.to_numeric(df["Monto"],           errors="coerce").fillna(0)
+    df["Valor Referencia"]= pd.to_numeric(df["Valor Referencia"],errors="coerce").fillna(0)
+    df["Pagado"]          = df["Pagado"].fillna(False).astype(bool)
+
+    # ── PAGADO ────────────────────────────────────────────────
+    vp = float(df.loc[df["Pagado"], "Monto"].sum())
+
+    # ── PENDIENTE ─────────────────────────────────────────────
+    df_pend = df[~df["Pagado"]].copy()
+
+    if df_pend.empty:
+        vpy = 0.0
     else:
-        vpy = 0
+        # Columna de valor base: Monto si > 0, sino Valor Referencia
+        df_pend["_base"] = df_pend["Monto"].where(
+            df_pend["Monto"] > 0, df_pend["Valor Referencia"]
+        )
+
+        # Para ítems proyectados: descontar montos asociados ya ejecutados
+        tiene_proyectados = (
+            "Es Proyectado" in df.columns and
+            "Presupuesto Asociado" in df.columns and
+            df_pend.get("Es Proyectado", pd.Series(False)).any()
+        )
+
+        if tiene_proyectados:
+            # Construir mapa: nombre_proyectado → suma de montos asociados
+            _pa = df["Presupuesto Asociado"].astype(str).str.strip()
+            validos = ~_pa.isin(["nan", "None", "NaN", ""])
+            asociados_map = (
+                df[validos]
+                .groupby(_pa[validos])["Monto"]
+                .sum()
+                .to_dict()
+            )
+
+            es_proy = df_pend.get("Es Proyectado", pd.Series(False)).fillna(False).astype(bool)
+
+            # Para proyectados: pendiente = max(ValRef - asociados, 0)
+            def pendiente_proyectado(row):
+                nombre    = str(row.get("Descripción", "")).strip()
+                vref      = float(row["Valor Referencia"])
+                asociados = float(asociados_map.get(nombre, 0))
+                return max(vref - asociados, 0)
+
+            df_pend["_base"] = df_pend.apply(
+                lambda r: pendiente_proyectado(r) if bool(r.get("Es Proyectado", False)) else r["_base"],
+                axis=1
+            )
+
+        vpy = float(df_pend["_base"].sum())
 
     bf       = it - vp - vpy
-    ahorro_p = (bf / it * 100) if it > 0 else 0
-    return it, vp, vpy, (it - vp), bf, ahorro_p
+    ahorro_p = (bf / it * 100) if it > 0 else 0.0
+    return it, vp, vpy, float(it - vp), bf, ahorro_p
 
 # --- 9. GENERADOR DE PDF ---
 def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u_id):
