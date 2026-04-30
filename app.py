@@ -1142,6 +1142,13 @@ if True:  # bloque siempre activo (reemplaza el expander)
             # Desmarcar el check después de copiar
             df_ed_g.loc[mask_copy, "📋"] = False
 
+
+# Tabla de ingresos adicionales
+st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
+df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+df_ed_oi  = st.data_editor(
+    df_mes_oi.reindex(columns=["Descripción","Monto"]).reset_index(drop=True),
+    use_container_width=True, num_rows="dynamic",
     column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")},
     key="oi_ed"
 )
