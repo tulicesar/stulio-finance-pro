@@ -263,6 +263,10 @@ def cargar_bd(u_id, token):
             if "Año" in df.columns:
                 df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
 
+        # ✅ Forzar Fecha Pago a datetime (evita que aparezca "None" como texto)
+        if "Fecha Pago" in df_g.columns:
+            df_g["Fecha Pago"] = pd.to_datetime(df_g["Fecha Pago"], errors="coerce")
+
         return df_g, df_i, df_oi
 
     except Exception as e:
@@ -1010,11 +1014,15 @@ st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span><
 if not df_mes_g.empty:
     df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
-# ✅ Agregar columna Fecha Pago si no existe — NaT en lugar de None
+# ✅ Fecha Pago: siempre como datetime, NaT para vacíos
 if "Fecha Pago" not in df_mes_g.columns:
     df_mes_g["Fecha Pago"] = pd.NaT
 else:
     df_mes_g["Fecha Pago"] = pd.to_datetime(df_mes_g["Fecha Pago"], errors="coerce")
+# Reemplazar cualquier None/NaN residual por NaT
+df_mes_g["Fecha Pago"] = df_mes_g["Fecha Pago"].where(
+    df_mes_g["Fecha Pago"].notna(), other=pd.NaT
+)
 
 # ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
