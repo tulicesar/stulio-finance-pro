@@ -275,12 +275,38 @@ def cargar_bd(u_id, token):
 
 # --- 8. CALCULAR MÉTRICAS ---
 def calcular_metricas(df_g, nom, otr, s_ant):
-    it   = float(s_ant) + float(nom) + float(otr)
-    vp   = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
-    vpy  = df_g[df_g["Pagado"] == False].apply(
-        lambda x: x["Monto"] if x["Monto"] > 0 else x["Valor Referencia"], axis=1
-    ).sum() if not df_g.empty else 0
-    bf   = it - vp - vpy
+    it  = float(s_ant) + float(nom) + float(otr)
+    vp  = df_g[df_g["Pagado"] == True]["Monto"].sum() if not df_g.empty else 0
+
+    if not df_g.empty:
+        vpy = 0
+        for _, row in df_g[df_g["Pagado"] == False].iterrows():
+            monto = float(row["Monto"] or 0)
+            vref  = float(row["Valor Referencia"] or 0)
+            nombre = str(row.get("Descripción", ""))
+
+            # Si es un ítem proyectado, descontar los montos ya ejecutados asociados
+            es_proy = bool(row.get("Es Proyectado", False))
+            if es_proy and vref > 0:
+                # Sumar montos asociados a este ítem proyectado
+                if "Presupuesto Asociado" in df_g.columns:
+                    _pa = df_g["Presupuesto Asociado"].astype(str).str.strip()
+                    asociados = df_g[
+                        (_pa == nombre.strip()) &
+                        (_pa != "nan") & (_pa != "None") & (_pa != "")
+                    ]["Monto"].apply(pd.to_numeric, errors="coerce").fillna(0).sum()
+                else:
+                    asociados = 0
+                # Pendiente real = Valor Referencia - ya ejecutado
+                pendiente = max(vref - asociados, 0)
+                vpy += pendiente
+            else:
+                # Gasto normal: usar Monto si > 0, sino Valor Referencia
+                vpy += monto if monto > 0 else vref
+    else:
+        vpy = 0
+
+    bf       = it - vp - vpy
     ahorro_p = (bf / it * 100) if it > 0 else 0
     return it, vp, vpy, (it - vp), bf, ahorro_p
 
