@@ -532,20 +532,27 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
         ws_g.set_column("E:E", 10)
         ws_g.set_column("F:F", 12)
 
-        # Título
-        ws_g.merge_range("A1:F1", f"MY FINANCEAPP — REPORTE DE GASTOS", f_title)
+        # ✅ LOGO + Título
+        ws_g.set_row(0, 60)   # fila 1 alta para el logo
+        ws_g.set_row(1, 22)
+        ws_g.set_row(2, 20)
+        # Logo centrado en fila 1 (columnas A:F)
+        if os.path.exists(LOGO_APP_H):
+            ws_g.insert_image("A1", LOGO_APP_H, {"x_scale": 0.45, "y_scale": 0.45,
+                "x_offset": 5, "y_offset": 5, "object_position": 1})
+        ws_g.merge_range("A1:F1", "", f_title)   # fondo azul detrás del logo
         ws_g.merge_range("A2:F2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
-        ws_g.set_row(0, 28); ws_g.set_row(1, 22)
+        ws_g.merge_range("A3:F3", "REPORTE DE GASTOS", f_title)
 
         # Encabezados tabla
         headers_g = ["CATEGORÍA", "DESCRIPCIÓN", "MONTO", "VALOR REF.", "PAGADO", "RECURRENTE"]
         for col, h in enumerate(headers_g):
-            ws_g.write(3, col, h, f_header)
-        ws_g.set_row(3, 20)
+            ws_g.write(4, col, h, f_header)
+        ws_g.set_row(4, 20)
 
         # Filas de datos
         for i, (_, row) in enumerate(df_g.iterrows()):
-            r = i + 4
+            r = i + 5
             is_odd = i % 2 == 0
             fm      = f_row1       if is_odd else f_row2
             fm_mon  = f_row1_money if is_odd else f_row2_money
@@ -564,7 +571,7 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
             ws_g.write(r, 5, rec, (f_si if is_odd else f_si2) if rec=="SI" else (f_no if is_odd else f_no2))
 
         # Fila total
-        last = len(df_g) + 4
+        last = len(df_g) + 5
         ws_g.set_row(last, 20)
         ws_g.merge_range(last, 0, last, 1, "TOTAL GASTOS DEL MES", f_total_lbl)
         ws_g.write(last, 2, float(df_g["Monto"].apply(pd.to_numeric, errors="coerce").fillna(0).sum()), f_total)
@@ -582,20 +589,24 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
         ws_i.set_column("A:A", 30)
         ws_i.set_column("B:B", 20)
 
-        ws_i.merge_range("A1:B1", "MY FINANCEAPP — INGRESOS DEL MES", f_title)
+        ws_i.set_row(0, 60); ws_i.set_row(1, 22); ws_i.set_row(2, 20)
+        if os.path.exists(LOGO_APP_H):
+            ws_i.insert_image("A1", LOGO_APP_H, {"x_scale": 0.45, "y_scale": 0.45,
+                "x_offset": 5, "y_offset": 5, "object_position": 1})
+        ws_i.merge_range("A1:B1", "", f_title)
         ws_i.merge_range("A2:B2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
-        ws_i.set_row(0, 28); ws_i.set_row(1, 22)
+        ws_i.merge_range("A3:B3", "INGRESOS DEL MES", f_title)
 
-        ws_i.write(3, 0, "CONCEPTO",  f_header)
-        ws_i.write(3, 1, "MONTO",     f_header)
-        ws_i.set_row(3, 20)
+        ws_i.write(4, 0, "CONCEPTO",  f_header)
+        ws_i.write(4, 1, "MONTO",     f_header)
+        ws_i.set_row(4, 20)
 
         ingresos_base = [
             ("Saldo Anterior",  saldo_ant),
             ("Nómina / Ingreso Fijo", nomina),
         ]
         for i, (label, val) in enumerate(ingresos_base):
-            r = i + 4
+            r = i + 5
             fm = f_row1 if i % 2 == 0 else f_row2
             fm_m = f_row1_money if i % 2 == 0 else f_row2_money
             ws_i.write(r, 0, label, fm)
@@ -603,7 +614,7 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
             ws_i.set_row(r, 16)
 
         # Otros ingresos
-        row_start = 7
+        row_start = 8
         if not df_oi.empty:
             ws_i.merge_range(row_start, 0, row_start, 1, "INGRESOS ADICIONALES", f_header)
             ws_i.set_row(row_start, 18); row_start += 1
@@ -636,9 +647,13 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
         ws_r.set_column("D:D", 28)
         ws_r.set_column("E:E", 20)
 
-        ws_r.merge_range("A1:E1", "MY FINANCEAPP — RESUMEN FINANCIERO", f_title)
+        ws_r.set_row(0, 60); ws_r.set_row(1, 22); ws_r.set_row(2, 20)
+        if os.path.exists(LOGO_APP_H):
+            ws_r.insert_image("A1", LOGO_APP_H, {"x_scale": 0.45, "y_scale": 0.45,
+                "x_offset": 5, "y_offset": 5, "object_position": 1})
+        ws_r.merge_range("A1:E1", "", f_title)
         ws_r.merge_range("A2:E2", f"{mes.upper()} {anio}  |  {nombre_usuario}", f_subtitle)
-        ws_r.set_row(0, 28); ws_r.set_row(1, 22)
+        ws_r.merge_range("A3:E3", "RESUMEN FINANCIERO", f_title)
 
         # KPIs en 2 columnas
         kpis = [
@@ -650,7 +665,7 @@ def generar_excel_reporte(df_g_full, df_i_full, df_oi_full, mes, anio, u_id, nom
             ("EFICIENCIA DE AHORRO",   ahorro_p, fmt(NARANJA, AZUL, bold=True, num_fmt='0.0"%"', align="center")),
         ]
 
-        row = 4
+        row = 5
         for i, (label, val, fmt_val) in enumerate(kpis):
             col_l = 0 if i % 2 == 0 else 3
             col_v = 1 if i % 2 == 0 else 4
