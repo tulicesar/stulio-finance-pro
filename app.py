@@ -1032,7 +1032,7 @@ if "Presupuesto Asociado" not in df_mes_g.columns:
     df_mes_g["Presupuesto Asociado"] = None
 
 # ✅ Columna temporal para copiar Ref → Monto por fila
-df_mes_g["→ Monto"] = False
+df_mes_g["📋"] = False
 
 # ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
@@ -1113,8 +1113,8 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Descripción":           st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
         "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f"),
         "Valor Referencia":      st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
-        "→ Monto":               st.column_config.CheckboxColumn("→ Monto", default=False,
-                                     help="Activa para copiar el Valor Referencia al Monto en esta fila"),
+        "📋":                    st.column_config.CheckboxColumn("📋 Ref", default=False,
+                                     help="Activa para copiar el Valor Referencia al Monto"),
         "Es Proyectado":         st.column_config.CheckboxColumn("💰 Proyectado", default=False,
                                      help="Marca si este ítem es un presupuesto proyectado (ej: GASOLINA PROYECTADA)"),
         "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="medium",
@@ -1124,19 +1124,16 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
     }
     df_ed_g = st.data_editor(
-        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","→ Monto","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
+        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
         use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
     )
 
     # ✅ Botón para aplicar la copia Ref → Monto en filas marcadas
-    n_marcadas = int((df_ed_g["→ Monto"] == True).sum()) if "→ Monto" in df_ed_g.columns else 0
-    if n_marcadas > 0:
-        if st.button(f"📋 Copiar Valor Referencia → Monto en {n_marcadas} fila(s) marcada(s)", use_container_width=False):
-            mask_copy = df_ed_g["→ Monto"] == True
+    # ✅ Copiar automáticamente Ref → Monto en filas donde "📋" está marcado
+    if "📋" in df_ed_g.columns:
+        mask_copy = df_ed_g["📋"] == True
+        if mask_copy.any():
             df_ed_g.loc[mask_copy, "Monto"] = df_ed_g.loc[mask_copy, "Valor Referencia"]
-            df_ed_g["→ Monto"] = False
-            st.success(f"✅ Copiado en {n_marcadas} fila(s). Presiona GUARDAR para confirmar.")
-            st.rerun()
 
 # Tabla de ingresos adicionales
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
