@@ -1136,7 +1136,7 @@ if True:  # bloque siempre activo (reemplaza el expander)
 
     config_g = {
         "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-        "Descripción":           st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
+        "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
         "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f"),
         "Valor Referencia":      st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
         "📋":                    st.column_config.CheckboxColumn("📋 Ref", default=False,
