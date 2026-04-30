@@ -64,8 +64,19 @@ st.markdown("""
     <style>
     header { background-color: rgba(0,0,0,0) !important; }
     .stApp { background: #495057; color: #ffffff; }
-    [data-testid="stDataEditor"] div { font-size: 2.0rem !important; }
+
+    /* ── TABLAS más legibles ── */
+    [data-testid="stDataEditor"] { border-radius: 10px; overflow: hidden; }
+    [data-testid="stDataEditor"] div { font-size: 0.85rem !important; }
+    [data-testid="stDataEditor"] [data-testid="glideDataEditor"] {
+        background-color: #ffffff !important;
+        color: #212529 !important;
+    }
+
+    /* ── TABS ── */
     .stTabs [aria-selected="true"] { color: #fca311 !important; border-bottom-color: #fca311 !important; font-weight: bold; }
+
+    /* ── KPI CARDS ── */
     .card {
         background-color: #ffffff; border-radius: 12px; padding: 15px;
         box-shadow: 0 8px 20px rgba(0,0,0,0.4); margin-bottom: 10px;
@@ -74,14 +85,63 @@ st.markdown("""
     }
     .card-label { font-size: 0.8rem; color: #495057; font-weight: 800; text-transform: uppercase; line-height: 1.1; opacity: 0.7; }
     .card-value { font-size: 1.6rem; font-weight: 800; color: #495057; margin: 3px 0; }
+
+    /* ── LEGEND BARS ── */
     .legend-bar {
         padding: 8px 12px; border-radius: 6px; margin-bottom: 4px;
         font-size: 0.9rem; font-weight: bold; color: #1a1d21;
         display: flex; justify-content: space-between; align-items: center;
     }
+
+    /* ── CHART CARDS — envuelven cada gráfica ── */
+    .chart-card {
+        background-color: #3a3f44; border-radius: 14px; padding: 16px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.35); margin-bottom: 8px;
+        border-top: 3px solid #fca311;
+    }
+    .chart-title {
+        font-size: 0.85rem; font-weight: 800; text-transform: uppercase;
+        color: #fca311; letter-spacing: 0.05em; margin-bottom: 10px;
+    }
+
+    /* ── SECTION HEADERS ── */
+    .section-header {
+        display: flex; align-items: center; gap: 10px;
+        background: linear-gradient(90deg, #212529 0%, rgba(33,37,41,0) 100%);
+        border-left: 4px solid #fca311; border-radius: 4px;
+        padding: 8px 14px; margin: 18px 0 10px 0;
+    }
+    .section-header span { font-size: 1.05rem; font-weight: 800;
+        color: #ffffff; text-transform: uppercase; letter-spacing: 0.04em; }
+
+    /* ── SIDEBAR ── */
     section[data-testid="stSidebar"] { background-color: #212529 !important; border-right: 1px solid #495057; }
-    .stButton>button { border-radius: 10px; font-weight: bold; width: 100%; background-color: #fca311; color: #212529; border: none; }
-    h2, h3 { color: #fca311 !important; font-weight: bold !important; }
+
+    /* ── BOTONES ── */
+    .stButton>button {
+        border-radius: 10px; font-weight: bold; width: 100%;
+        background-color: #fca311; color: #212529; border: none;
+        transition: transform 0.1s ease, box-shadow 0.1s ease;
+    }
+    .stButton>button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(252,163,17,0.4); }
+
+    /* ── BOTÓN GUARDAR especial ── */
+    .save-btn button {
+        background: linear-gradient(135deg, #fca311 0%, #e08e00 100%) !important;
+        color: #14213d !important; font-size: 1.1rem !important;
+        padding: 14px !important; border-radius: 12px !important;
+        box-shadow: 0 6px 20px rgba(252,163,17,0.5) !important;
+        letter-spacing: 0.05em !important;
+    }
+
+    /* ── JERARQUÍA DE TÍTULOS ── */
+    h2 { color: #ffffff !important; font-weight: 800 !important;
+         border-bottom: 2px solid #fca311; padding-bottom: 6px; }
+    h3 { color: #fca311 !important; font-weight: bold !important; }
+    h4 { color: #adb5bd !important; font-weight: 600 !important; font-size: 0.9rem !important; text-transform: uppercase; }
+
+    /* ── DIVIDER ── */
+    hr { border-color: rgba(252,163,17,0.3) !important; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -862,7 +922,7 @@ if df_mes_g.empty:
                 df_mes_g["Pagado"] = False
 
 # Tabla de gastos
-st.markdown("### 📝 Movimiento de Gastos")
+st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span></div>', unsafe_allow_html=True)
 config_g = {
     "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f"),
@@ -876,7 +936,7 @@ df_ed_g = st.data_editor(
 )
 
 # Tabla de ingresos adicionales
-st.markdown("### 💰 Ingresos Adicionales")
+st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
 df_ed_oi  = st.data_editor(
     df_mes_oi.reindex(columns=["Descripción","Monto"]).reset_index(drop=True),
@@ -913,11 +973,11 @@ for i, (l, v, col) in enumerate(tarj):
     )
 
 # Gráficas
-st.markdown("### 📊 Análisis de Distribución")
+st.markdown('<div class="section-header"><span>📊 Análisis de Distribución</span></div>', unsafe_allow_html=True)
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
 with inf1:
-    st.markdown("#### Desglose de Gastos")
+    st.markdown('<div class="chart-card"><div class="chart-title">Desglose de Gastos</div>', unsafe_allow_html=True)
     t_df = df_ed_g.copy()
     t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
     if not t_df.empty and t_df['V'].sum() > 0:
@@ -945,7 +1005,7 @@ with inf1:
         st.markdown(barras_html, unsafe_allow_html=True)
 
 with inf2:
-    st.markdown("#### Eficiencia de Ahorro")
+    st.markdown('<div class="chart-card"><div class="chart-title">Eficiencia de Ahorro</div>', unsafe_allow_html=True)
     v_cl = max(0, min(ahorro_p, 100))
     META = 20  # Meta recomendada de ahorro
 
@@ -980,7 +1040,7 @@ with inf2:
         st.markdown(f'<div style="text-align:center;color:#e74c3c;font-weight:bold;font-size:0.85rem">⚠️ Te falta {falta:.0f}% para la meta recomendada del {META}%</div>', unsafe_allow_html=True)
 
 with inf3:
-    st.markdown("#### Estado Real del Dinero")
+    st.markdown('<div class="chart-card"><div class="chart-title">Estado Real del Dinero</div>', unsafe_allow_html=True)
 
     # ✅ MEJORA 3: Dona con saldo a favor en el centro en lugar de solo "Estado"
     centro_valor = format_moneda(bf)
@@ -1009,8 +1069,9 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
 
 # --- GUARDAR ---
-st.markdown("<br><br>", unsafe_allow_html=True)
-if st.button("💾 GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
+st.markdown("<br>", unsafe_allow_html=True)
+st.markdown('<div class="save-btn">', unsafe_allow_html=True)
+if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     df_g_limpio  = df_ed_g.dropna(subset=["Categoría","Descripción","Monto"], how="all")
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción","Monto"], how="all")
 
