@@ -1000,7 +1000,7 @@ if df_mes_g.empty:
             if not activos.empty:
                 df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente"])
                 df_mes_g["Pagado"]     = False
-                df_mes_g["Fecha Pago"] = None
+                df_mes_g["Fecha Pago"] = pd.NaT
                 df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 # Tabla de gastos
@@ -1010,9 +1010,11 @@ st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span><
 if not df_mes_g.empty:
     df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
-# ✅ Agregar columna Fecha Pago si no existe
+# ✅ Agregar columna Fecha Pago si no existe — NaT en lugar de None
 if "Fecha Pago" not in df_mes_g.columns:
-    df_mes_g["Fecha Pago"] = None
+    df_mes_g["Fecha Pago"] = pd.NaT
+else:
+    df_mes_g["Fecha Pago"] = pd.to_datetime(df_mes_g["Fecha Pago"], errors="coerce")
 
 # ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
