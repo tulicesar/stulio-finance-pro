@@ -330,17 +330,17 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
                 monto = r['V']
                 bar_len = max((pct / 100) * BAR_W, 3)
 
-                # Fondo oscuro
-                c.setFillColor(C_OSCURO)
+                # ✅ Fondo gris claro (visible en PDF blanco)
+                c.setFillColor(HexColor("#e0e0e0"))
                 c.roundRect(BAR_X, y_cat - ROW_H + 5, BAR_W, ROW_H - 7, 3, fill=1, stroke=0)
                 # Barra color
                 c.setFillColor(HexColor(color_hex))
                 c.roundRect(BAR_X, y_cat - ROW_H + 5, bar_len, ROW_H - 7, 3, fill=1, stroke=0)
-                # Etiqueta dentro de la barra
+                # ✅ Etiqueta dentro de la barra en negro (visible sobre colores claros)
                 c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 6)
                 c.drawString(BAR_X + 3, y_cat - 8, r['Categoría'][:18])
-                # Monto + % fuera de la barra (a la derecha fija en x=225)
-                c.setFont("Helvetica", 6); c.setFillColor(HexColor("#ffffff"))
+                # ✅ Monto + % FUERA a la derecha en negro (sobre fondo blanco del PDF)
+                c.setFont("Helvetica", 6); c.setFillColor(C_NEGRO)
                 c.drawString(BAR_X + BAR_W + 4, y_cat - 8, f"${monto:,.0f}  {pct:.1f}%")
                 y_cat -= ROW_H
 
@@ -398,18 +398,18 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
         for label, val, hex_col in items_estado:
             pct_e = (val / total_est * 100) if total_est > 0 else 0
             bar_e = max((pct_e / 100) * BAR_EST_W, 2)
-            # Fondo
-            c.setFillColor(C_OSCURO)
-            c.roundRect(BAR_EST_X, y_est - 11, BAR_EST_W, 11, 3, fill=1, stroke=0)
+            # ✅ Fondo gris claro
+            c.setFillColor(HexColor("#e0e0e0"))
+            c.roundRect(BAR_EST_X, y_est - 13, BAR_EST_W, 13, 3, fill=1, stroke=0)
             # Barra color
             c.setFillColor(HexColor(hex_col))
-            c.roundRect(BAR_EST_X, y_est - 11, bar_e, 11, 3, fill=1, stroke=0)
-            # Texto
-            c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 6)
-            c.drawString(BAR_EST_X + 3, y_est - 8, label)
-            c.setFont("Helvetica", 6)
-            c.drawRightString(BAR_EST_X + BAR_EST_W - 2, y_est - 8, f"$ {val:,.0f} ({pct_e:.1f}%)")
-            y_est -= 20
+            c.roundRect(BAR_EST_X, y_est - 13, bar_e, 13, 3, fill=1, stroke=0)
+            # ✅ Texto negro visible
+            c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7)
+            c.drawString(BAR_EST_X + 3, y_est - 10, label)
+            c.setFont("Helvetica", 7)
+            c.drawRightString(BAR_EST_X + BAR_EST_W - 3, y_est - 10, f"$ {val:,.0f} ({pct_e:.1f}%)")
+            y_est -= 22
 
     # ============================================================
     # PARTE INFERIOR — TENDENCIA DE AHORRO (ancho completo)
@@ -436,18 +436,25 @@ def generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses, titulo, anio, u
     if hist_pdf:
         max_val   = max([abs(v[1]) for v in hist_pdf] + [1])
         BAR_H_MAX = 65
-        BAR_BASE  = Y_TEND_TOP - 40
+        # ✅ BAR_BASE es la línea del suelo — las barras crecen HACIA ARRIBA desde aquí
+        BAR_BASE  = Y_TEND_TOP - 100
         bar_w     = 60
         x_bar     = 80
+        # Línea base
+        c.setStrokeColor(HexColor("#cccccc")); c.setLineWidth(0.5)
+        c.line(60, BAR_BASE, 500, BAR_BASE)
         for m_n, val in hist_pdf:
             h_bar   = max((abs(val) / max_val) * BAR_H_MAX, 3)
             color_b = C_NARANJA if val >= 0 else C_ROJO
             c.setFillColor(color_b)
-            c.roundRect(x_bar, BAR_BASE - h_bar, bar_w - 10, h_bar, 3, fill=1, stroke=0)
+            # ✅ La barra arranca desde BAR_BASE y sube h_bar puntos
+            c.roundRect(x_bar, BAR_BASE, bar_w - 10, h_bar, 3, fill=1, stroke=0)
+            # Mes debajo de la línea base
             c.setFillColor(C_NEGRO); c.setFont("Helvetica-Bold", 7)
-            c.drawCentredString(x_bar + (bar_w-10)//2, BAR_BASE - h_bar - 13, m_n)
+            c.drawCentredString(x_bar + (bar_w-10)//2, BAR_BASE - 12, m_n)
+            # Valor encima de la barra
             c.setFont("Helvetica", 6)
-            c.drawCentredString(x_bar + (bar_w-10)//2, BAR_BASE + 3, f"${val:,.0f}")
+            c.drawCentredString(x_bar + (bar_w-10)//2, BAR_BASE + h_bar + 3, f"${val:,.0f}")
             x_bar += bar_w
 
     c.showPage(); c.save(); buf.seek(0)
