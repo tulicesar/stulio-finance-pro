@@ -1248,15 +1248,6 @@ if todas_cats:
 else:
     st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
 
-# ── DEBUG 2 ──────────────────────────────────────────────
-if not df_asociados.empty:
-    st.write("✅ df_asociados FILTRADO:", df_asociados[["Descripción","Monto","Presupuesto Asociado"]].to_dict())
-else:
-    st.write("❌ df_asociados VACÍO después del filtro")
-    # Mostrar valores raw para diagnóstico
-    if "Presupuesto Asociado" in df_ed_g.columns:
-        st.write("Valores raw Presupuesto Asociado:", df_ed_g["Presupuesto Asociado"].tolist())
-
 # ── SEGUIMIENTO POR ÍTEM PROYECTADO ──────────────────────
 if not df_proyectados.empty:
     st.markdown('<div class="section-header"><span>🎯 Seguimiento de Ítems Proyectados</span></div>', unsafe_allow_html=True)
@@ -1271,7 +1262,8 @@ if not df_proyectados.empty:
 
         # Gastos reales asociados a este ítem
         if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
-            gastos_item = df_asociados[df_asociados["Presupuesto Asociado"] == nombre_proy]["Monto"].sum()
+            match = df_asociados[df_asociados["Presupuesto Asociado"] == nombre_proy]
+            gastos_item = float(pd.to_numeric(match["Monto"], errors="coerce").fillna(0).sum())
         else:
             gastos_item = 0.0
 
