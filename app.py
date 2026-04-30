@@ -140,7 +140,7 @@ st.markdown("""
         #close-sidebar-btn { display: block; }
     }
 
-    /* ── BOTONES — Pill con sombra sólida (Opción D) ── */
+    /* ── BOTONES sidebar — Pill azul oscuro / sombra naranja ── */
     .stButton>button {
         border-radius: 50px !important;
         font-weight: 700 !important;
@@ -149,23 +149,23 @@ st.markdown("""
         text-transform: uppercase !important;
         width: 100% !important;
         border: none !important;
-        background: #fca311 !important;
-        color: #14213d !important;
-        box-shadow: 0 4px 0 #9a6c00 !important;
+        background: #14213d !important;
+        color: #fca311 !important;
+        box-shadow: 0 4px 0 #fca311 !important;
         transition: transform 0.1s ease, box-shadow 0.1s ease !important;
         padding: 10px 20px !important;
     }
     .stButton>button:hover {
-        filter: brightness(1.06) !important;
+        background: #1e3260 !important;
         transform: translateY(-1px) !important;
-        box-shadow: 0 5px 0 #9a6c00 !important;
+        box-shadow: 0 5px 0 #fca311 !important;
     }
     .stButton>button:active {
-        transform: translateY(3px) !important;
+        transform: translateY(4px) !important;
         box-shadow: none !important;
     }
 
-    /* ── BOTÓN GUARDAR — Pill grande ── */
+    /* ── BOTÓN GUARDAR — Pill naranja / sombra azul oscuro ── */
     .save-btn button {
         border-radius: 50px !important;
         font-weight: 800 !important;
@@ -175,14 +175,14 @@ st.markdown("""
         background: #fca311 !important;
         color: #14213d !important;
         border: none !important;
-        box-shadow: 0 6px 0 #9a6c00 !important;
+        box-shadow: 0 6px 0 #14213d !important;
         padding: 16px !important;
         transition: transform 0.1s ease, box-shadow 0.1s ease !important;
     }
     .save-btn button:hover {
         filter: brightness(1.06) !important;
         transform: translateY(-1px) !important;
-        box-shadow: 0 7px 0 #9a6c00 !important;
+        box-shadow: 0 7px 0 #14213d !important;
     }
     .save-btn button:active {
         transform: translateY(5px) !important;
