@@ -1027,19 +1027,85 @@ df_mes_g["Fecha Pago"] = df_mes_g["Fecha Pago"].where(
 # ✅ Autocompletado: todas las descripciones usadas históricamente por este usuario
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
-config_g = {
-    "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-    "Descripción":          st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
-    "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f"),
-    "Valor Referencia":     st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
-    "Pagado":               st.column_config.CheckboxColumn("Pagado", default=False),
-    "Movimiento Recurrente":st.column_config.CheckboxColumn("Recurrente", default=False),
-    "Fecha Pago":           st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
-}
-df_ed_g = st.data_editor(
-    df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
-    use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
-)
+# ── TABLA VISUAL con colores por categoría ──────────────────
+def render_tabla_gastos(df):
+    if df.empty:
+        st.info("No hay gastos registrados para este mes.")
+        return
+
+    filas_html = ""
+    for i, (_, row) in enumerate(df.iterrows()):
+        bg  = "#2d3238" if i % 2 == 0 else "#3a3f44"
+        cat = str(row.get("Categoría", ""))
+        col = COLOR_MAP.get(cat, "#aaaaaa")
+        # Badge de categoría
+        badge = f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:{col}22;color:{col}">{cat}</span>'
+        # Monto
+        monto = float(row.get("Monto", 0) or 0)
+        vref  = float(row.get("Valor Referencia", 0) or 0)
+        monto_str = f"$ {monto:,.0f}" if monto else f'<span style="color:#6c757d">$ {vref:,.0f}</span>'
+        # Pagado / Recurrente
+        pagado = row.get("Pagado", False)
+        recur  = row.get("Movimiento Recurrente", False)
+        chk_p  = '<span style="color:#2ecc71;font-size:16px">✓</span>' if pagado else '<span style="color:#6c757d">—</span>'
+        chk_r  = '<span style="color:#2ecc71;font-size:16px">✓</span>' if recur  else '<span style="color:#6c757d">—</span>'
+        # Fecha pago
+        fp = row.get("Fecha Pago", None)
+        if fp is not None and str(fp) not in ["NaT","None",""]:
+            try:
+                fecha_str = pd.to_datetime(fp).strftime("%d/%m/%Y")
+            except:
+                fecha_str = '<span style="color:#6c757d">—</span>'
+        else:
+            fecha_str = '<span style="color:#6c757d">—</span>'
+
+        desc = str(row.get("Descripción",""))
+        filas_html += f"""
+        <tr style="background:{bg}">
+            <td style="padding:7px 10px">{badge}</td>
+            <td style="padding:7px 10px;color:#fff;font-size:12px">{desc}</td>
+            <td style="padding:7px 10px;color:#fff;font-size:12px;text-align:right">{monto_str}</td>
+            <td style="padding:7px 10px;text-align:center">{chk_p}</td>
+            <td style="padding:7px 10px;text-align:center">{chk_r}</td>
+            <td style="padding:7px 10px;color:#adb5bd;font-size:11px">{fecha_str}</td>
+        </tr>"""
+
+    tabla_html = f"""
+    <div style="border-radius:10px;overflow:hidden;margin-bottom:8px">
+    <table style="width:100%;border-collapse:collapse;font-family:sans-serif">
+        <thead>
+            <tr style="background:#14213d">
+                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:left;font-weight:700">Categoría</th>
+                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:left;font-weight:700">Descripción</th>
+                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:right;font-weight:700">Monto</th>
+                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:center;font-weight:700">Pagado</th>
+                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:center;font-weight:700">Recurrente</th>
+                <th style="padding:9px 10px;color:#fca311;font-size:11px;text-transform:uppercase;letter-spacing:0.04em;text-align:left;font-weight:700">Fecha Pago</th>
+            </tr>
+        </thead>
+        <tbody>{filas_html}</tbody>
+    </table>
+    </div>"""
+    st.markdown(tabla_html, unsafe_allow_html=True)
+
+# Mostrar tabla visual
+render_tabla_gastos(df_mes_g)
+
+# Editor oculto bajo un expander para agregar/editar
+with st.expander("✏️ Editar / Agregar movimientos"):
+    config_g = {
+        "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+        "Descripción":          st.column_config.SelectboxColumn("Descripción", options=descripciones_históricas, width="large"),
+        "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+        "Valor Referencia":     st.column_config.NumberColumn("Valor Referencia", format="$ %,.0f"),
+        "Pagado":               st.column_config.CheckboxColumn("Pagado", default=False),
+        "Movimiento Recurrente":st.column_config.CheckboxColumn("Recurrente", default=False),
+        "Fecha Pago":           st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
+    }
+    df_ed_g = st.data_editor(
+        df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True),
+        use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
+    )
 
 # Tabla de ingresos adicionales
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
