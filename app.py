@@ -1123,49 +1123,25 @@ if True:  # bloque siempre activo (reemplaza el expander)
         "Movimiento Recurrente": st.column_config.CheckboxColumn("Recurrente", default=False),
         "Fecha Pago":            st.column_config.DateColumn("Fecha Pago", format="DD/MM/YYYY"),
     }
-    # Preparar df base
+    # Preparar df base — sin rerun, sin session_state complejo
     df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
-
-    # ✅ Restaurar TODO el estado del editor antes del rerun (preserva Pagado, etc.)
-    if st.session_state.get("editor_estado_previo") is not None:
-        estado = st.session_state["editor_estado_previo"]
-        for col in ["Monto","Pagado","Movimiento Recurrente","Valor Referencia","Es Proyectado","Presupuesto Asociado","Fecha Pago"]:
-            if col in estado.columns and col in df_base.columns:
-                df_base[col] = estado[col].values if len(estado) == len(df_base) else df_base[col]
-        del st.session_state["editor_estado_previo"]
-
-    # Aplicar copia Ref → Monto pendiente
-    if st.session_state.get("aplicar_copia_ref"):
-        for idx, val_ref in st.session_state["aplicar_copia_ref"].items():
-            if idx < len(df_base):
-                df_base.loc[idx, "Monto"] = val_ref
-                df_base.loc[idx, "📋"]   = False
-        del st.session_state["aplicar_copia_ref"]
 
     df_ed_g = st.data_editor(
         df_base,
         use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
     )
 
-    # Detectar 📋 marcado → preservar estado actual + aplicar copia en siguiente render
+    # ✅ Aplicar copia silenciosa: si 📋 está marcado, copiar Ref → Monto
+    # Esto ocurre DESPUÉS de leer df_ed_g, sin rerun, preservando todos los demás valores
     if "📋" in df_ed_g.columns:
         mask_copy = df_ed_g["📋"] == True
         if mask_copy.any():
-            copia = {int(idx): float(df_ed_g.loc[idx,"Valor Referencia"] or 0)
-                     for idx in df_ed_g[mask_copy].index
-                     if float(df_ed_g.loc[idx,"Valor Referencia"] or 0) > 0}
-            if copia:
-                # ✅ Guardamos TODO el estado actual del editor para restaurarlo después del rerun
-                st.session_state["editor_estado_previo"] = df_ed_g.copy()
-                st.session_state["aplicar_copia_ref"]    = copia
-                st.rerun()
+            df_ed_g.loc[mask_copy, "Monto"] = pd.to_numeric(
+                df_ed_g.loc[mask_copy, "Valor Referencia"], errors="coerce"
+            ).fillna(0)
+            # Desmarcar el check después de copiar
+            df_ed_g.loc[mask_copy, "📋"] = False
 
-# Tabla de ingresos adicionales
-st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
-df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-df_ed_oi  = st.data_editor(
-    df_mes_oi.reindex(columns=["Descripción","Monto"]).reset_index(drop=True),
-    use_container_width=True, num_rows="dynamic",
     column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")},
     key="oi_ed"
 )
