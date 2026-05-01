@@ -334,7 +334,7 @@ with st.sidebar:
     st.divider()
 
     # ── ⚙️ CONFIGURACIÓN ──────────────────────────────────
-    with st.expander("⚙️ Configuración de cuenta"):
+    with st.expander("Configuración de cuenta"):
         st.markdown(
             '<p style="color:#adb5bd;font-size:0.78rem;margin-bottom:10px">'
             'Opciones avanzadas de tu cuenta</p>',
