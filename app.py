@@ -89,27 +89,28 @@ css_fonts = (
 # Reemplaza desde la línea 89 hasta que termina el bloque de <style>
 st.markdown(f"""
     <style>
+ @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+
     {css_fonts}
 
     /* 1. Fuente para el texto (Evitamos el '*' para no romper iconos) */
-    html, body, .stApp, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
-    p, h1, h2, h3, h4, h5, h6, label, table, div {{
-        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
-    }}
-
+html, body, .stApp,
+[data-testid="stWidgetLabel"],
+[data-testid="stMarkdownContainer"],
+p, h1, h2, h3, h4, h5, h6, label, table {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+[data-testid="stExpander"] summary span:first-child {
+    font-family: "Material Icons" !important;
+    font-weight: normal !important;
+    font-style: normal !important;
+    font-size: 20px !important;
+    display: inline-block !important;
+    line-height: 1 !important;
+    
     /* 2. EL ESCUDO: Esto convierte 'keyboard_arrow_right' en una flecha real */
-    /* Forzamos la fuente de iconos oficial de Streamlit */
-    [data-testid="stIconMaterial"], 
-    .stIconMaterial, 
-    [data-testid="baseButton-header"] span,
-    [data-testid="stExpander"] span,
-    [data-testid="stExpander"] svg {{
-        font-family: "Material Icons" !important;
-        font-style: normal !important;
-        display: inline-block !important;
-        text-transform: none !important;
-        line-height: 1 !important;
-    }}
+/* Forzamos la fuente de iconos oficial de Streamlit */
+
 
     /* 3. Ajuste para que el texto 'Configuración' no se choque con la flecha */
     .streamlit-expanderHeader p {{
