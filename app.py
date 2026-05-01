@@ -17,6 +17,39 @@ from reports import generar_pdf_reporte, generar_excel_reporte
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
+# --- 1b. FUENTE SF PRO DISPLAY ---
+import base64
+
+def embed_font(path, weight):
+    with open(path, "rb") as f:
+        data = base64.b64encode(f.read()).decode("utf-8")
+    return f"""
+    @font-face {{
+        font-family: 'SF Pro Display';
+        src: url(data:font/otf;base64,{data}) format('opentype');
+        font-weight: {weight};
+    }}
+    """
+
+css_fonts = (
+    embed_font("SFNSDisplay-Regular.otf",  "400") +
+    embed_font("SFNSDisplay-Medium.otf",   "500") +
+    embed_font("SFNSDisplay-Semibold.otf", "600") +
+    embed_font("SFNSDisplay-Bold.otf",     "700")
+)
+
+st.markdown(f"""
+<style>
+{css_fonts}
+html, body, [class*="css"], .stApp, .stMarkdown,
+.stTextInput, .stSelectbox, .stDataFrame, button {{
+    font-family: 'SF Pro Display', -apple-system, sans-serif !important;
+}}
+</style>
+""", unsafe_allow_html=True)
+
+# --- 2. INICIALIZACIÓN DE SESSION STATE (una sola vez, al inicio) ---
+
 # --- 2. INICIALIZACIÓN DE SESSION STATE (una sola vez, al inicio) ---
 for key, default in {
     "autenticado": False,
