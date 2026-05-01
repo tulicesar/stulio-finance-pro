@@ -29,18 +29,19 @@ for key, default in {
 
 # --- 3. CONEXIÓN A SUPABASE ---
 try:
-    url = st.secrets["supabase"]["url"]
-    key = st.secrets["supabase"]["key"]
+    # Cambiamos a mayúsculas y quitamos el ["supabase"]
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
     supabase: Client = create_client(url, key)
 
     # Si ya hay sesión activa, reinyectamos el token en cada recarga
     if st.session_state.autenticado and st.session_state.token:
         supabase.postgrest.auth(st.session_state.token)
 
-except Exception:
-    st.error("Error conectando a Supabase. Revisa los Secrets.")
+except Exception as e:
+    # Agregamos {e} para que si falla, te diga exactamente POR QUÉ falló
+    st.error(f"Error conectando a Supabase. Revisa los Secrets. Detalle técnico: {e}")
     st.stop()
-
 
 # --- 4. CONSTANTES ---
 LOGO_LOGIN   = "logoapp 1.png"
