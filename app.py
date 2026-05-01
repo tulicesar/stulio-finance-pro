@@ -10,7 +10,7 @@ import pytz
 from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
-from auth    import mostrar_login, cerrar_sesion
+from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
 from data    import cargar_bd, calcular_metricas, guardar_bd
 from reports import generar_pdf_reporte, generar_excel_reporte
 
@@ -251,39 +251,7 @@ def parse_moneda(texto):
 # --- 11. PANTALLA DE LOGIN ---
 # ============================================================
 if not st.session_state.autenticado:
-    col1, col2, col3 = st.columns([1, 1.5, 1])
-    with col2:
-        if os.path.exists(LOGO_LOGIN):
-            st.image(LOGO_LOGIN, use_container_width=True)
-
-        # ✅ Ahora pedimos el correo completo, sin mapeo hardcodeado
-        email = st.text_input("Correo electrónico", key="login_email")
-        pwd   = st.text_input("Contraseña", type="password", key="login_pwd")
-
-        if st.button("Ingresar", use_container_width=True):
-            try:
-                res = supabase.auth.sign_in_with_password({"email": email.strip(), "password": pwd})
-
-                # Guardamos el UUID real y el token
-                st.session_state.token      = res.session.access_token
-                st.session_state.usuario_id = res.user.id          # ✅ UUID real de Supabase
-                supabase.postgrest.auth(st.session_state.token)
-
-                # Buscamos el nombre real en la tabla usuarios
-                try:
-                    r_user = supabase.table("usuarios").select("nombre_completo").eq("usuario_id", res.user.id).execute()
-                    nombre = r_user.data[0]["nombre_completo"] if r_user.data else email.split("@")[0].title()
-                except:
-                    nombre = email.split("@")[0].title()
-
-                st.session_state.u_nombre_completo = nombre
-                st.session_state.autenticado       = True
-
-                st.success(f"✅ ¡Hola, {nombre}!")
-                st.rerun()
-
-            except Exception as e:
-                st.error(f"❌ Correo o contraseña incorrectos.")
+    mostrar_login(supabase, LOGO_LOGIN)
     st.stop()
 
 # ============================================================
@@ -370,6 +338,10 @@ with st.sidebar:
 
     if st.button("🚪 Salir"):
         cerrar_sesion()
+
+# Eliminar cuenta (fuera del sidebar, en la parte inferior)
+mostrar_eliminar_cuenta(supabase, token, u_id,
+    st.session_state.get("u_email", ""))
 
 # --- CUERPO PRINCIPAL ---
 if os.path.exists(LOGO_APP_H):
