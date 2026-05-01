@@ -90,23 +90,30 @@ st.markdown(f"""
     <style>
     {css_fonts}
 
-    /* 1. Aplicamos tu fuente SF Pro solo a lo que es TEXTO REAL */
+    /* 1. Aplicamos tu fuente SF Pro solo al TEXTO, no a los íconos */
+    /* Al quitar el '*', protegemos las flechas de la app */
     html, body, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
-    .stText, p, h1, h2, h3, h4, h5, h6, label, input, button, select, textarea {{
+    .stText, p, h1, h2, h3, h4, h5, h6, label, .stButton>button {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* 2. PROTECCIÓN TOTAL DE ÍCONOS (Esto quita las letras 'keyl' y 'keyboard_...') */
-    /* Forzamos a que los componentes de sistema de Streamlit NO usen tu fuente */
+    /* 2. EL DIBUJANTE DE FLECHAS (Convierte el texto en símbolos) */
+    /* Esto corrige las letras 'keyl' de arriba y 'keyboard_arrow' del botón */
+    .stIconMaterial, 
     [data-testid="stIconMaterial"], 
-    .stIconMaterial,
     [data-testid="baseButton-header"] span,
     [data-testid="stExpander"] span,
-    [data-testid="stExpander"] svg,
-    button[kind="header"] svg {{
+    [data-testid="stExpander"] svg {{
         font-family: "Material Symbols Outlined" !important;
         font-style: normal !important;
         display: inline-block !important;
+        text-transform: none !important;
+    }}
+
+    /* 3. Espacio de seguridad para el botón de Configuración */
+    .streamlit-expanderHeader p {{
+        margin-left: 28px !important; /* Mueve el texto para que no tape la flecha */
+        font-family: 'SF Pro Display', sans-serif !important;
     }}
 
     /* 3. Ajuste visual para el Expander de Configuración */
