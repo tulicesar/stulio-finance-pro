@@ -39,9 +39,18 @@ def mostrar_login(supabase, LOGO_LOGIN):
                         supabase.postgrest.auth(st.session_state.token)
                         try:
                             r_user = supabase.table("usuarios").select("nombre_completo").eq("usuario_id", res.user.id).execute()
-                            nombre = r_user.data[0]["nombre_completo"] if r_user.data else email.split("@")[0].title()
+                            if r_user.data and r_user.data[0]["nombre_completo"]:
+                                nombre = r_user.data[0]["nombre_completo"]
+                            else:
+                                # Intentar desde metadatos de Supabase Auth
+                                meta = res.user.user_metadata or {}
+                                nombre = meta.get("nombre_completo") or email.split("@")[0].title()
                         except:
-                            nombre = email.split("@")[0].title()
+                            try:
+                                meta = res.user.user_metadata or {}
+                                nombre = meta.get("nombre_completo") or email.split("@")[0].title()
+                            except:
+                                nombre = email.split("@")[0].title()
                         st.session_state.u_nombre_completo = nombre
                         st.session_state.autenticado       = True
                         st.session_state.u_email           = email.strip()
