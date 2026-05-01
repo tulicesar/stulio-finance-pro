@@ -89,74 +89,39 @@ css_fonts = (
 # Reemplaza desde la línea 89 hasta que termina el bloque de <style>
 st.markdown(f"""
     <style>
- @import url('https://fonts.googleapis.com/icon?family=Material+Icons');
-
     {css_fonts}
 
-    /* 1. Fuente para texto */
-html, body, .stApp,
-[data-testid="stWidgetLabel"],
-[data-testid="stMarkdownContainer"],
-p, h1, h2, h3, h4, h5, h6, label, table {
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
-}
+    /* 1. Fuente para el texto (Evitamos el '*' para no romper iconos) */
+    html, body, .stApp, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
+    p, h1, h2, h3, h4, h5, h6, label, table, div {{
+        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    }}
 
-/* 🔥 FIX DEFINITIVO SIN MATERIAL ICONS */
+    /* 2. EL ESCUDO: Esto convierte 'keyboard_arrow_right' en una flecha real */
+    /* Forzamos la fuente de iconos oficial de Streamlit */
+    [data-testid="stIconMaterial"], 
+    .stIconMaterial, 
+    [data-testid="baseButton-header"] span,
+    [data-testid="stExpander"] span,
+    [data-testid="stExpander"] svg {{
+        font-family: "Material Icons" !important;
+        font-style: normal !important;
+        display: inline-block !important;
+        text-transform: none !important;
+        line-height: 1 !important;
+    }}
 
-/* Oculta el texto keyboard_arrow_right */
-[data-testid="stExpander"] summary span:first-child {
-    font-size: 0 !important;
-}
+    /* 3. Ajuste para que el texto 'Configuración' no se choque con la flecha */
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        margin-left: 35px !important;
+        color: #fca311 !important;
+        font-weight: 700 !important;
+    }}
 
-/* Flecha manual */
-[data-testid="stExpander"] summary::before {
-    content: "▶";
-    font-size: 14px;
-    margin-right: 8px;
-    display: inline-block;
-    transform: rotate(0deg);
-    transition: transform 0.2s ease;
-}
+    header {{ background-color: rgba(0,0,0,0) !important; }}
+    .stApp {{ background: #495057; color: #ffffff; }}
 
-/* Animación al abrir */
-[data-testid="stExpander"][aria-expanded="true"] summary::before {
-    transform: rotate(90deg);
-}
-
-/* Texto del expander */
-.streamlit-expanderHeader p {
-    font-family: 'SF Pro Display', sans-serif !important;
-    margin-left: 10px !important;
-    color: #fca311 !important;
-    font-weight: 700 !important;
-}
-
-/* Fondo */
-header { background-color: rgba(0,0,0,0) !important; }
-.stApp { background: #495057; color: #ffffff; }
-    /* 🔥 FIX DEFINITIVO SIN MATERIAL ICONS */
-
-/* Oculta el texto raro */
-[data-testid="stExpander"] summary span:first-child {
-    font-size: 0 !important;
-}
-
-/* Crea la flecha manualmente */
-[data-testid="stExpander"] summary::before {
-    content: "▶";
-    font-size: 14px;
-    margin-right: 8px;
-    display: inline-block;
-    transform: rotate(0deg);
-    transition: transform 0.2s ease;
-}
-
-/* Cuando está abierto */
-[data-testid="stExpander"][aria-expanded="true"] summary::before {
-    transform: rotate(90deg);
-}
-</style>
-""", unsafe_allow_html=True)
     /* 3. Ajuste para que el texto de Configuración no tape la flecha */
     .streamlit-expanderHeader p {{
         font-family: 'SF Pro Display', sans-serif !important;
