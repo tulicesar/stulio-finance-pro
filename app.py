@@ -94,6 +94,13 @@ st.markdown(f"""
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
+    /* ESCUDO: Evita que los íconos se conviertan en palabras como 'arrow_right' */
+    span[data-testid="stIconMaterial"], 
+    .st-emotion-cache-16idsys span, 
+    svg {{
+        font-family: "Material Symbols Outlined" !important;
+    }}
+
     header {{ background-color: rgba(0,0,0,0) !important; }}
     .stApp {{ background: #495057; color: #ffffff; }}
 
