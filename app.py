@@ -90,19 +90,36 @@ st.markdown(f"""
     <style>
     {css_fonts}
 
-    /* 1. Tu fuente favorita para todo el texto */
-    * {{
-        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    /* 1. Tu fuente SF Pro para todos los textos legibles */
+    html, body, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], p, h1, h2, h3, h4, span:not([data-testid="stIconMaterial"]) {{
+        font-family: 'SF Pro Display', -apple-system, sans-serif !important;
     }}
 
-    /* 2. EL ESCUDO DEFINITIVO: Protege todos los íconos de la app */
-    /* Usamos selectores que no cambian nunca */
-    [data-testid="stIconMaterial"],
+    /* 2. EL CONVERSOR DE SÍMBOLOS (Esto quita las letras y pone la flecha) */
+    /* Forzamos a que cualquier cosa que Streamlit use como icono NO use SF Pro */
+    [data-testid="stIconMaterial"], 
+    .stIconMaterial,
+    [data-testid="stExpander"] i,
     [data-testid="stExpander"] svg,
-    [data-testid="stExpander"] span,
-    .stIconMaterial {{
+    [data-testid="stExpander"] span {{
         font-family: "Material Symbols Outlined" !important;
+        font-style: normal !important;
+        text-transform: none !important;
+        line-height: 1 !important;
         display: inline-block !important;
+        white-space: nowrap !important;
+    }}
+
+    /* 3. Limpieza del botón de Configuración */
+    .streamlit-expanderHeader {{
+        border: 1px solid #495057 !important;
+        border-radius: 10px !important;
+        padding: 5px 10px !important;
+    }}
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        color: #ffffff !important;
+        font-size: 0.9rem !important;
     }}
 
     /* 3. Ajuste específico para que el texto de Configuración no se monte */
