@@ -122,6 +122,27 @@ p, h1, h2, h3, h4, h5, h6, label, table {
 
     header {{ background-color: rgba(0,0,0,0) !important; }}
     .stApp {{ background: #495057; color: #ffffff; }}
+    /* 🔥 FIX DEFINITIVO SIN MATERIAL ICONS */
+
+/* Oculta el texto raro */
+[data-testid="stExpander"] summary span:first-child {
+    font-size: 0 !important;
+}
+
+/* Crea la flecha manualmente */
+[data-testid="stExpander"] summary::before {
+    content: "▶";
+    font-size: 14px;
+    margin-right: 8px;
+    display: inline-block;
+    transform: rotate(0deg);
+    transition: transform 0.2s ease;
+}
+
+/* Cuando está abierto */
+[data-testid="stExpander"][aria-expanded="true"] summary::before {
+    transform: rotate(90deg);
+}
 </style>
 """, unsafe_allow_html=True)
     /* 3. Ajuste para que el texto de Configuración no tape la flecha */
