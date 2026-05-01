@@ -90,24 +90,33 @@ st.markdown(f"""
     <style>
     {css_fonts}
 
-    /* 1. Tu fuente SF Pro para todos los textos legibles */
-    html, body, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], p, h1, h2, h3, h4, span:not([data-testid="stIconMaterial"]) {{
-        font-family: 'SF Pro Display', -apple-system, sans-serif !important;
+    /* 1. Aplicamos tu fuente SF Pro solo a lo que es TEXTO REAL */
+    html, body, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
+    .stText, p, h1, h2, h3, h4, h5, h6, label, input, button, select, textarea {{
+        font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* 2. EL CONVERSOR DE SÍMBOLOS (Esto quita las letras y pone la flecha) */
-    /* Forzamos a que cualquier cosa que Streamlit use como icono NO use SF Pro */
+    /* 2. PROTECCIÓN TOTAL DE ÍCONOS (Esto quita las letras 'keyl' y 'keyboard_...') */
+    /* Forzamos a que los componentes de sistema de Streamlit NO usen tu fuente */
     [data-testid="stIconMaterial"], 
     .stIconMaterial,
-    [data-testid="stExpander"] i,
+    [data-testid="baseButton-header"] span,
+    [data-testid="stExpander"] span,
     [data-testid="stExpander"] svg,
-    [data-testid="stExpander"] span {{
+    button[kind="header"] svg {{
         font-family: "Material Symbols Outlined" !important;
         font-style: normal !important;
-        text-transform: none !important;
-        line-height: 1 !important;
         display: inline-block !important;
-        white-space: nowrap !important;
+    }}
+
+    /* 3. Ajuste visual para el Expander de Configuración */
+    .streamlit-expanderHeader {{
+        margin-top: 10px !important;
+    }}
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        font-weight: 700 !important;
+        color: #fca311 !important;
     }}
 
     /* 3. Limpieza del botón de Configuración */
