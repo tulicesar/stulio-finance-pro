@@ -29,19 +29,18 @@ for key, default in {
 
 # --- 3. CONEXIÓN A SUPABASE ---
 try:
-    # Cambiamos a mayúsculas y quitamos el ["supabase"]
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
     supabase: Client = create_client(url, key)
 
     # Si ya hay sesión activa, reinyectamos el token en cada recarga
     if st.session_state.autenticado and st.session_state.token:
         supabase.postgrest.auth(st.session_state.token)
 
-except Exception as e:
-    # Agregamos {e} para que si falla, te diga exactamente POR QUÉ falló
-    st.error(f"Error conectando a Supabase. Revisa los Secrets. Detalle técnico: {e}")
+except Exception:
+    st.error("Error conectando a Supabase. Revisa los Secrets.")
     st.stop()
+
 
 # --- 4. CONSTANTES ---
 LOGO_LOGIN   = "logoapp 1.png"
@@ -520,10 +519,15 @@ def render_resumen_gastos(df):
                 if bool(row.get("Es Proyectado", False)):
                     nombre = str(row.get("Descripción",""))
                     _pa = df["Presupuesto Asociado"].astype(str).str.strip()
-                    asociados_monto = df[
+                    df_asoc_pend = df[
                         (_pa == nombre.strip()) &
                         (_pa != "nan") & (_pa != "None") & (_pa != "")
-                    ]["Monto"].apply(pd.to_numeric, errors="coerce").fillna(0).sum()
+                    ].copy()
+                    # ✅ Usar Monto si > 0, sino Valor Referencia
+                    df_asoc_pend["_val"] = pd.to_numeric(df_asoc_pend["Monto"], errors="coerce").fillna(0)
+                    df_asoc_pend["_vref"] = pd.to_numeric(df_asoc_pend["Valor Referencia"], errors="coerce").fillna(0)
+                    df_asoc_pend["_real"] = df_asoc_pend["_val"].where(df_asoc_pend["_val"] > 0, df_asoc_pend["_vref"])
+                    asociados_monto = df_asoc_pend["_real"].sum()
                     vref_orig = float(row.get("Valor Referencia", 0) or 0)
                     df_pend_adj.loc[idx, "Valor Referencia"] = max(vref_orig - asociados_monto, 0)
         html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Val.Ref", False)
