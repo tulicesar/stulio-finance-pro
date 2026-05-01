@@ -82,9 +82,14 @@ def calcular_metricas(df_g, nom, otr, s_ant):
         if tiene_proyectados:
             _pa    = df["Presupuesto Asociado"].astype(str).str.strip()
             validos = ~_pa.isin(["nan", "None", "NaN", ""])
+            # ✅ Usar Monto si > 0, sino Valor Referencia para los asociados
+            df_asoc = df[validos].copy()
+            df_asoc["_val"] = df_asoc["Monto"].where(
+                df_asoc["Monto"] > 0, df_asoc["Valor Referencia"]
+            )
             asociados_map = (
-                df[validos]
-                .groupby(_pa[validos])["Monto"]
+                df_asoc
+                .groupby(_pa[validos])["_val"]
                 .sum()
                 .to_dict()
             )
