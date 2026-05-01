@@ -122,7 +122,8 @@ p, h1, h2, h3, h4, h5, h6, label, table {
 
     header {{ background-color: rgba(0,0,0,0) !important; }}
     .stApp {{ background: #495057; color: #ffffff; }}
-
+</style>
+""", unsafe_allow_html=True)
     /* 3. Ajuste para que el texto de Configuración no tape la flecha */
     .streamlit-expanderHeader p {{
         font-family: 'SF Pro Display', sans-serif !important;
