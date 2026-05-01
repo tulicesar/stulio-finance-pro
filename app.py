@@ -15,12 +15,8 @@ from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
 from data    import cargar_bd, calcular_metricas, guardar_bd
 from reports import generar_pdf_reporte, generar_excel_reporte
 
-st.set_page_config(
-    page_title="My FinanceApp by Stulio Designs",
-    layout="wide",
-    page_icon="💰",
-    initial_sidebar_state="collapsed"  # 👈 clave para móvil
-)
+# --- 1. CONFIGURACIÓN DE PÁGINA ---
+st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
 # --- 2. INICIALIZACIÓN DE SESSION STATE ---
 for key, default in {
@@ -292,6 +288,28 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
+# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL ---
+st.markdown("""
+<button id="close-sidebar-btn" onclick="closeSidebar()">✕ Cerrar menú</button>
+<script>
+function closeSidebar() {
+    var btns = window.parent.document.querySelectorAll('[data-testid="collapsedControl"], button[kind="header"]');
+    btns.forEach(function(btn){ btn.click(); });
+    var chevron = window.parent.document.querySelector('button[aria-label="Close sidebar"], [data-testid="baseButton-header"]');
+    if (chevron) chevron.click();
+}
+var observer = new MutationObserver(function() {
+    var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
+    var btn = document.getElementById("close-sidebar-btn");
+    if (sidebar && btn) {
+        var isOpen = window.parent.innerWidth <= 768 &&
+                     sidebar.getBoundingClientRect().left >= 0;
+        btn.style.display = isOpen ? "block" : "none";
+    }
+});
+observer.observe(window.parent.document.body, { attributes: true, subtree: true, attributeFilter: ["class", "style"] });
+</script>
+""", unsafe_allow_html=True)
 
 # --- 6. FUNCIONES DE FORMATO ---
 def format_moneda(valor):
