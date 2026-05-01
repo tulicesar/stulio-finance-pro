@@ -93,35 +93,47 @@ st.markdown(f"""
 
     {css_fonts}
 
-    /* 1. Fuente para el texto (Evitamos el '*' para no romper iconos) */
+    /* 1. Fuente para texto */
 html, body, .stApp,
 [data-testid="stWidgetLabel"],
 [data-testid="stMarkdownContainer"],
 p, h1, h2, h3, h4, h5, h6, label, table {
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
 }
+
+/* 🔥 FIX DEFINITIVO SIN MATERIAL ICONS */
+
+/* Oculta el texto keyboard_arrow_right */
 [data-testid="stExpander"] summary span:first-child {
-    font-family: "Material Icons" !important;
-    font-weight: normal !important;
-    font-style: normal !important;
-    font-size: 20px !important;
-    display: inline-block !important;
-    line-height: 1 !important;
-    
-    /* 2. EL ESCUDO: Esto convierte 'keyboard_arrow_right' en una flecha real */
-/* Forzamos la fuente de iconos oficial de Streamlit */
+    font-size: 0 !important;
+}
 
+/* Flecha manual */
+[data-testid="stExpander"] summary::before {
+    content: "▶";
+    font-size: 14px;
+    margin-right: 8px;
+    display: inline-block;
+    transform: rotate(0deg);
+    transition: transform 0.2s ease;
+}
 
-    /* 3. Ajuste para que el texto 'Configuración' no se choque con la flecha */
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        margin-left: 35px !important;
-        color: #fca311 !important;
-        font-weight: 700 !important;
-    }}
+/* Animación al abrir */
+[data-testid="stExpander"][aria-expanded="true"] summary::before {
+    transform: rotate(90deg);
+}
 
-    header {{ background-color: rgba(0,0,0,0) !important; }}
-    .stApp {{ background: #495057; color: #ffffff; }}
+/* Texto del expander */
+.streamlit-expanderHeader p {
+    font-family: 'SF Pro Display', sans-serif !important;
+    margin-left: 10px !important;
+    color: #fca311 !important;
+    font-weight: 700 !important;
+}
+
+/* Fondo */
+header { background-color: rgba(0,0,0,0) !important; }
+.stApp { background: #495057; color: #ffffff; }
     /* 🔥 FIX DEFINITIVO SIN MATERIAL ICONS */
 
 /* Oculta el texto raro */
