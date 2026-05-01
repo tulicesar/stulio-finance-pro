@@ -6,3 +6,4 @@ xlsxwriter
 reportlab
 pytz
 supabase
+httpx
