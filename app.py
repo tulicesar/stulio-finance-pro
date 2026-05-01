@@ -90,24 +90,33 @@ st.markdown(f"""
     <style>
     {css_fonts}
 
-    /* 1. Aplicamos tu fuente SF Pro solo al TEXTO, no a los íconos */
-    /* Al quitar el '*', protegemos las flechas de la app */
-    html, body, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
-    .stText, p, h1, h2, h3, h4, h5, h6, label, .stButton>button {{
+    /* 1. Aplicamos SF Pro solo a elementos de texto reales */
+    /* Eliminamos el '*' para que no rompa los iconos del sistema */
+    html, body, p, div, h1, h2, h3, h4, h5, h6, label, span, .stText, 
+    [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"] {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* 2. EL DIBUJANTE DE FLECHAS (Convierte el texto en símbolos) */
-    /* Esto corrige las letras 'keyl' de arriba y 'keyboard_arrow' del botón */
+    /* 2. ESCUDO PARA ICONOS: Convierte el texto 'keyboard_...' en flechas */
+    /* Esto arregla el 'keyl' de la barra lateral y las flechas de los botones */
     .stIconMaterial, 
     [data-testid="stIconMaterial"], 
     [data-testid="baseButton-header"] span,
     [data-testid="stExpander"] span,
-    [data-testid="stExpander"] svg {{
+    [data-testid="stExpander"] svg,
+    .st-emotion-cache-p5msec {{
         font-family: "Material Symbols Outlined" !important;
         font-style: normal !important;
         display: inline-block !important;
         text-transform: none !important;
+        word-wrap: normal !important;
+    }}
+
+    /* 3. Ajuste de posición para que el texto no tape la flecha */
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        margin-left: 30px !important;
+        color: #fca311 !important;
     }}
 
     /* 3. Espacio de seguridad para el botón de Configuración */
