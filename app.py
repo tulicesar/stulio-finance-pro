@@ -90,15 +90,25 @@ st.markdown(f"""
     <style>
     {css_fonts}
 
+    /* 1. Tu fuente favorita para todo el texto */
     * {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* ESCUDO: Evita que los íconos se conviertan en palabras como 'arrow_right' */
-    span[data-testid="stIconMaterial"], 
-    .st-emotion-cache-16idsys span, 
-    svg {{
+    /* 2. EL ESCUDO DEFINITIVO: Protege todos los íconos de la app */
+    /* Usamos selectores que no cambian nunca */
+    [data-testid="stIconMaterial"],
+    [data-testid="stExpander"] svg,
+    [data-testid="stExpander"] span,
+    .stIconMaterial {{
         font-family: "Material Symbols Outlined" !important;
+        display: inline-block !important;
+    }}
+
+    /* 3. Ajuste específico para que el texto de Configuración no se monte */
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        margin-left: 10px !important; /* Separa el texto de la flecha */
     }}
 
     header {{ background-color: rgba(0,0,0,0) !important; }}
