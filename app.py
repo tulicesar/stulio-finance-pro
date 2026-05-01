@@ -90,27 +90,45 @@ st.markdown(f"""
     <style>
     {css_fonts}
 
-    /* 1. Aplicamos SF Pro solo a elementos de texto reales */
-    /* Eliminamos el '*' para que no rompa los iconos del sistema */
-    html, body, p, div, h1, h2, h3, h4, h5, h6, label, span, .stText, 
-    [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"] {{
+    st.markdown(f"""
+    <style>
+    {css_fonts}
+
+    /* 1. Aplicamos SF Pro solo a lo que es TEXTO real */
+    /* Eliminamos el '*' para que las flechas del sistema respiren */
+    html, body, .stApp, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
+    p, h1, h2, h3, h4, h5, h6, label, table, div {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* 2. ESCUDO PARA ICONOS: Convierte el texto 'keyboard_...' en flechas */
-    /* Esto arregla el 'keyl' de la barra lateral y las flechas de los botones */
+    /* 2. RESTAURACIÓN DE ICONOS (El Escudo) */
+    /* Esto obliga a que los iconos de Streamlit NO usen tu fuente de texto */
     .stIconMaterial, 
     [data-testid="stIconMaterial"], 
     [data-testid="baseButton-header"] span,
     [data-testid="stExpander"] span,
     [data-testid="stExpander"] svg,
-    .st-emotion-cache-p5msec {{
+    header svg {{
         font-family: "Material Symbols Outlined" !important;
         font-style: normal !important;
         display: inline-block !important;
         text-transform: none !important;
+        letter-spacing: normal !important;
         word-wrap: normal !important;
+        white-space: nowrap !important;
+        direction: ltr !important;
     }}
+
+    /* 3. Ajuste para que el texto de Configuración no tape la flecha */
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        margin-left: 32px !important;
+        color: #fca311 !important;
+        font-weight: 700 !important;
+    }}
+
+    header {{ background-color: rgba(0,0,0,0) !important; }}
+    .stApp {{ background: #495057; color: #ffffff; }}
 
     /* 3. Ajuste de posición para que el texto no tape la flecha */
     .streamlit-expanderHeader p {{
