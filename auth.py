@@ -63,7 +63,8 @@ def mostrar_login(supabase, LOGO_LOGIN):
                         elif "invalid" in err:
                             st.error("❌ Correo o contraseña incorrectos.")
                         else:
-                            st.error("❌ Error al ingresar. Intenta de nuevo.")
+                            # 🔴 AQUÍ ESTÁ EL CAMBIO CLAVE 🔴
+                            st.error(f"❌ Error técnico de Supabase: {e}")
 
         # ── REGISTRO ───────────────────────────────────────────
         with tab_registro:
