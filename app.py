@@ -23,7 +23,8 @@ for key, default in {
     "autenticado": False,
     "token": None,
     "usuario_id": None,
-    "u_nombre_completo": ""
+    "u_nombre_completo": "",
+    "mostrar_eliminar": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -43,6 +44,7 @@ except Exception:
 LOGO_LOGIN   = "logoapp 1.png"
 LOGO_SIDEBAR = "logoapp 2.png"
 LOGO_APP_H   = "LOGOapp horizontal.png"
+SF_FONT      = "SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif"
 
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
@@ -62,7 +64,7 @@ COLOR_MAP = {
     "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
 }
 
-# --- 5. FUENTE SF PRO DISPLAY + ESTILOS (bloque unificado) ---
+# --- 5. FUENTE SF PRO DISPLAY + ESTILOS ---
 def embed_font(path, weight):
     try:
         with open(path, "rb") as f:
@@ -196,6 +198,13 @@ st.markdown(f"""
 
     /* ── DIVIDER ── */
     hr {{ border-color: rgba(252,163,17,0.3) !important; }}
+
+    /* ── EXPANDER CONFIGURACIÓN ── */
+    .streamlit-expanderHeader {{
+        color: #fca311 !important;
+        font-weight: 700 !important;
+        font-size: 0.85rem !important;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
@@ -234,6 +243,13 @@ def parse_moneda(texto):
     if not texto: return 0.0
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
+
+# --- 7. LAYOUT BASE PLOTLY (con SF Pro) ---
+PLOTLY_LAYOUT = dict(
+    paper_bgcolor='rgba(0,0,0,0)',
+    plot_bgcolor='rgba(0,0,0,0)',
+    font=dict(family=SF_FONT, color="#ffffff"),
+)
 
 # --- 11. PANTALLA DE LOGIN ---
 if not st.session_state.autenticado:
@@ -286,7 +302,8 @@ with st.sidebar:
 
     placeholder_otros = st.empty()
 
-    st.divider(); st.subheader("📑 Extractos")
+    st.divider()
+    st.subheader("📑 Extractos")
     c_pdf, c_xls = st.columns(2)
     with c_pdf:
         if st.button("📄 PDF"):
@@ -314,10 +331,26 @@ with st.sidebar:
         p2 = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, meses_lista[6:12], "Balance Proyectado Julio - Diciembre", anio_s, u_id)
         st.download_button("Descargar S2", p2, f"Balance_S2_{anio_s}.pdf")
 
+    st.divider()
+
+    # ── ⚙️ CONFIGURACIÓN ──────────────────────────────────
+    with st.expander("⚙️ Configuración de cuenta"):
+        st.markdown(
+            '<p style="color:#adb5bd;font-size:0.78rem;margin-bottom:10px">'
+            'Opciones avanzadas de tu cuenta</p>',
+            unsafe_allow_html=True
+        )
+        if st.button("🗑️ Eliminar mi cuenta", key="btn_abrir_eliminar"):
+            st.session_state.mostrar_eliminar = not st.session_state.get("mostrar_eliminar", False)
+        if st.session_state.get("mostrar_eliminar", False):
+            mostrar_eliminar_cuenta(
+                supabase, token, u_id,
+                st.session_state.get("u_email", "")
+            )
+
+    st.divider()
     if st.button("🚪 Salir"):
         cerrar_sesion()
-
-mostrar_eliminar_cuenta(supabase, token, u_id, st.session_state.get("u_email", ""))
 
 # --- CUERPO PRINCIPAL ---
 if os.path.exists(LOGO_APP_H):
@@ -458,13 +491,13 @@ def render_resumen_gastos(df):
         html += f'</tr></thead><tbody>{filas}</tbody></table></div>'
         return html
 
-    df_pagados    = df[df["Pagado"] == True].copy()
+    df_pagados_t  = df[df["Pagado"] == True].copy()
     df_pendientes = df[df["Pagado"] == False].copy()
 
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div style="color:#2ecc71;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">✅ Obligaciones Pagadas</div>', unsafe_allow_html=True)
-        html_p = make_tabla(df_pagados, "PAGADO", "#2ecc71", "Fecha Pago", True)
+        html_p = make_tabla(df_pagados_t, "PAGADO", "#2ecc71", "Fecha Pago", True)
         if html_p: st.markdown(html_p, unsafe_allow_html=True)
         else: st.info("Sin pagos registrados.")
     with col2:
@@ -641,7 +674,7 @@ for i, (l, v, col) in enumerate(tarj):
         unsafe_allow_html=True
     )
 
-# Gráficas
+# ── GRÁFICAS ─────────────────────────────────────────────
 st.markdown('<div class="section-header"><span>📊 Análisis de Distribución</span></div>', unsafe_allow_html=True)
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
@@ -679,9 +712,13 @@ with inf2:
     fig2 = go.Figure(go.Indicator(
         mode="gauge+number",
         value=v_cl,
-        number={'suffix': "%", 'font': {'color': '#fca311', 'size': 50}, 'valueformat': '.0f'},
+        number={
+            'suffix': "%",
+            'font': {'color': '#fca311', 'size': 50, 'family': SF_FONT},
+            'valueformat': '.0f'
+        },
         gauge={
-            'axis': {'range': [0, 100]},
+            'axis': {'range': [0, 100], 'tickfont': {'family': SF_FONT, 'color': '#ffffff'}},
             'bar': {'color': "#fca311"},
             'bgcolor': "white",
             'steps': [
@@ -695,7 +732,7 @@ with inf2:
             }
         }
     ))
-    fig2.update_layout(paper_bgcolor='rgba(0,0,0,0)', height=280, margin=dict(t=50,b=0,l=25,r=25))
+    fig2.update_layout(**PLOTLY_LAYOUT, height=280, margin=dict(t=50,b=0,l=25,r=25))
     st.plotly_chart(fig2, use_container_width=True)
     if v_cl >= META:
         st.markdown(f'<div style="text-align:center;color:#2ecc71;font-weight:bold;font-size:0.85rem">✅ ¡Meta alcanzada! Ahorraste {v_cl:.0f}% (Meta: {META}%)</div>', unsafe_allow_html=True)
@@ -717,11 +754,15 @@ with inf3:
         hovertemplate='<b>%{label}</b><br>$ %{value:,.0f}<br>%{percent}<extra></extra>'
     )])
     fig3.update_layout(
-        showlegend=False, paper_bgcolor='rgba(0,0,0,0)', height=250,
+        **PLOTLY_LAYOUT,
+        showlegend=False,
+        height=250,
         margin=dict(t=0,b=0,l=0,r=0),
         annotations=[
-            dict(text=centro_label, x=0.5, y=0.58, font_size=13, showarrow=False, font_color="#495057", font=dict(family="Arial Black")),
-            dict(text=centro_valor, x=0.5, y=0.42, font_size=15, showarrow=False, font_color=centro_color, font=dict(family="Arial Black")),
+            dict(text=centro_label, x=0.5, y=0.58, font_size=13, showarrow=False,
+                 font_color="#495057", font=dict(family=SF_FONT)),
+            dict(text=centro_valor, x=0.5, y=0.42, font_size=15, showarrow=False,
+                 font_color=centro_color, font=dict(family=SF_FONT)),
         ]
     )
     st.plotly_chart(fig3, use_container_width=True)
