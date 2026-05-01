@@ -217,7 +217,7 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL ---
+# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL + FIX KEYBOARD ARROW ---
 st.markdown("""
 <button id="close-sidebar-btn" onclick="closeSidebar()">✕ Cerrar menú</button>
 <script>
@@ -227,6 +227,23 @@ function closeSidebar() {
     var chevron = window.parent.document.querySelector('button[aria-label="Close sidebar"], [data-testid="baseButton-header"]');
     if (chevron) chevron.click();
 }
+
+function fixSidebarIcons() {
+    var allSpans = window.parent.document.querySelectorAll('span, button');
+    allSpans.forEach(function(el) {
+        if (el.innerText && el.innerText.includes('keyboard_arrow')) {
+            el.style.display = 'none';
+        }
+    });
+}
+
+fixSidebarIcons();
+setTimeout(fixSidebarIcons, 500);
+setTimeout(fixSidebarIcons, 1500);
+
+var obs = new MutationObserver(fixSidebarIcons);
+obs.observe(window.parent.document.body, { childList: true, subtree: true });
+
 var observer = new MutationObserver(function() {
     var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
     var btn = document.getElementById("close-sidebar-btn");
