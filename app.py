@@ -86,38 +86,41 @@ css_fonts = (
     embed_font("SFNSDisplay-Bold.otf",     "700")
 )
 
+# Reemplaza desde la línea 89 hasta que termina el bloque de <style>
 st.markdown(f"""
     <style>
     {css_fonts}
 
-    st.markdown(f"""
-    <style>
-    {css_fonts}
-
-    /* 1. Aplicamos SF Pro solo a lo que es TEXTO real */
-    /* Eliminamos el '*' para que las flechas del sistema respiren */
+    /* 1. Fuente para el texto (Evitamos el '*' para no romper iconos) */
     html, body, .stApp, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
     p, h1, h2, h3, h4, h5, h6, label, table, div {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* 2. RESTAURACIÓN DE ICONOS (El Escudo) */
-    /* Esto obliga a que los iconos de Streamlit NO usen tu fuente de texto */
-    .stIconMaterial, 
+    /* 2. EL ESCUDO: Esto convierte 'keyboard_arrow_right' en una flecha real */
+    /* Forzamos la fuente de iconos oficial de Streamlit */
     [data-testid="stIconMaterial"], 
+    .stIconMaterial, 
     [data-testid="baseButton-header"] span,
     [data-testid="stExpander"] span,
-    [data-testid="stExpander"] svg,
-    header svg {{
-        font-family: "Material Symbols Outlined" !important;
+    [data-testid="stExpander"] svg {{
+        font-family: "Material Icons" !important;
         font-style: normal !important;
         display: inline-block !important;
         text-transform: none !important;
-        letter-spacing: normal !important;
-        word-wrap: normal !important;
-        white-space: nowrap !important;
-        direction: ltr !important;
+        line-height: 1 !important;
     }}
+
+    /* 3. Ajuste para que el texto 'Configuración' no se choque con la flecha */
+    .streamlit-expanderHeader p {{
+        font-family: 'SF Pro Display', sans-serif !important;
+        margin-left: 35px !important;
+        color: #fca311 !important;
+        font-weight: 700 !important;
+    }}
+
+    header {{ background-color: rgba(0,0,0,0) !important; }}
+    .stApp {{ background: #495057; color: #ffffff; }}
 
     /* 3. Ajuste para que el texto de Configuración no tape la flecha */
     .streamlit-expanderHeader p {{
