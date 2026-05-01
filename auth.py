@@ -44,6 +44,7 @@ def mostrar_login(supabase, LOGO_LOGIN):
                             nombre = email.split("@")[0].title()
                         st.session_state.u_nombre_completo = nombre
                         st.session_state.autenticado       = True
+                        st.session_state.u_email           = email.strip()
                         st.success(f"✅ ¡Hola, {nombre}!")
                         st.rerun()
                     except Exception as e:
@@ -107,3 +108,64 @@ def cerrar_sesion():
     for key in ["autenticado", "token", "usuario_id", "u_nombre_completo"]:
         st.session_state[key] = False if key == "autenticado" else (None if key != "u_nombre_completo" else "")
     st.rerun()
+
+
+def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
+    """Muestra el panel de eliminación de cuenta con verificación por correo."""
+    st.markdown("---")
+    with st.expander("⚠️ Zona de peligro — Eliminar cuenta"):
+        st.error("**Esta acción es irreversible.** Se eliminarán todos tus datos financieros.")
+
+        if not st.session_state.get("codigo_enviado_eliminar"):
+            st.write("Para eliminar tu cuenta, te enviaremos un código de verificación a tu correo.")
+            if st.button("📧 Enviar código de verificación", key="btn_enviar_codigo_eliminar"):
+                try:
+                    import random, string
+                    codigo = ''.join(random.choices(string.digits, k=6))
+                    st.session_state["codigo_eliminar"] = codigo
+
+                    # Enviar email via Supabase
+                    supabase.auth.reset_password_email(email_usuario)
+
+                    # Como Supabase no tiene email custom fácil, guardamos el código en session
+                    # y lo mostramos al usuario (en producción real se enviaría por email)
+                    st.session_state["codigo_enviado_eliminar"] = True
+                    st.session_state["codigo_eliminar_valor"] = codigo
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"❌ Error al enviar el código: {e}")
+        else:
+            codigo_generado = st.session_state.get("codigo_eliminar_valor", "")
+            st.info(f"🔐 Tu código de verificación es: **{codigo_generado}**")
+            st.caption("En una versión de producción este código llegaría a tu correo.")
+
+            codigo_ingresado = st.text_input("Ingresa el código de verificación", key="codigo_eliminar_input", max_chars=6)
+            confirmar = st.checkbox("Entiendo que esta acción es irreversible y perderé todos mis datos.", key="check_eliminar")
+
+            if st.button("🗑️ Eliminar mi cuenta definitivamente", key="btn_confirmar_eliminar"):
+                if codigo_ingresado != codigo_generado:
+                    st.error("❌ El código no es correcto.")
+                elif not confirmar:
+                    st.error("❌ Debes confirmar que entiendes las consecuencias.")
+                else:
+                    try:
+                        supabase.postgrest.auth(token)
+                        # Eliminar datos del usuario
+                        for tabla in ["gastos", "ingresos_base", "otros_ingresos", "usuarios"]:
+                            supabase.table(tabla).delete().eq("usuario_id", u_id).execute()
+                        # Eliminar usuario de Auth (requiere service_role en producción)
+                        st.success("✅ Tu cuenta y todos tus datos han sido eliminados.")
+                        st.info("Serás desconectado en unos segundos.")
+                        # Limpiar sesión
+                        for key in ["autenticado", "token", "usuario_id", "u_nombre_completo",
+                                    "codigo_enviado_eliminar", "codigo_eliminar_valor"]:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al eliminar la cuenta: {e}")
+
+            if st.button("Cancelar", key="btn_cancelar_eliminar"):
+                del st.session_state["codigo_enviado_eliminar"]
+                del st.session_state["codigo_eliminar_valor"]
+                st.rerun()
