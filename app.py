@@ -215,11 +215,17 @@ st.markdown(f"""
     /* ── DIVIDER ── */
     hr {{ border-color: rgba(252,163,17,0.3) !important; }}
 
+    /* ── FIX SIDEBAR COLLAPSE BUTTON ── */
+    [data-testid="stSidebarCollapseButton"] {{
+        display: none !important;
+    }}
+
     /* ── FIX KEYBOARD ARROW ICON ── */
     [data-testid="stIconMaterial"] {{
         font-family: 'Material Symbols Rounded' !important;
-        font-size: 1.5rem !important;
-        color: rgba(255, 255, 255, 0.6) !important;
+        font-size: 0px !important;
+        width: 0px !important;
+        overflow: hidden !important;
     }}
     </style>
     """, unsafe_allow_html=True)
