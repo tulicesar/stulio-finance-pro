@@ -88,90 +88,29 @@ css_fonts = (
 
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:...');
+    @import url('https://fonts.googleapis.com/css2?
+    family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
     {css_fonts}
 
-    /* 1. Fuente para el texto (Evitamos el '*' para no romper iconos) */
-    html, body, .stApp, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"], 
-    p, h1, h2, h3, h4, h5, h6, label, table, div {{
+    /* ── FUENTE GENERAL — excluye íconos de Material ── */
+    html, body, [class*="css"], .stApp, .stMarkdown,
+    p, span:not(.material-icons):not(.material-icons-outlined),
+    div, h1, h2, h3, h4, h5, h6, label, button,
+    .stButton > button, input, select, textarea,
+    [data-testid="stText"], [data-testid="stMarkdown"] {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
-    /* 2. EL ESCUDO: Esto convierte 'keyboard_arrow_right' en una flecha real */
-    /* Forzamos la fuente de iconos oficial de Streamlit */
-    [data-testid="stIconMaterial"], 
-    .stIconMaterial, 
-    [data-testid="baseButton-header"] span,
-    [data-testid="stExpander"] span,
-    [data-testid="stExpander"] svg {{
-        font-family: "Material Icons" !important;
-        font-style: normal !important;
-        display: inline-block !important;
-        text-transform: none !important;
-        line-height: 1 !important;
-    }}
-
-    /* 3. Ajuste para que el texto 'Configuración' no se choque con la flecha */
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        margin-left: 35px !important;
-        color: #fca311 !important;
-        font-weight: 700 !important;
-    }}
-
-    header {{ background-color: rgba(0,0,0,0) !important; }}
-    .stApp {{ background: #495057; color: #ffffff; }}
-
-    /* 3. Ajuste para que el texto de Configuración no tape la flecha */
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        margin-left: 32px !important;
-        color: #fca311 !important;
-        font-weight: 700 !important;
-    }}
-
-    header {{ background-color: rgba(0,0,0,0) !important; }}
-    .stApp {{ background: #495057; color: #ffffff; }}
-
-    /* 3. Ajuste de posición para que el texto no tape la flecha */
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        margin-left: 30px !important;
-        color: #fca311 !important;
-    }}
-
-    /* 3. Espacio de seguridad para el botón de Configuración */
-    .streamlit-expanderHeader p {{
-        margin-left: 28px !important; /* Mueve el texto para que no tape la flecha */
-        font-family: 'SF Pro Display', sans-serif !important;
-    }}
-
-    /* 3. Ajuste visual para el Expander de Configuración */
-    .streamlit-expanderHeader {{
-        margin-top: 10px !important;
-    }}
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        font-weight: 700 !important;
-        color: #fca311 !important;
-    }}
-
-    /* 3. Limpieza del botón de Configuración */
-    .streamlit-expanderHeader {{
-        border: 1px solid #495057 !important;
-        border-radius: 10px !important;
-        padding: 5px 10px !important;
-    }}
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        color: #ffffff !important;
-        font-size: 0.9rem !important;
-    }}
-
-    /* 3. Ajuste específico para que el texto de Configuración no se monte */
-    .streamlit-expanderHeader p {{
-        font-family: 'SF Pro Display', sans-serif !important;
-        margin-left: 10px !important; /* Separa el texto de la flecha */
+    /* ── PROTEGER ÍCONOS MATERIAL DE STREAMLIT ── */
+    .material-icons,
+    .material-icons-outlined,
+    [data-testid="collapsedControl"] span,
+    [data-testid="stSidebarCollapsedControl"] span,
+    [class*="material"],
+    span[class*="Icon"],
+    svg {{
+        font-family: 'Material Icons' !important;
     }}
 
     header {{ background-color: rgba(0,0,0,0) !important; }}
@@ -279,16 +218,24 @@ st.markdown(f"""
     /* ── DIVIDER ── */
     hr {{ border-color: rgba(252,163,17,0.3) !important; }}
 
-    /* ── EXPANDER CONFIGURACIÓN ── */
-    .streamlit-expanderHeader {{
-        color: #fca311 !important;
-        font-weight: 700 !important;
-        font-size: 0.85rem !important;
+    /* ── FIX SIDEBAR COLLAPSE BUTTON ── */
+    [data-testid="stSidebarCollapseButton"] {{
+        [data-testid="stSidebarCollapseButton"] {{
+        opacity: 1 !important;
+        visibility: visible !important;
+    }}
+
+    /* ── FIX KEYBOARD ARROW ICON ── */
+    [data-testid="stIconMaterial"] {{
+       font-family: 'Material Symbols Rounded' !important;
+         font-size: 1.5rem !important;
+        color: #fca311 !important;;
+        visibility: visible !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL ---
+# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL + FIX KEYBOARD ARROW ---
 st.markdown("""
 <button id="close-sidebar-btn" onclick="closeSidebar()">✕ Cerrar menú</button>
 <script>
@@ -298,6 +245,23 @@ function closeSidebar() {
     var chevron = window.parent.document.querySelector('button[aria-label="Close sidebar"], [data-testid="baseButton-header"]');
     if (chevron) chevron.click();
 }
+
+function fixSidebarIcons() {
+    var allSpans = window.parent.document.querySelectorAll('span, button');
+    allSpans.forEach(function(el) {
+        if (el.innerText && el.innerText.includes('keyboard_arrow')) {
+            el.style.display = 'none';
+        }
+    });
+}
+
+fixSidebarIcons();
+setTimeout(fixSidebarIcons, 500);
+setTimeout(fixSidebarIcons, 1500);
+
+var obs = new MutationObserver(fixSidebarIcons);
+obs.observe(window.parent.document.body, { childList: true, subtree: true });
+
 var observer = new MutationObserver(function() {
     var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
     var btn = document.getElementById("close-sidebar-btn");
