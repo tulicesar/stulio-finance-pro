@@ -159,14 +159,18 @@ st.markdown(f"""
     section[data-testid="stSidebar"] {{ background-color: #212529 !important; border-right: 1px solid #495057; }}
 
     /* ── BOTÓN CERRAR SIDEBAR MÓVIL ── */
-    #close-sidebar-btn {{
-        display: none; position: fixed; bottom: 24px; left: 16px; z-index: 99999;
-        background: #fca311; color: #14213d; border: none; border-radius: 50px;
-        padding: 12px 20px; font-weight: 800; font-size: 0.85rem;
-        letter-spacing: 0.05em; text-transform: uppercase;
-        box-shadow: 0 4px 0 #9a6c00; cursor: pointer;
+    #close-sidebar-btn {{ display: none; }}
+
+    /* ── BANNER DATOS PENDIENTES ── */
+    .banner-pendiente {{
+        position: fixed; top: 0; left: 0; right: 0; z-index: 999999;
+        background: linear-gradient(90deg, #fca311, #e8940a);
+        color: #14213d; padding: 10px 20px;
+        font-weight: 800; font-size: 0.85rem;
+        text-align: center; letter-spacing: 0.05em;
+        text-transform: uppercase;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     }}
-    @media (max-width: 768px) {{ #close-sidebar-btn {{ display: block; }} }}
 
     /* ── BOTONES SIDEBAR ── */
     .stButton>button {{
@@ -218,28 +222,9 @@ st.markdown(f"""
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL ---
-st.markdown("""
-<button id="close-sidebar-btn" onclick="closeSidebar()">✕ Cerrar menú</button>
-<script>
-function closeSidebar() {
-    var btns = window.parent.document.querySelectorAll('[data-testid="collapsedControl"], button[kind="header"]');
-    btns.forEach(function(btn){ btn.click(); });
-    var chevron = window.parent.document.querySelector('button[aria-label="Close sidebar"], [data-testid="baseButton-header"]');
-    if (chevron) chevron.click();
-}
-var observer = new MutationObserver(function() {
-    var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
-    var btn = document.getElementById("close-sidebar-btn");
-    if (sidebar && btn) {
-        var isOpen = window.parent.innerWidth <= 768 &&
-                     sidebar.getBoundingClientRect().left >= 0;
-        btn.style.display = isOpen ? "block" : "none";
-    }
-});
-observer.observe(window.parent.document.body, { attributes: true, subtree: true, attributeFilter: ["class", "style"] });
-</script>
-""", unsafe_allow_html=True)
+# --- 5b. SESSION STATE PARA DATOS MODIFICADOS ---
+if "datos_modificados" not in st.session_state:
+    st.session_state.datos_modificados = False
 
 # --- 6. FUNCIONES DE FORMATO ---
 def format_moneda(valor):
@@ -455,6 +440,10 @@ if True:
             ).fillna(0)
             df_ed_g.loc[mask_copy, "📋"] = False
 
+# Detectar cambios en el editor
+if not df_ed_g.equals(df_base):
+    st.session_state.datos_modificados = True
+
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
 df_ed_oi  = st.data_editor(
@@ -559,6 +548,32 @@ placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", 
 
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
+
+# ── BANNER DATOS PENDIENTES ──────────────────────────────
+if st.session_state.get("datos_modificados", False):
+    st.markdown("""
+    <div class="banner-pendiente">
+        ⚠️ Tienes datos pendientes por guardar — presiona 💾 GUARDAR CAMBIOS DEFINITIVOS
+    </div>
+    <div style="height:40px"></div>
+    """, unsafe_allow_html=True)
+
+# ── KPIs (debajo de Ingresos Adicionales) ────────────────
+st.divider()
+c_kpi = st.columns(5)
+tarj = [
+    ("INGRESOS",           it,   "black"),
+    ("OBLIG. PAGADAS",     vp,   "green"),
+    ("OBLIG. PENDIENTES",  vpy,  "red"),
+    ("DINERO DISPONIBLE",  fact, "blue"),
+    (label_ahorro,         bf,   "#fca311")
+]
+for i, (l, v, col) in enumerate(tarj):
+    c_kpi[i].markdown(
+        f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>',
+        unsafe_allow_html=True
+    )
+st.divider()
 
 # ══════════════════════════════════════════════
 # PRESUPUESTO VS EJECUCIÓN POR CATEGORÍA
@@ -683,22 +698,6 @@ if not df_proyectados.empty:
     items_html += '</div>'
     st.markdown(items_html, unsafe_allow_html=True)
 
-# KPIs
-st.divider()
-c_kpi = st.columns(5)
-tarj = [
-    ("INGRESOS",           it,   "black"),
-    ("OBLIG. PAGADAS",     vp,   "green"),
-    ("OBLIG. PENDIENTES",  vpy,  "red"),
-    ("DINERO DISPONIBLE",  fact, "blue"),
-    (label_ahorro,         bf,   "#fca311")
-]
-for i, (l, v, col) in enumerate(tarj):
-    c_kpi[i].markdown(
-        f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>',
-        unsafe_allow_html=True
-    )
-
 # ── GRÁFICAS ─────────────────────────────────────────────
 st.markdown('<div class="section-header"><span>📊 Análisis de Distribución</span></div>', unsafe_allow_html=True)
 inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
@@ -808,6 +807,7 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
             with st.spinner("Sincronizando con Supabase..."):
                 guardar_bd(supabase, token, u_id, mes_s, anio_s,
                            df_g_limpio, df_oi_limpio, s_in, n_in, otr_v)
+                st.session_state.datos_modificados = False
                 st.balloons()
                 st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
                 st.rerun()
