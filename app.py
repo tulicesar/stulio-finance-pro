@@ -453,6 +453,41 @@ df_ed_oi  = st.data_editor(
     key="oi_ed"
 )
 
+# ── CALCULAR MÉTRICAS (antes de renderizar KPIs) ─────────
+df_ed_g["Monto"]            = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
+df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
+df_ed_oi["Monto"]           = pd.to_numeric(df_ed_oi["Monto"],          errors="coerce").fillna(0)
+otr_v = float(df_ed_oi["Monto"].sum())
+placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
+it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
+label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
+
+# ── BANNER DATOS PENDIENTES ──────────────────────────────
+if st.session_state.get("datos_modificados", False):
+    st.markdown("""
+    <div class="banner-pendiente">
+        ⚠️ Tienes datos pendientes por guardar — presiona 💾 GUARDAR CAMBIOS DEFINITIVOS
+    </div>
+    <div style="height:40px"></div>
+    """, unsafe_allow_html=True)
+
+# ── KPIs ─────────────────────────────────────────────────
+st.divider()
+c_kpi = st.columns(5)
+tarj = [
+    ("INGRESOS",           it,   "black"),
+    ("OBLIG. PAGADAS",     vp,   "green"),
+    ("OBLIG. PENDIENTES",  vpy,  "red"),
+    ("DINERO DISPONIBLE",  fact, "blue"),
+    (label_ahorro,         bf,   "#fca311")
+]
+for i, (l, v, col) in enumerate(tarj):
+    c_kpi[i].markdown(
+        f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>',
+        unsafe_allow_html=True
+    )
+st.divider()
+
 st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span></div>', unsafe_allow_html=True)
 
 if not df_mes_g.empty:
@@ -538,42 +573,6 @@ def render_resumen_gastos(df):
 
 
 render_resumen_gastos(df_mes_g)
-
-df_ed_g["Monto"]            = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
-df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
-df_ed_oi["Monto"]           = pd.to_numeric(df_ed_oi["Monto"],          errors="coerce").fillna(0)
-
-otr_v = float(df_ed_oi["Monto"].sum())
-placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
-
-it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
-label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
-
-# ── BANNER DATOS PENDIENTES ──────────────────────────────
-if st.session_state.get("datos_modificados", False):
-    st.markdown("""
-    <div class="banner-pendiente">
-        ⚠️ Tienes datos pendientes por guardar — presiona 💾 GUARDAR CAMBIOS DEFINITIVOS
-    </div>
-    <div style="height:40px"></div>
-    """, unsafe_allow_html=True)
-
-# ── KPIs (debajo de Ingresos Adicionales) ────────────────
-st.divider()
-c_kpi = st.columns(5)
-tarj = [
-    ("INGRESOS",           it,   "black"),
-    ("OBLIG. PAGADAS",     vp,   "green"),
-    ("OBLIG. PENDIENTES",  vpy,  "red"),
-    ("DINERO DISPONIBLE",  fact, "blue"),
-    (label_ahorro,         bf,   "#fca311")
-]
-for i, (l, v, col) in enumerate(tarj):
-    c_kpi[i].markdown(
-        f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>',
-        unsafe_allow_html=True
-    )
-st.divider()
 
 # ══════════════════════════════════════════════
 # PRESUPUESTO VS EJECUCIÓN POR CATEGORÍA
