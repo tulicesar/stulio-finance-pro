@@ -88,29 +88,20 @@ css_fonts = (
 
 st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:...');
-    @import url('https://fonts.googleapis.com/css2?
-    family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
+    @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200');
     {css_fonts}
 
-    /* ── FUENTE GENERAL — excluye íconos de Material ── */
-    html, body, [class*="css"], .stApp, .stMarkdown,
-    p, span:not(.material-icons):not(.material-icons-outlined),
-    div, h1, h2, h3, h4, h5, h6, label, button,
-    .stButton > button, input, select, textarea,
-    [data-testid="stText"], [data-testid="stMarkdown"] {{
+    /* ── FUENTE GENERAL ── */
+    html, body, .stApp, [data-testid="stWidgetLabel"], [data-testid="stMarkdownContainer"],
+    p, h1, h2, h3, h4, h5, h6, label, table, div {{
         font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }}
 
     /* ── PROTEGER ÍCONOS MATERIAL DE STREAMLIT ── */
-    .material-icons,
-    .material-icons-outlined,
-    [data-testid="collapsedControl"] span,
-    [data-testid="stSidebarCollapsedControl"] span,
-    [class*="material"],
-    span[class*="Icon"],
-    svg {{
-        font-family: 'Material Icons' !important;
+    [data-testid="stIconMaterial"] {{
+        font-family: 'Material Symbols Rounded' !important;
+        font-size: 1.5rem !important;
+        color: rgba(255, 255, 255, 0.6) !important;
     }}
 
     header {{ background-color: rgba(0,0,0,0) !important; }}
@@ -218,24 +209,16 @@ st.markdown(f"""
     /* ── DIVIDER ── */
     hr {{ border-color: rgba(252,163,17,0.3) !important; }}
 
-    /* ── FIX SIDEBAR COLLAPSE BUTTON ── */
-    [data-testid="stSidebarCollapseButton"] {{
-        [data-testid="stSidebarCollapseButton"] {{
-        opacity: 1 !important;
-        visibility: visible !important;
-    }}
-
-    /* ── FIX KEYBOARD ARROW ICON ── */
-    [data-testid="stIconMaterial"] {{
-       font-family: 'Material Symbols Rounded' !important;
-         font-size: 1.5rem !important;
-        color: #fca311 !important;;
-        visibility: visible !important;
+    /* ── EXPANDER CONFIGURACIÓN ── */
+    .streamlit-expanderHeader {{
+        color: #fca311 !important;
+        font-weight: 700 !important;
+        font-size: 0.85rem !important;
     }}
     </style>
     """, unsafe_allow_html=True)
 
-# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL + FIX KEYBOARD ARROW ---
+# --- 5b. BOTÓN CERRAR SIDEBAR MÓVIL ---
 st.markdown("""
 <button id="close-sidebar-btn" onclick="closeSidebar()">✕ Cerrar menú</button>
 <script>
@@ -245,23 +228,6 @@ function closeSidebar() {
     var chevron = window.parent.document.querySelector('button[aria-label="Close sidebar"], [data-testid="baseButton-header"]');
     if (chevron) chevron.click();
 }
-
-function fixSidebarIcons() {
-    var allSpans = window.parent.document.querySelectorAll('span, button');
-    allSpans.forEach(function(el) {
-        if (el.innerText && el.innerText.includes('keyboard_arrow')) {
-            el.style.display = 'none';
-        }
-    });
-}
-
-fixSidebarIcons();
-setTimeout(fixSidebarIcons, 500);
-setTimeout(fixSidebarIcons, 1500);
-
-var obs = new MutationObserver(fixSidebarIcons);
-obs.observe(window.parent.document.body, { childList: true, subtree: true });
-
 var observer = new MutationObserver(function() {
     var sidebar = window.parent.document.querySelector('[data-testid="stSidebar"]');
     var btn = document.getElementById("close-sidebar-btn");
