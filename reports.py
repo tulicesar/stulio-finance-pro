@@ -22,6 +22,34 @@ COLOR_MAP = {
     "Ahorro e Inversión": "#d4af37", "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
 }
 
+def _register_sf_pro():
+    """Registra SF Pro Display para uso en PDFs vía ReportLab."""
+    try:
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        fonts = [
+            ("SFPro",         "SFNSDisplay-Regular.otf"),
+            ("SFPro-Bold",    "SFNSDisplay-Bold.otf"),
+            ("SFPro-Medium",  "SFNSDisplay-Medium.otf"),
+            ("SFPro-Semi",    "SFNSDisplay-Semibold.otf"),
+        ]
+        for name, path in fonts:
+            if os.path.exists(path):
+                pdfmetrics.registerFont(TTFont(name, path))
+        return True
+    except Exception:
+        return False
+
+_SF_AVAILABLE = _register_sf_pro()
+
+def _f(style="regular"):
+    """Devuelve el nombre de fuente correcto según disponibilidad."""
+    if _SF_AVAILABLE:
+        return {"regular": "SFPro", "bold": "SFPro-Bold",
+                "medium": "SFPro-Medium", "semi": "SFPro-Semi"}.get(style, "SFPro")
+    return {"regular": "Helvetica", "bold": "Helvetica-Bold",
+            "medium": "Helvetica", "semi": "Helvetica-Bold"}.get(style, "Helvetica")
+
 def _C():
     from reportlab.lib.colors import HexColor
     return {"az":HexColor("#14213d"),"na":HexColor("#fca311"),
@@ -34,11 +62,11 @@ def _head(c, t, a, u):
     c.setFillColor(colors.white); c.rect(0,0,612,792,fill=1)
     if os.path.exists(LOGO_APP_H):
         c.drawImage(LOGO_APP_H,55,670,width=500,height=100,preserveAspectRatio=True,anchor='c')
-    c.setFont("Helvetica-BoldOblique",9); c.setFillColor(C["az"])
+    c.setFont(_f("semi"),9); c.setFillColor(C["az"])
     c.drawString(50,650,f"Usuario: {u}"); c.drawRightString(560,650,f"{t} {a}")
     c.setStrokeColor(C["na"]); c.setLineWidth(2); c.line(50,645,560,645)
     tz=pytz.timezone('America/Bogota')
-    c.setFont("Helvetica",7); c.setFillColor(colors.grey)
+    c.setFont(_f("regular"),7); c.setFillColor(colors.grey)
     c.drawString(50,30,f"Documento generado el: {datetime.now(tz).strftime('%d/%m/%Y %H:%M:%S')}")
     return 620
 
@@ -46,47 +74,47 @@ def _mes_header(c,m,it,vp,vpy,bf,y,t,a,u):
     C=_C()
     if y<250: c.showPage(); y=_head(c,t,a,u)
     c.setFillColor(C["gr"]); c.rect(50,y-55,510,60,fill=1,stroke=0)
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",11); c.drawString(60,y-15,f"MES: {m}")
-    c.setFont("Helvetica",9)
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),11); c.drawString(60,y-15,f"MES: {m}")
+    c.setFont(_f("regular"),9)
     c.drawString(60,y-30,f"Ingresos: $ {it:,.0f} | Pagadas: $ {vp:,.0f} | Pendientes: $ {vpy:,.0f}")
-    c.setFillColor(C["na"]); c.setFont("Helvetica-Bold",9)
+    c.setFillColor(C["na"]); c.setFont(_f("bold"),9)
     c.drawString(60,y-45,f"SALDO A FAVOR FINAL: $ {bf:,.0f}")
     return y-80
 
 def _ingresos(c,y,s,n,oi,os_,t,a,u):
     from reportlab.lib import colors
     C=_C()
-    c.setFont("Helvetica-Bold",9); c.setFillColor(C["az"]); c.drawString(60,y,"RELACIÓN DE INGRESOS"); y-=15
-    c.setFont("Helvetica",8); c.setFillColor(C["ne"])
+    c.setFont(_f("bold"),9); c.setFillColor(C["az"]); c.drawString(60,y,"RELACIÓN DE INGRESOS"); y-=15
+    c.setFont(_f("regular"),8); c.setFillColor(C["ne"])
     c.drawString(60,y,"Saldo Anterior"); c.drawRightString(480,y,f"$ {s:,.0f}"); y-=10
     c.drawString(60,y,"Nómina"); c.drawRightString(480,y,f"$ {n:,.0f}"); y-=5
     if not oi.empty:
         c.setStrokeColor(colors.lightgrey); c.line(60,y,480,y); y-=12
-        c.setFont("Helvetica-BoldOblique",7); c.setFillColor(colors.darkgrey)
+        c.setFont(_f("semi"),7); c.setFillColor(colors.darkgrey)
         c.drawString(60,y,"Ingresos Variables"); y-=10
         for _,r in oi.iterrows():
-            c.setFont("Helvetica",8); c.setFillColor(C["ne"])
+            c.setFont(_f("regular"),8); c.setFillColor(C["ne"])
             c.drawString(65,y,f"● {r['Descripción']}"); c.drawRightString(480,y,f"$ {r['Monto']:,.0f}"); y-=10
-        c.setFont("Helvetica-Bold",8); c.line(60,y+5,480,y+5)
+        c.setFont(_f("bold"),8); c.line(60,y+5,480,y+5)
         c.drawRightString(480,y-5,f"Total Otros Ingresos: $ {os_:,.0f}"); y-=25
     else: y-=15
     return y
 
 def _gastos(c,y,gm,t,a,u):
     C=_C()
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",9); c.drawString(60,y,"RELACIÓN DE GASTOS"); y-=15
-    c.setFont("Helvetica-Bold",8)
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawString(60,y,"RELACIÓN DE GASTOS"); y-=15
+    c.setFont(_f("bold"),8)
     c.drawString(60,y,"CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(490,y,"MONTO"); c.drawRightString(545,y,"PAGADO"); y-=12
     c.setStrokeColor(C["gr"]); c.setLineWidth(0.5); c.line(60,y+8,545,y+8)
-    c.setFont("Helvetica",8); c.setFillColor(C["ne"]); total=0
+    c.setFont(_f("regular"),8); c.setFillColor(C["ne"]); total=0
     for _,row in gm.iterrows():
-        if y<80: c.showPage(); y=_head(c,t,a,u); c.setFont("Helvetica",8)
+        if y<80: c.showPage(); y=_head(c,t,a,u); c.setFont(_f("regular"),8)
         m=float(row['Monto'])
         if bool(row.get("Pagado",False)): total+=m
         c.drawString(60,y,f"{row['Categoría']} - {row['Descripción']}"[:65])
         c.drawRightString(490,y,f"$ {m:,.0f}"); c.drawRightString(545,y,"SI" if row["Pagado"] else "NO"); y-=12
     c.setStrokeColor(C["az"]); c.setLineWidth(1); c.line(60,y+8,545,y+8)
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",9)
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),9)
     c.drawString(60,y-2,"TOTAL GASTOS PAGADOS:"); c.drawRightString(490,y-2,f"$ {total:,.0f}")
     return y-25, total
 
@@ -96,13 +124,13 @@ def _resumen_periodo(c,y,titulo,nom,otr,gas):
     y-=20
     c.setFillColor(C["na"]); c.setStrokeColor(C["az"]); c.setLineWidth(2)
     c.rect(50,y-100,510,110,fill=1,stroke=1)
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",12); c.drawString(70,y-5,f"RESUMEN: {titulo.upper()}")
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),12); c.drawString(70,y-5,f"RESUMEN: {titulo.upper()}")
     saldo=nom+otr-gas
-    c.setFont("Helvetica",10)
+    c.setFont(_f("regular"),10)
     c.drawString(70,y-25,f"Total Nómina Percibida:       $ {nom:,.0f}")
     c.drawString(70,y-40,f"Total Ingresos Adicionales:   $ {otr:,.0f}")
     c.drawString(70,y-55,f"Total Gastos del Periodo:     $ {gas:,.0f}")
-    c.setFont("Helvetica-Bold",12); c.drawString(70,y-85,f"SALDO TOTAL AL CIERRE: $ {abs(saldo):,.0f}")
+    c.setFont(_f("bold"),12); c.drawString(70,y-85,f"SALDO TOTAL AL CIERRE: $ {abs(saldo):,.0f}")
     return y-150
 
 def _draw_arc(c,cx,cy,ro,ri,a0,a1,col):
@@ -121,10 +149,10 @@ def _pagina_visual(c,t,a,u,ugm,uap,uvp,uvpy,ubf,dg,di,doi,meses,uid):
     from reportlab.lib.colors import HexColor
     C=_C()
     c.showPage(); y=_head(c,t,a,u)
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",13); c.drawString(50,y,"ANÁLISIS VISUAL DEL MES"); y-=8
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),13); c.drawString(50,y,"ANÁLISIS VISUAL DEL MES"); y-=8
     c.setStrokeColor(C["na"]); c.setLineWidth(2); c.line(50,y,560,y)
     TOP=y-20; BX=50; BW=170; RH=17; C2=330
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",9); c.drawString(BX,TOP,"DESGLOSE POR CATEGORÍA")
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawString(BX,TOP,"DESGLOSE POR CATEGORÍA")
     yc=TOP-16
     if ugm is not None and not ugm.empty:
         tp=ugm.copy()
@@ -139,32 +167,32 @@ def _pagina_visual(c,t,a,u,ugm,uap,uvp,uvpy,ubf,dg,di,doi,meses,uid):
                 bl=max((p/100)*BW,3)
                 c.setFillColor(HexColor("#e0e0e0")); c.roundRect(BX,yc-RH+5,BW,RH-7,3,fill=1,stroke=0)
                 c.setFillColor(HexColor(ch)); c.roundRect(BX,yc-RH+5,bl,RH-7,3,fill=1,stroke=0)
-                c.setFillColor(C["ne"]); c.setFont("Helvetica-Bold",6); c.drawString(BX+3,yc-8,r['Categoría'][:18])
-                c.setFont("Helvetica",6); c.drawString(BX+BW+4,yc-8,f"${m:,.0f}  {p:.1f}%")
+                c.setFillColor(C["ne"]); c.setFont(_f("bold"),6); c.drawString(BX+3,yc-8,r['Categoría'][:18])
+                c.setFont(_f("regular"),6); c.drawString(BX+BW+4,yc-8,f"${m:,.0f}  {p:.1f}%")
                 yc-=RH
     META=20; vcl=max(0,min(uap,100)); CX=C2+100; CY=TOP-75; RO=65; RI=46
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",9); c.drawCentredString(CX,TOP,"EFICIENCIA DE AHORRO")
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawCentredString(CX,TOP,"EFICIENCIA DE AHORRO")
     am=180-(META/100*180)
     _draw_arc(c,CX,CY,RO,RI,am,180,HexColor("#f8d7da"))
     _draw_arc(c,CX,CY,RO,RI,0,am,HexColor("#d4edda"))
     _draw_arc(c,CX,CY,RO,RI,180-(vcl/100*180),180,HexColor("#fca311"))
     amr=math.radians(am); c.setStrokeColor(C["ve"]); c.setLineWidth(2)
     c.line(CX+RI*math.cos(amr),CY+RI*math.sin(amr),CX+(RO+6)*math.cos(amr),CY+(RO+6)*math.sin(amr))
-    c.setFillColor(C["na"]); c.setFont("Helvetica-Bold",18); c.drawCentredString(CX,CY-12,f"{vcl:.0f}%")
-    c.setFont("Helvetica",7); c.setFillColor(C["ne"]); c.drawCentredString(CX,CY-24,f"Meta: {META}%")
-    if vcl>=META: c.setFillColor(C["ve"]); c.setFont("Helvetica-Bold",8); c.drawCentredString(CX,CY-36,"¡Meta alcanzada!")
-    else: c.setFillColor(C["ro"]); c.setFont("Helvetica-Bold",8); c.drawCentredString(CX,CY-36,f"Falta {META-vcl:.0f}% para la meta")
-    ye=CY-60; c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",9); c.drawCentredString(CX,ye,"ESTADO REAL DEL DINERO"); ye-=14
+    c.setFillColor(C["na"]); c.setFont(_f("bold"),18); c.drawCentredString(CX,CY-12,f"{vcl:.0f}%")
+    c.setFont(_f("regular"),7); c.setFillColor(C["ne"]); c.drawCentredString(CX,CY-24,f"Meta: {META}%")
+    if vcl>=META: c.setFillColor(C["ve"]); c.setFont(_f("bold"),8); c.drawCentredString(CX,CY-36,"¡Meta alcanzada!")
+    else: c.setFillColor(C["ro"]); c.setFont(_f("bold"),8); c.drawCentredString(CX,CY-36,f"Falta {META-vcl:.0f}% para la meta")
+    ye=CY-60; c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawCentredString(CX,ye,"ESTADO REAL DEL DINERO"); ye-=14
     te=uvp+uvpy+max(ubf,0)
     if te>0:
         for lb,vl,hc in [("Oblig. Pagadas",uvp,"#2ecc71"),("Oblig. Pendient",uvpy,"#e74c3c"),("Saldo a Favor",max(ubf,0),"#fca311")]:
             pe=(vl/te*100) if te>0 else 0; be=max((pe/100)*190,2)
             c.setFillColor(HexColor("#e0e0e0")); c.roundRect(C2,ye-13,190,13,3,fill=1,stroke=0)
             c.setFillColor(HexColor(hc)); c.roundRect(C2,ye-13,be,13,3,fill=1,stroke=0)
-            c.setFillColor(C["ne"]); c.setFont("Helvetica-Bold",7); c.drawString(C2+3,ye-10,lb)
-            c.setFont("Helvetica",7); c.drawRightString(C2+187,ye-10,f"$ {vl:,.0f} ({pe:.1f}%)"); ye-=22
+            c.setFillColor(C["ne"]); c.setFont(_f("bold"),7); c.drawString(C2+3,ye-10,lb)
+            c.setFont(_f("regular"),7); c.drawRightString(C2+187,ye-10,f"$ {vl:,.0f} ({pe:.1f}%)"); ye-=22
     YT=210; c.setStrokeColor(C["az"]); c.setLineWidth(1); c.line(50,YT,560,YT)
-    c.setFillColor(C["az"]); c.setFont("Helvetica-Bold",10); c.drawString(50,YT-14,"TENDENCIA DE AHORRO (Últimos 6 meses)")
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),10); c.drawString(50,YT-14,"TENDENCIA DE AHORRO (Últimos 6 meses)")
     mh=["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
     hist=[]; ref=mh.index(meses[-1])
     for i in range(5,-1,-1):
@@ -183,8 +211,8 @@ def _pagina_visual(c,t,a,u,ugm,uap,uvp,uvpy,ubf,dg,di,doi,meses,uid):
         for mn,val in hist:
             hb=max((abs(val)/mv)*65,3); cb=C["na"] if val>=0 else C["ro"]
             c.setFillColor(cb); c.roundRect(xb,BASE,bw-10,hb,3,fill=1,stroke=0)
-            c.setFillColor(C["ne"]); c.setFont("Helvetica-Bold",7); c.drawCentredString(xb+(bw-10)//2,BASE-12,mn)
-            c.setFont("Helvetica",6); c.drawCentredString(xb+(bw-10)//2,BASE+hb+3,f"${val:,.0f}")
+            c.setFillColor(C["ne"]); c.setFont(_f("bold"),7); c.drawCentredString(xb+(bw-10)//2,BASE-12,mn)
+            c.setFont(_f("regular"),6); c.drawCentredString(xb+(bw-10)//2,BASE+hb+3,f"${val:,.0f}")
             xb+=bw
 
 # ── FUNCIÓN PRINCIPAL PDF ─────────────────────────────────────
@@ -214,7 +242,8 @@ def generar_pdf_reporte(df_g_full,df_i_full,df_oi_full,meses,titulo,anio,u_id):
 
 # ── HELPERS EXCEL ─────────────────────────────────────────────
 def _xfmt(wb,bg,fc="#000000",bold=False,nf=None,brd=False,al="left"):
-    d={"bg_color":bg,"font_color":fc,"bold":bold,"valign":"vcenter","align":al}
+    d={"bg_color":bg,"font_color":fc,"bold":bold,"valign":"vcenter","align":al,
+       "font_name":"SF Pro Display"}
     if nf: d["num_format"]=nf
     if brd: d.update({"border":1,"border_color":"#cccccc"})
     return wb.add_format(d)
