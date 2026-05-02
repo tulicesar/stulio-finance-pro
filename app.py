@@ -271,7 +271,22 @@ u_id  = st.session_state.usuario_id
 token = st.session_state.token
 
 supabase.postgrest.auth(token)
-df_g_full, df_i_full, df_oi_full = cargar_bd(supabase, u_id, token)
+try:
+    df_g_full, df_i_full, df_oi_full = cargar_bd(supabase, u_id, token)
+except Exception as e:
+    if "JWT" in str(e) or "expired" in str(e).lower():
+        st.warning("⚠️ Tu sesión expiró. Por favor inicia sesión nuevamente.")
+        cerrar_sesion()
+        st.stop()
+    else:
+        st.error(f"Error al cargar datos: {e}")
+        st.stop()
+if "Periodo" not in df_i_full.columns:
+    df_i_full = pd.DataFrame(columns=["Periodo","Año","Nomina","SaldoAnterior"])
+if "Periodo" not in df_g_full.columns:
+    df_g_full = pd.DataFrame(columns=["Periodo","Año","Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago","Es Proyectado","Presupuesto Asociado"])
+if "Periodo" not in df_oi_full.columns:
+    df_oi_full = pd.DataFrame(columns=["Periodo","Año","Descripción","Monto"])
 
 meses_lista = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
