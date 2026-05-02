@@ -425,7 +425,7 @@ if True:
         "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁", default=False, width="small"),
         "Fecha Pago":            st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
     }
-    df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).reset_index(drop=True)
+    df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
     df_ed_g = st.data_editor(
         df_base,
