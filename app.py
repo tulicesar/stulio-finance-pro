@@ -217,15 +217,17 @@ st.markdown(f"""
 
     /* ── FIX SIDEBAR COLLAPSE BUTTON ── */
     [data-testid="stSidebarCollapseButton"] {{
-        display: none !important;
+        [data-testid="stSidebarCollapseButton"] {{
+        opacity: 1 !important;
+        visibility: visible !important;
     }}
 
     /* ── FIX KEYBOARD ARROW ICON ── */
     [data-testid="stIconMaterial"] {{
-        font-family: 'Material Symbols Rounded' !important;
-        font-size: 0px !important;
-        width: 0px !important;
-        overflow: hidden !important;
+       font-family: 'Material Symbols Rounded' !important;
+         font-size: 1.5rem !important;
+        color: #fca311 !important;;
+        visibility: visible !important;
     }}
     </style>
     """, unsafe_allow_html=True)
