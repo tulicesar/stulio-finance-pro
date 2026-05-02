@@ -17,7 +17,25 @@ from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
-
+# DIAGNÓSTICO TEMPORAL — borrar después
+import streamlit.components.v1 as components
+components.html("""
+<script>
+setTimeout(function() {
+    var allText = [];
+    document.querySelectorAll('*').forEach(function(el) {
+        if (el.childNodes.length === 1 && el.childNodes[0].nodeType === 3) {
+            var t = el.innerText || '';
+            if (t.includes('keyboard')) {
+                allText.push(el.tagName + ' | class: ' + el.className + ' | text: ' + t);
+            }
+        }
+    });
+    document.getElementById('debug-out').innerText = allText.join('\\n');
+}, 2000);
+</script>
+<pre id="debug-out" style="color:lime;background:#111;padding:10px;font-size:11px">Buscando...</pre>
+""", height=200)
 # --- 2. INICIALIZACIÓN DE SESSION STATE ---
 for key, default in {
     "autenticado": False,
