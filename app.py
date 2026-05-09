@@ -470,8 +470,24 @@ with st.sidebar:
 
     s_sug = 0.0
     if not i_ant.empty:
-        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
-        s_sug = float(bf_a)
+        # Reconstruir df_ant con Es Referencia para usar calcular_pendientes
+        _nom_ant = float(i_ant["Nomina"].sum())
+        _otr_ant = float(oi_ant["Monto"].sum()) if not oi_ant.empty else 0.0
+        _sal_ant = float(i_ant["SaldoAnterior"].iloc[0])
+        _it_ant  = _sal_ant + _nom_ant + _otr_ant
+        # Pagado del mes anterior
+        _vp_ant  = float(g_ant[g_ant["Pagado"].fillna(False).astype(bool)]["Monto"].sum()) if not g_ant.empty else 0.0
+        # Pendientes usando la misma lógica que el dashboard
+        _pend_ant = calcular_pendientes(g_ant)
+        if not _pend_ant.empty:
+            _pend_ant["_v"] = _pend_ant.apply(
+                lambda r: float(r.get("Monto",0) or 0) if float(r.get("Monto",0) or 0) > 0
+                          else float(r.get("Valor Referencia",0) or 0), axis=1
+            )
+            _vpy_ant = float(_pend_ant["_v"].sum())
+        else:
+            _vpy_ant = 0.0
+        s_sug = _it_ant - _vp_ant - _vpy_ant
 
     st.divider()
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
