@@ -7,4 +7,4 @@ reportlab
 pytz
 supabase
 httpx
-google-generativeai
+google-genai
