@@ -475,17 +475,38 @@ df_base_mov = df_mov_rows.reindex(
     columns=["Categoría", "Descripción", "Monto", "Presupuesto Asociado", "Pagado", "Fecha Pago"]
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
-# Aplicar copia automática de Valor Proyectado → Monto si el ítem tiene 📋 marcado
-# (cuando el usuario asocia un movimiento a un proyectado que tiene 📋 activo)
-if not df_ed_proy_clean.empty and not df_base_mov.empty:
-    proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True]["Descripción"].tolist()
-    for desc in proy_con_copia:
-        val_proy = df_ed_proy_clean.loc[
-            df_ed_proy_clean["Descripción"] == desc, "Valor Referencia"
-        ].values
-        if len(val_proy) > 0:
-            mask = df_base_mov["Presupuesto Asociado"] == desc
-            df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = float(val_proy[0])
+# ── 📋 COPIAR AL REGISTRAR ────────────────────────────────────────────────────
+# Cuando el usuario marca 📋 en un ítem proyectado, se crea automáticamente una
+# fila nueva en la tabla de movimientos con Categoría, Descripción y Monto copiados.
+# Si ya existe una fila con esa misma Descripción en movimientos, NO se duplica.
+if not df_ed_proy_clean.empty:
+    proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True].copy()
+    if not proy_con_copia.empty:
+        filas_nuevas = []
+        descripciones_existentes = df_base_mov["Descripción"].str.strip().str.upper().tolist()
+        for _, proy_row in proy_con_copia.iterrows():
+            desc_proy  = str(proy_row.get("Descripción", "")).strip()
+            cat_proy   = str(proy_row.get("Categoría", ""))
+            val_proy   = float(proy_row.get("Valor Referencia", 0) or 0)
+            # Solo agrega si no existe ya una fila con esa descripción (sin distinción mayúsculas)
+            if desc_proy.upper() not in descripciones_existentes:
+                filas_nuevas.append({
+                    "Categoría":            cat_proy,
+                    "Descripción":          desc_proy,
+                    "Monto":                val_proy,
+                    "Presupuesto Asociado": desc_proy,  # se auto-asocia al proyectado
+                    "Pagado":               False,
+                    "Fecha Pago":           pd.NaT,
+                })
+            else:
+                # Ya existe: solo actualiza el monto si está en 0
+                mask = df_base_mov["Descripción"].str.strip().str.upper() == desc_proy.upper()
+                df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = val_proy
+        if filas_nuevas:
+            df_nuevas = pd.DataFrame(filas_nuevas)
+            df_base_mov = pd.concat([df_base_mov, df_nuevas], ignore_index=True).sort_values(
+                ["Categoría", "Descripción"], ascending=[True, True]
+            ).reset_index(drop=True)
 
 df_ed_mov = st.data_editor(
     df_base_mov,
@@ -531,7 +552,28 @@ df_ed_g["Pagado"]            = df_ed_g["Pagado"].fillna(False).astype(bool)
 df_ed_g["Es Proyectado"]     = df_ed_g["Es Proyectado"].fillna(False).astype(bool)
 df_ed_g["Movimiento Recurrente"] = df_ed_g["Movimiento Recurrente"].fillna(False).astype(bool)
 
-# df_base unificado para detección de cambios (no se usa en equals porque son tablas separadas)
+# ── ANTI-DUPLICACIÓN EN KPIs ──────────────────────────────────────────────────
+# Si un ítem proyectado tiene el mismo nombre (o está asociado) a un movimiento
+# pagado → se marca como pagado en df_ed_g para que calcular_metricas no lo cuente
+# como obligación pendiente.
+_desc_pagadas_kpi = set(
+    df_ed_g[df_ed_g["Pagado"] == True]["Descripción"]
+    .dropna().str.strip().str.upper().tolist()
+)
+if "Presupuesto Asociado" in df_ed_g.columns:
+    _proy_con_pago_kpi = set(
+        df_ed_g[df_ed_g["Pagado"] == True]["Presupuesto Asociado"]
+        .dropna().astype(str).str.strip().str.upper().tolist()
+    )
+    _desc_pagadas_kpi = _desc_pagadas_kpi | _proy_con_pago_kpi
+
+for _idx, _row in df_ed_g.iterrows():
+    if bool(_row.get("Es Proyectado", False)) and not bool(_row.get("Pagado", False)):
+        _desc = str(_row.get("Descripción", "")).strip().upper()
+        if _desc in _desc_pagadas_kpi:
+            df_ed_g.loc[_idx, "Pagado"] = True  # no doble-conteo
+
+# df_base unificado para detección de cambios
 df_base = df_ed_g.copy()
 
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
@@ -631,6 +673,49 @@ def render_resumen_gastos(df):
     df_pagados_t  = df[df["Pagado"] == True].copy()
     df_pendientes = df[df["Pagado"] == False].copy()
 
+    # ── ANTI-DUPLICACIÓN ───────────────────────────────────────────────────────
+    # Si un ítem proyectado (Es Proyectado=True) tiene el mismo nombre que un
+    # movimiento ya PAGADO en la tabla de movimientos, no aparece como pendiente.
+    # Esto evita que QUINCENA OSIRIS figure como pendiente si ya fue registrada y pagada.
+    descripciones_pagadas = set(
+        df_pagados_t["Descripción"].dropna().str.strip().str.upper().tolist()
+    )
+    # También verificar si el proyectado está asociado a un movimiento pagado
+    if "Presupuesto Asociado" in df.columns:
+        items_proy_con_pago = set(
+            df[df["Pagado"] == True]["Presupuesto Asociado"]
+            .dropna().astype(str).str.strip().str.upper().tolist()
+        )
+        descripciones_pagadas = descripciones_pagadas | items_proy_con_pago
+
+    def es_proyectado_ya_cubierto(row):
+        """Retorna True si este ítem proyectado ya tiene un movimiento pagado asociado."""
+        if not bool(row.get("Es Proyectado", False)):
+            return False
+        desc = str(row.get("Descripción", "")).strip().upper()
+        return desc in descripciones_pagadas
+
+    df_pend_adj = df_pendientes[
+        ~df_pendientes.apply(es_proyectado_ya_cubierto, axis=1)
+    ].copy()
+
+    # Para ítems proyectados aún pendientes: descontar lo que ya fue ejecutado
+    if "Es Proyectado" in df_pend_adj.columns and "Presupuesto Asociado" in df.columns:
+        for idx, row in df_pend_adj.iterrows():
+            if bool(row.get("Es Proyectado", False)):
+                nombre = str(row.get("Descripción",""))
+                _pa = df["Presupuesto Asociado"].astype(str).str.strip()
+                df_asoc_pend = df[
+                    (_pa == nombre.strip()) &
+                    (_pa != "nan") & (_pa != "None") & (_pa != "")
+                ].copy()
+                df_asoc_pend["_val"]  = pd.to_numeric(df_asoc_pend["Monto"], errors="coerce").fillna(0)
+                df_asoc_pend["_vref"] = pd.to_numeric(df_asoc_pend["Valor Referencia"], errors="coerce").fillna(0)
+                df_asoc_pend["_real"] = df_asoc_pend["_val"].where(df_asoc_pend["_val"] > 0, df_asoc_pend["_vref"])
+                asociados_monto = df_asoc_pend["_real"].sum()
+                vref_orig = float(row.get("Valor Referencia", 0) or 0)
+                df_pend_adj.loc[idx, "Valor Referencia"] = max(vref_orig - asociados_monto, 0)
+
     col1, col2 = st.columns(2)
     with col1:
         st.markdown('<div style="color:#2ecc71;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">✅ Obligaciones Pagadas</div>', unsafe_allow_html=True)
@@ -639,22 +724,6 @@ def render_resumen_gastos(df):
         else: st.info("Sin pagos registrados.")
     with col2:
         st.markdown('<div style="color:#e74c3c;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⏳ Obligaciones Pendientes</div>', unsafe_allow_html=True)
-        df_pend_adj = df_pendientes.copy()
-        if "Es Proyectado" in df_pend_adj.columns and "Presupuesto Asociado" in df.columns:
-            for idx, row in df_pend_adj.iterrows():
-                if bool(row.get("Es Proyectado", False)):
-                    nombre = str(row.get("Descripción",""))
-                    _pa = df["Presupuesto Asociado"].astype(str).str.strip()
-                    df_asoc_pend = df[
-                        (_pa == nombre.strip()) &
-                        (_pa != "nan") & (_pa != "None") & (_pa != "")
-                    ].copy()
-                    df_asoc_pend["_val"]  = pd.to_numeric(df_asoc_pend["Monto"], errors="coerce").fillna(0)
-                    df_asoc_pend["_vref"] = pd.to_numeric(df_asoc_pend["Valor Referencia"], errors="coerce").fillna(0)
-                    df_asoc_pend["_real"] = df_asoc_pend["_val"].where(df_asoc_pend["_val"] > 0, df_asoc_pend["_vref"])
-                    asociados_monto = df_asoc_pend["_real"].sum()
-                    vref_orig = float(row.get("Valor Referencia", 0) or 0)
-                    df_pend_adj.loc[idx, "Valor Referencia"] = max(vref_orig - asociados_monto, 0)
         html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Val.Ref", False)
         if html_n: st.markdown(html_n, unsafe_allow_html=True)
         else: st.success("¡Sin obligaciones pendientes!")
