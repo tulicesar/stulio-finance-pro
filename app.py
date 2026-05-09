@@ -1131,7 +1131,7 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
             else:
                 _url = (
                     "https://generativelanguage.googleapis.com/v1beta"
-                    f"/models/gemini-1.5-flash:generateContent?key={_gemini_key}"
+                    f"/models/gemini-2.0-flash-lite:generateContent?key={_gemini_key}"
                 )
                 _body = {
                     "contents": [{"parts": [{"text": prompt_contexto}]}],
