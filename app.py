@@ -447,18 +447,10 @@ with st.sidebar:
 
     # ── ⚙️ CONFIGURACIÓN ──────────────────────────────────
     with st.expander("Configuración de cuenta"):
-        st.markdown(
-            '<p style="color:#adb5bd;font-size:0.78rem;margin-bottom:10px">'
-            'Opciones avanzadas de tu cuenta</p>',
-            unsafe_allow_html=True
+        mostrar_eliminar_cuenta(
+            supabase, token, u_id,
+            st.session_state.get("u_email", "")
         )
-        if st.button("🗑️ Eliminar mi cuenta", key="btn_abrir_eliminar"):
-            st.session_state.mostrar_eliminar = not st.session_state.get("mostrar_eliminar", False)
-        if st.session_state.get("mostrar_eliminar", False):
-            mostrar_eliminar_cuenta(
-                supabase, token, u_id,
-                st.session_state.get("u_email", "")
-            )
 
     st.divider()
     if st.button("🚪 Salir"):
