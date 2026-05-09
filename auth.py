@@ -132,7 +132,7 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
 
     if not st.session_state.get("solicitud_eliminar_paso2"):
         # ── PASO 1: botón inicial ─────────────────────────────
-        if st.button("🗑️ Solicitar eliminar cuenta", key="btn_abrir_eliminar"):
+        if st.button("🗑️ Solicitar eliminar cuenta", key="btn_solicitar_eliminar_cuenta"):
             st.session_state["solicitud_eliminar_paso2"] = True
             st.rerun()
     else:
