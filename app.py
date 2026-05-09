@@ -401,48 +401,138 @@ else:
 if "Presupuesto Asociado" not in df_mes_g.columns:
     df_mes_g["Presupuesto Asociado"] = None
 
-df_mes_g["📋"] = False
-
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
-st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
-st.caption("Los cambios se aplican al presionar 💾 GUARDAR CAMBIOS DEFINITIVOS")
-if True:
-    items_proyectados = df_mes_g[df_mes_g["Es Proyectado"]==True]["Descripción"].dropna().tolist() if not df_mes_g.empty else []
+# ══════════════════════════════════════════════════════════
+# TABLA 1: GASTOS / EGRESOS PROYECTADOS
+# Aquí se planifica: qué se espera gastar este mes
+# ══════════════════════════════════════════════════════════
+st.markdown('<div class="section-header"><span>📅 Gastos / Egresos Proyectados</span></div>', unsafe_allow_html=True)
+st.caption("Define aquí los gastos que proyectas para el mes. Estos sirven como presupuesto de referencia.")
 
-    config_g = {
-        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-        "Descripción":           st.column_config.TextColumn("Descripción", width="medium"),
-        "Monto":                 st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
-        "Valor Referencia":      st.column_config.NumberColumn("Val.Ref", format="$ %,.0f", width="small"),
-        "📋":                    st.column_config.CheckboxColumn("📋", default=False, width="small",
-                                     help="Copia Valor Referencia → Monto"),
-        "Es Proyectado":         st.column_config.CheckboxColumn("Proy.", default=False, width="small",
-                                     help="Ítem proyectado"),
-        "Presupuesto Asociado":  st.column_config.SelectboxColumn("Asociado a", options=items_proyectados, width="small",
-                                     help="Ítem proyectado al que pertenece este gasto"),
-        "Pagado":                st.column_config.CheckboxColumn("✅", default=False, width="small"),
-        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁", default=False, width="small"),
-        "Fecha Pago":            st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
-    }
-    df_base = df_mes_g.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","📋","Es Proyectado","Presupuesto Asociado","Pagado","Movimiento Recurrente","Fecha Pago"]).sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
+# Separar filas proyectadas del df_mes_g
+df_proy_rows = df_mes_g[df_mes_g["Es Proyectado"] == True].copy()
+df_proy_rows["📋"] = False  # columna para copiar val.ref → monto al registrar
 
-    df_ed_g = st.data_editor(
-        df_base,
-        use_container_width=True, num_rows="dynamic", column_config=config_g, key="g_ed"
-    )
+config_proy = {
+    "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+    "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
+    "Valor Referencia":      st.column_config.NumberColumn("Valor Proyectado", format="$ %,.0f", width="small",
+                                 help="Monto que proyectas gastar en este ítem"),
+    "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
+                                 help="Cuando registres este gasto, copia automáticamente el valor proyectado como monto"),
+    "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
+                                 help="Se repite todos los meses automáticamente"),
+}
 
-    if "📋" in df_ed_g.columns:
-        mask_copy = df_ed_g["📋"] == True
-        if mask_copy.any():
-            df_ed_g.loc[mask_copy, "Monto"] = pd.to_numeric(
-                df_ed_g.loc[mask_copy, "Valor Referencia"], errors="coerce"
-            ).fillna(0)
-            df_ed_g.loc[mask_copy, "📋"] = False
+df_base_proy = df_proy_rows.reindex(
+    columns=["Categoría", "Descripción", "Valor Referencia", "📋", "Movimiento Recurrente"]
+).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
-# Detectar cambios en el editor
-if not df_ed_g.equals(df_base):
+df_ed_proy = st.data_editor(
+    df_base_proy,
+    use_container_width=True,
+    num_rows="dynamic",
+    column_config=config_proy,
+    key="proy_ed"
+)
+
+# Limpiar columna 📋 (es de uso visual solamente — la lógica se aplica al registrar el movimiento)
+df_ed_proy_clean = df_ed_proy.copy()
+df_ed_proy_clean["📋"] = df_ed_proy_clean.get("📋", False)
+
+# Construir lista de ítems proyectados para el dropdown de la tabla de movimientos
+items_proyectados = df_ed_proy_clean["Descripción"].dropna().tolist()
+# Añadir también los que ya estaban guardados en BD (por si se editó la tabla proyectada antes de guardar)
+items_proy_bd = df_mes_g[df_mes_g["Es Proyectado"] == True]["Descripción"].dropna().tolist()
+items_proyectados = sorted(set(items_proyectados + items_proy_bd))
+
+# ── Detectar cambios en tabla proyectados ──
+if not df_ed_proy.equals(df_base_proy):
     st.session_state.datos_modificados = True
+
+# ══════════════════════════════════════════════════════════
+# TABLA 2: EDITAR / AGREGAR MOVIMIENTOS (registro diario)
+# Aquí se registra lo que realmente se gastó / se pagó
+# ══════════════════════════════════════════════════════════
+st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
+st.caption("Registra aquí los gastos del día a día. Asocia cada uno a su ítem proyectado si aplica.")
+
+# Filas NO proyectadas = movimientos reales del día a día
+df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
+
+config_mov = {
+    "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+    "Descripción":          st.column_config.TextColumn("Descripción", width="large"),
+    "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
+    "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
+                                help="Ítem proyectado al que pertenece este gasto"),
+    "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
+    "Fecha Pago":           st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
+}
+
+df_base_mov = df_mov_rows.reindex(
+    columns=["Categoría", "Descripción", "Monto", "Presupuesto Asociado", "Pagado", "Fecha Pago"]
+).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
+
+# Aplicar copia automática de Valor Proyectado → Monto si el ítem tiene 📋 marcado
+# (cuando el usuario asocia un movimiento a un proyectado que tiene 📋 activo)
+if not df_ed_proy_clean.empty and not df_base_mov.empty:
+    proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True]["Descripción"].tolist()
+    for desc in proy_con_copia:
+        val_proy = df_ed_proy_clean.loc[
+            df_ed_proy_clean["Descripción"] == desc, "Valor Referencia"
+        ].values
+        if len(val_proy) > 0:
+            mask = df_base_mov["Presupuesto Asociado"] == desc
+            df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = float(val_proy[0])
+
+df_ed_mov = st.data_editor(
+    df_base_mov,
+    use_container_width=True,
+    num_rows="dynamic",
+    column_config=config_mov,
+    key="mov_ed"
+)
+
+# ── Detectar cambios en tabla de movimientos ──
+if not df_ed_mov.equals(df_base_mov):
+    st.session_state.datos_modificados = True
+
+# ══════════════════════════════════════════════════════════
+# RECONSTRUIR df_ed_g unificado para toda la lógica downstream
+# (KPIs, gráficas, presupuesto vs ejecución, guardar)
+# ══════════════════════════════════════════════════════════
+
+# Preparar tabla proyectada con todas las columnas necesarias
+df_proy_final = df_ed_proy_clean.copy()
+df_proy_final["Es Proyectado"]   = True
+df_proy_final["Pagado"]          = False
+df_proy_final["Monto"]           = 0.0
+df_proy_final["Presupuesto Asociado"] = None
+df_proy_final["Fecha Pago"]      = pd.NaT
+# Asegurar columna Movimiento Recurrente
+if "Movimiento Recurrente" not in df_proy_final.columns:
+    df_proy_final["Movimiento Recurrente"] = False
+
+# Preparar tabla de movimientos con todas las columnas necesarias
+df_mov_final = df_ed_mov.copy()
+df_mov_final["Es Proyectado"]      = False
+df_mov_final["Valor Referencia"]   = 0.0
+df_mov_final["Movimiento Recurrente"] = False
+
+# Unificar en df_ed_g
+df_ed_g = pd.concat([df_proy_final, df_mov_final], ignore_index=True)
+
+# Asegurar tipos
+df_ed_g["Monto"]             = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
+df_ed_g["Valor Referencia"]  = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
+df_ed_g["Pagado"]            = df_ed_g["Pagado"].fillna(False).astype(bool)
+df_ed_g["Es Proyectado"]     = df_ed_g["Es Proyectado"].fillna(False).astype(bool)
+df_ed_g["Movimiento Recurrente"] = df_ed_g["Movimiento Recurrente"].fillna(False).astype(bool)
+
+# df_base unificado para detección de cambios (no se usa en equals porque son tablas separadas)
+df_base = df_ed_g.copy()
 
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
@@ -454,9 +544,7 @@ df_ed_oi  = st.data_editor(
 )
 
 # ── CALCULAR MÉTRICAS (antes de renderizar KPIs) ─────────
-df_ed_g["Monto"]            = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
-df_ed_g["Valor Referencia"] = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
-df_ed_oi["Monto"]           = pd.to_numeric(df_ed_oi["Monto"],          errors="coerce").fillna(0)
+df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum())
 placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 it, vp, vpy, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
@@ -797,7 +885,14 @@ with inf3:
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    df_g_limpio  = df_ed_g.dropna(subset=["Categoría","Descripción","Monto"], how="all")
+    # df_ed_g ya es el DataFrame unificado (proyectados + movimientos)
+    # Solo descartamos filas completamente vacías
+    df_g_limpio = df_ed_g.dropna(subset=["Categoría", "Descripción"], how="all")
+    # Para proyectados sin monto (monto = 0) los mantenemos, son válidos si tienen Valor Referencia
+    df_g_limpio = df_g_limpio[
+        (df_g_limpio["Valor Referencia"] > 0) | (df_g_limpio["Monto"] > 0) |
+        (df_g_limpio["Descripción"].notna() & (df_g_limpio["Descripción"].str.strip() != ""))
+    ].copy()
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción","Monto"], how="all")
     if df_g_limpio.empty and df_oi_limpio.empty and n_in == 0:
         st.error("🛑 No hay datos suficientes para guardar.")
