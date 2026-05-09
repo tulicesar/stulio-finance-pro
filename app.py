@@ -269,7 +269,7 @@ except Exception as e:
 if "Periodo" not in df_i_full.columns:
     df_i_full = pd.DataFrame(columns=["Periodo","Año","Nomina","SaldoAnterior"])
 if "Periodo" not in df_g_full.columns:
-    df_g_full = pd.DataFrame(columns=["Periodo","Año","Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago","Es Proyectado","Presupuesto Asociado"])
+    df_g_full = pd.DataFrame(columns=["Periodo","Año","Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago","Es Proyectado","Presupuesto Asociado","Es Referencia"])
 if "Periodo" not in df_oi_full.columns:
     df_oi_full = pd.DataFrame(columns=["Periodo","Año","Descripción","Monto"])
 
@@ -407,6 +407,10 @@ else:
     df_mes_g["Es Proyectado"] = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
 if "Presupuesto Asociado" not in df_mes_g.columns:
     df_mes_g["Presupuesto Asociado"] = None
+if "Es Referencia" not in df_mes_g.columns:
+    df_mes_g["Es Referencia"] = False
+else:
+    df_mes_g["Es Referencia"] = df_mes_g["Es Referencia"].fillna(False).astype(bool)
 
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
@@ -420,20 +424,24 @@ st.caption("Define aquí los gastos que proyectas para el mes. Estos sirven como
 # Separar filas proyectadas del df_mes_g
 df_proy_rows = df_mes_g[df_mes_g["Es Proyectado"] == True].copy()
 df_proy_rows["📋"] = False  # columna para copiar val.ref → monto al registrar
+if "Es Referencia" not in df_proy_rows.columns:
+    df_proy_rows["Es Referencia"] = False
 
 config_proy = {
     "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
     "Valor Referencia":      st.column_config.NumberColumn("Valor Proyectado", format="$ %,.0f", width="small",
                                  help="Monto que proyectas gastar en este ítem"),
+    "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
+                                 help="Activa para hacer seguimiento de este ítem: aparecerá en Pendientes y en Seguimiento de Proyectados"),
     "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
-                                 help="Cuando registres este gasto, copia automáticamente el valor proyectado como monto"),
+                                 help="Copia automáticamente el valor proyectado como monto al registrar el movimiento"),
     "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
                                  help="Se repite todos los meses automáticamente"),
 }
 
 df_base_proy = df_proy_rows.reindex(
-    columns=["Categoría", "Descripción", "Valor Referencia", "📋", "Movimiento Recurrente"]
+    columns=["Categoría", "Descripción", "Valor Referencia", "Es Referencia", "📋", "Movimiento Recurrente"]
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
 df_ed_proy = st.data_editor(
@@ -447,12 +455,25 @@ df_ed_proy = st.data_editor(
 # Limpiar columna 📋 (es de uso visual solamente — la lógica se aplica al registrar el movimiento)
 df_ed_proy_clean = df_ed_proy.copy()
 df_ed_proy_clean["📋"] = df_ed_proy_clean.get("📋", False)
+if "Es Referencia" not in df_ed_proy_clean.columns:
+    df_ed_proy_clean["Es Referencia"] = False
+df_ed_proy_clean["Es Referencia"] = df_ed_proy_clean["Es Referencia"].fillna(False).astype(bool)
 
-# Construir lista de ítems proyectados para el dropdown de la tabla de movimientos
-items_proyectados = df_ed_proy_clean["Descripción"].dropna().tolist()
-# Añadir también los que ya estaban guardados en BD (por si se editó la tabla proyectada antes de guardar)
-items_proy_bd = df_mes_g[df_mes_g["Es Proyectado"] == True]["Descripción"].dropna().tolist()
-items_proyectados = sorted(set(items_proyectados + items_proy_bd))
+# ── Solo los ítems con 📌 Referencia activo aparecen en el dropdown de movimientos ──
+items_referencia = df_ed_proy_clean[
+    df_ed_proy_clean["Es Referencia"] == True
+]["Descripción"].dropna().tolist()
+# También incluir los ya guardados en BD con referencia activa
+if "Es Referencia" in df_mes_g.columns:
+    items_ref_bd = df_mes_g[
+        (df_mes_g["Es Proyectado"] == True) & (df_mes_g["Es Referencia"] == True)
+    ]["Descripción"].dropna().tolist()
+    items_referencia = sorted(set(items_referencia + items_ref_bd))
+else:
+    items_referencia = sorted(set(items_referencia))
+
+# (mantener lista completa para compatibilidad interna)
+items_proyectados = items_referencia
 
 # ── Detectar cambios en tabla proyectados ──
 if not df_ed_proy.equals(df_base_proy):
@@ -534,20 +555,23 @@ if not df_ed_mov.equals(df_base_mov):
 
 # Preparar tabla proyectada con todas las columnas necesarias
 df_proy_final = df_ed_proy_clean.copy()
-df_proy_final["Es Proyectado"]   = True
-df_proy_final["Pagado"]          = False
-df_proy_final["Monto"]           = 0.0
+df_proy_final["Es Proyectado"]        = True
+df_proy_final["Pagado"]               = False
+df_proy_final["Monto"]                = 0.0
 df_proy_final["Presupuesto Asociado"] = None
-df_proy_final["Fecha Pago"]      = pd.NaT
-# Asegurar columna Movimiento Recurrente
+df_proy_final["Fecha Pago"]           = pd.NaT
+if "Es Referencia" not in df_proy_final.columns:
+    df_proy_final["Es Referencia"] = False
+df_proy_final["Es Referencia"] = df_proy_final["Es Referencia"].fillna(False).astype(bool)
 if "Movimiento Recurrente" not in df_proy_final.columns:
     df_proy_final["Movimiento Recurrente"] = False
 
 # Preparar tabla de movimientos con todas las columnas necesarias
 df_mov_final = df_ed_mov.copy()
-df_mov_final["Es Proyectado"]      = False
-df_mov_final["Valor Referencia"]   = 0.0
+df_mov_final["Es Proyectado"]         = False
+df_mov_final["Valor Referencia"]      = 0.0
 df_mov_final["Movimiento Recurrente"] = False
+df_mov_final["Es Referencia"]         = False
 
 # Unificar en df_ed_g
 df_ed_g = pd.concat([df_proy_final, df_mov_final], ignore_index=True)
@@ -560,25 +584,27 @@ df_ed_g["Es Proyectado"]     = df_ed_g["Es Proyectado"].fillna(False).astype(boo
 df_ed_g["Movimiento Recurrente"] = df_ed_g["Movimiento Recurrente"].fillna(False).astype(bool)
 
 # ── ANTI-DUPLICACIÓN EN KPIs ──────────────────────────────────────────────────
-# Si un ítem proyectado tiene el mismo nombre (o está asociado) a un movimiento
-# pagado → se marca como pagado en df_ed_g para que calcular_metricas no lo cuente
-# como obligación pendiente.
-_desc_pagadas_kpi = set(
-    df_ed_g[df_ed_g["Pagado"] == True]["Descripción"]
-    .dropna().str.strip().str.upper().tolist()
-)
-if "Presupuesto Asociado" in df_ed_g.columns:
+# Ítems proyectados con Referencia activa que ya tienen movimientos asociados pagados
+# se marcan como pagados para que calcular_metricas no los cuente como pendientes dobles.
+if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.columns:
     _proy_con_pago_kpi = set(
         df_ed_g[df_ed_g["Pagado"] == True]["Presupuesto Asociado"]
         .dropna().astype(str).str.strip().str.upper().tolist()
     )
-    _desc_pagadas_kpi = _desc_pagadas_kpi | _proy_con_pago_kpi
-
-for _idx, _row in df_ed_g.iterrows():
-    if bool(_row.get("Es Proyectado", False)) and not bool(_row.get("Pagado", False)):
-        _desc = str(_row.get("Descripción", "")).strip().upper()
-        if _desc in _desc_pagadas_kpi:
-            df_ed_g.loc[_idx, "Pagado"] = True  # no doble-conteo
+    for _idx, _row in df_ed_g.iterrows():
+        if (bool(_row.get("Es Proyectado", False)) and
+            bool(_row.get("Es Referencia", False)) and
+            not bool(_row.get("Pagado", False))):
+            _desc     = str(_row.get("Descripción","")).strip().upper()
+            _vref     = float(_row.get("Valor Referencia", 0) or 0)
+            # Calcular ejecutado para este ítem
+            _movs_k   = df_ed_g[
+                df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == _desc
+            ]
+            _ejecutado = float(pd.to_numeric(_movs_k["Monto"], errors="coerce").fillna(0).sum())
+            _pag_comp  = bool(_movs_k["Pagado"].fillna(False).all()) if not _movs_k.empty else False
+            if _pag_comp and _ejecutado >= _vref:
+                df_ed_g.loc[_idx, "Pagado"] = True
 
 # df_base unificado para detección de cambios
 df_base = df_ed_g.copy()
@@ -680,78 +706,60 @@ def render_resumen_gastos(df):
     df_pagados_t  = df[df["Pagado"] == True].copy()
     df_pendientes = df[df["Pagado"] == False].copy()
 
-    # ── CONSTRUIR MAPA DE EJECUCIÓN POR ÍTEM PROYECTADO ───────────────────────
-    # Para cada ítem proyectado calculamos cuánto ya se ejecutó (suma de movimientos asociados)
-    # y cuánto se pagó completamente (para saber si eliminarlo o mostrar saldo restante).
-    mapa_ejecutado   = {}  # descripción_proy_upper → monto ejecutado total
-    mapa_pagado_full = {}  # descripción_proy_upper → True si TODOS los asociados están pagados
+    # ── PENDIENTES: lógica con Es Referencia ──────────────────────────────────
+    # Reglas:
+    # 1. Movimientos normales (Es Proyectado=False, sin Presupuesto Asociado) → pendientes normales
+    # 2. Ítems proyectados con Es Referencia=True → aparecen con saldo disponible (proyectado - ejecutado)
+    #    - Si el saldo = 0 o está totalmente cubierto → desaparecen
+    # 3. Ítems proyectados con Es Referencia=False → NO aparecen en pendientes
+    # 4. Movimientos asociados a un proyectado (tienen Presupuesto Asociado) → NO aparecen solos
 
-    if "Presupuesto Asociado" in df.columns:
-        df_movs = df[
-            df["Presupuesto Asociado"].notna() &
-            (~df["Presupuesto Asociado"].astype(str).str.strip().isin(["", "nan", "None", "NaN"]))
+    # Construir mapa de ejecución por ítem referencia
+    mapa_ejecutado = {}   # desc_upper → suma montos asociados
+    mapa_pagado_completo = {}  # desc_upper → True si todos los asociados están pagados
+
+    col_pa = "Presupuesto Asociado"
+    if col_pa in df.columns:
+        df_con_asociado = df[
+            df[col_pa].notna() &
+            (~df[col_pa].astype(str).str.strip().isin(["", "nan", "None", "NaN"]))
         ].copy()
-        df_movs["_monto_real"] = pd.to_numeric(df_movs["Monto"], errors="coerce").fillna(0)
-        df_movs["_pa_key"]     = df_movs["Presupuesto Asociado"].astype(str).str.strip().str.upper()
+        df_con_asociado["_monto"] = pd.to_numeric(df_con_asociado["Monto"], errors="coerce").fillna(0)
+        df_con_asociado["_key"]   = df_con_asociado[col_pa].astype(str).str.strip().str.upper()
+        for key, grp in df_con_asociado.groupby("_key"):
+            mapa_ejecutado[key]         = float(grp["_monto"].sum())
+            mapa_pagado_completo[key]   = bool(grp["Pagado"].fillna(False).all())
 
-        for key, grp in df_movs.groupby("_pa_key"):
-            mapa_ejecutado[key]   = float(grp["_monto_real"].sum())
-            mapa_pagado_full[key] = bool(grp["Pagado"].all())
+    filas_pendientes = []
 
-    # También considerar movimientos con la misma descripción sin "Presupuesto Asociado"
-    for _, prow in df[df.get("Es Proyectado", pd.Series(False, index=df.index)).fillna(False).astype(bool)].iterrows():
-        desc_key = str(prow.get("Descripción","")).strip().upper()
-        # Buscar movimientos con misma descripción (que no sean proyectados)
-        movs_same = df[
-            (df["Es Proyectado"].fillna(False).astype(bool) == False) &
-            (df["Descripción"].str.strip().str.upper() == desc_key)
-        ]
-        if not movs_same.empty:
-            ej = float(pd.to_numeric(movs_same["Monto"], errors="coerce").fillna(0).sum())
-            if desc_key not in mapa_ejecutado:
-                mapa_ejecutado[desc_key]   = ej
-                mapa_pagado_full[desc_key] = bool(movs_same["Pagado"].all())
-            else:
-                mapa_ejecutado[desc_key]   += ej
-                mapa_pagado_full[desc_key]  = mapa_pagado_full[desc_key] and bool(movs_same["Pagado"].all())
+    for _, row in df_pendientes.iterrows():
+        es_proy  = bool(row.get("Es Proyectado", False))
+        es_ref   = bool(row.get("Es Referencia", False))
+        col_pa_v = str(row.get(col_pa, "")).strip() if col_pa in df.columns else ""
+        tiene_asociado = col_pa_v not in ("", "nan", "None", "NaN")
 
-    # ── AJUSTAR PENDIENTES ─────────────────────────────────────────────────────
-    df_pend_adj = df_pendientes.copy()
-    filas_a_eliminar = []
-
-    for idx, row in df_pend_adj.iterrows():
-        if not bool(row.get("Es Proyectado", False)):
+        if es_proy:
+            # Solo los de referencia activa aparecen en pendientes
+            if not es_ref:
+                continue
+            desc_key  = str(row.get("Descripción","")).strip().upper()
+            vref      = float(row.get("Valor Referencia", 0) or 0)
+            ejecutado = mapa_ejecutado.get(desc_key, 0.0)
+            pag_comp  = mapa_pagado_completo.get(desc_key, False)
+            saldo     = max(vref - ejecutado, 0)
+            if saldo == 0 or (pag_comp and ejecutado >= vref):
+                continue  # totalmente cubierto → no aparece
+            fila = row.copy()
+            fila["Valor Referencia"] = saldo  # mostrar saldo disponible
+            filas_pendientes.append(fila)
+        elif tiene_asociado:
+            # Movimiento asociado a un proyectado → no aparece solo
             continue
-        desc_key  = str(row.get("Descripción","")).strip().upper()
-        vref_orig = float(row.get("Valor Referencia", 0) or 0)
-        ejecutado = mapa_ejecutado.get(desc_key, 0.0)
-        pagado_full = mapa_pagado_full.get(desc_key, False)
-
-        if ejecutado == 0:
-            # Sin movimientos asociados → pendiente completo, no tocar
-            continue
-        elif pagado_full and ejecutado >= vref_orig:
-            # Totalmente cubierto y pagado → eliminar de pendientes
-            filas_a_eliminar.append(idx)
         else:
-            # Parcialmente ejecutado → mostrar saldo restante
-            saldo = max(vref_orig - ejecutado, 0)
-            if saldo == 0:
-                filas_a_eliminar.append(idx)
-            else:
-                df_pend_adj.loc[idx, "Valor Referencia"] = saldo
+            # Movimiento normal → aparece tal cual
+            filas_pendientes.append(row)
 
-    df_pend_adj = df_pend_adj.drop(index=filas_a_eliminar)
-
-    # Excluir además los movimientos NO proyectados que ya están asociados a un proyectado
-    # (para que no aparezcan duplicados como pendientes por sí solos)
-    if "Presupuesto Asociado" in df_pend_adj.columns:
-        mask_asociado = (
-            df_pend_adj["Presupuesto Asociado"].notna() &
-            (~df_pend_adj["Presupuesto Asociado"].astype(str).str.strip().isin(["", "nan", "None", "NaN"])) &
-            (df_pend_adj["Es Proyectado"].fillna(False).astype(bool) == False)
-        )
-        df_pend_adj = df_pend_adj[~mask_asociado]
+    df_pend_adj = pd.DataFrame(filas_pendientes).reset_index(drop=True) if filas_pendientes else pd.DataFrame(columns=df.columns)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -778,7 +786,13 @@ df_mes_bd = df_g_full[
     (df_g_full["Año"] == anio_s)
 ].copy()
 
-df_proyectados = df_mes_bd[df_mes_bd["Es Proyectado"] == True].copy() if "Es Proyectado" in df_mes_bd.columns else pd.DataFrame()
+# Solo ítems proyectados con 📌 Referencia activa
+if "Es Referencia" not in df_mes_bd.columns:
+    df_mes_bd["Es Referencia"] = False
+df_proyectados = df_mes_bd[
+    (df_mes_bd.get("Es Proyectado", pd.Series(False, index=df_mes_bd.index)).fillna(False).astype(bool)) &
+    (df_mes_bd.get("Es Referencia", pd.Series(False, index=df_mes_bd.index)).fillna(False).astype(bool))
+].copy() if not df_mes_bd.empty else pd.DataFrame()
 
 if "Presupuesto Asociado" in df_mes_bd.columns:
     _pa = df_mes_bd["Presupuesto Asociado"].astype(str).str.strip()
