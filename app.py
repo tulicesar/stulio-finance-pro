@@ -375,18 +375,25 @@ if df_mes_g.empty:
     if not gastos_hist.empty:
         p_actual = (anio_s * 12) + meses_lista.index(mes_s)
         gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
-        registros_previos = gastos_hist[gastos_hist["lt"] < p_actual]
-        if not registros_previos.empty:
-            ultimo_lt   = registros_previos["lt"].max()
-            foto        = registros_previos[registros_previos["lt"] == ultimo_lt]
-            activos     = foto[foto["Movimiento Recurrente"] == True].copy()
+        # ── CORRECCIÓN RECURRENTE ──────────────────────────────────────────────
+        # Solo propagar desde el mes INMEDIATAMENTE anterior (p_actual - 1),
+        # no desde el último mes con datos. Así, si en el mes anterior se desactivó
+        # un recurrente, no vuelve a aparecer en el mes actual.
+        p_anterior = p_actual - 1
+        foto_anterior = gastos_hist[gastos_hist["lt"] == p_anterior]
+        if not foto_anterior.empty:
+            # Solo los que tienen Movimiento Recurrente = True en ese mes exacto
+            activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
-                df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente"])
+                df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Es Proyectado","Presupuesto Asociado"])
                 df_mes_g["Pagado"]               = False
                 df_mes_g["Fecha Pago"]           = pd.NaT
-                df_mes_g["Es Proyectado"]        = df_mes_g.get("Es Proyectado", False)
-                df_mes_g["Presupuesto Asociado"] = df_mes_g.get("Presupuesto Asociado", None)
+                df_mes_g["Es Proyectado"]        = df_mes_g["Es Proyectado"].fillna(False)
+                df_mes_g["Presupuesto Asociado"] = df_mes_g["Presupuesto Asociado"].where(
+                    df_mes_g["Presupuesto Asociado"].notna(), other=None
+                )
                 df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
+        # Si no hay datos en el mes anterior inmediato, el mes queda vacío (sin propagar)
 
 if "Fecha Pago" not in df_mes_g.columns:
     df_mes_g["Fecha Pago"] = pd.NaT
@@ -673,48 +680,78 @@ def render_resumen_gastos(df):
     df_pagados_t  = df[df["Pagado"] == True].copy()
     df_pendientes = df[df["Pagado"] == False].copy()
 
-    # ── ANTI-DUPLICACIÓN ───────────────────────────────────────────────────────
-    # Si un ítem proyectado (Es Proyectado=True) tiene el mismo nombre que un
-    # movimiento ya PAGADO en la tabla de movimientos, no aparece como pendiente.
-    # Esto evita que QUINCENA OSIRIS figure como pendiente si ya fue registrada y pagada.
-    descripciones_pagadas = set(
-        df_pagados_t["Descripción"].dropna().str.strip().str.upper().tolist()
-    )
-    # También verificar si el proyectado está asociado a un movimiento pagado
+    # ── CONSTRUIR MAPA DE EJECUCIÓN POR ÍTEM PROYECTADO ───────────────────────
+    # Para cada ítem proyectado calculamos cuánto ya se ejecutó (suma de movimientos asociados)
+    # y cuánto se pagó completamente (para saber si eliminarlo o mostrar saldo restante).
+    mapa_ejecutado   = {}  # descripción_proy_upper → monto ejecutado total
+    mapa_pagado_full = {}  # descripción_proy_upper → True si TODOS los asociados están pagados
+
     if "Presupuesto Asociado" in df.columns:
-        items_proy_con_pago = set(
-            df[df["Pagado"] == True]["Presupuesto Asociado"]
-            .dropna().astype(str).str.strip().str.upper().tolist()
-        )
-        descripciones_pagadas = descripciones_pagadas | items_proy_con_pago
+        df_movs = df[
+            df["Presupuesto Asociado"].notna() &
+            (~df["Presupuesto Asociado"].astype(str).str.strip().isin(["", "nan", "None", "NaN"]))
+        ].copy()
+        df_movs["_monto_real"] = pd.to_numeric(df_movs["Monto"], errors="coerce").fillna(0)
+        df_movs["_pa_key"]     = df_movs["Presupuesto Asociado"].astype(str).str.strip().str.upper()
 
-    def es_proyectado_ya_cubierto(row):
-        """Retorna True si este ítem proyectado ya tiene un movimiento pagado asociado."""
+        for key, grp in df_movs.groupby("_pa_key"):
+            mapa_ejecutado[key]   = float(grp["_monto_real"].sum())
+            mapa_pagado_full[key] = bool(grp["Pagado"].all())
+
+    # También considerar movimientos con la misma descripción sin "Presupuesto Asociado"
+    for _, prow in df[df.get("Es Proyectado", pd.Series(False, index=df.index)).fillna(False).astype(bool)].iterrows():
+        desc_key = str(prow.get("Descripción","")).strip().upper()
+        # Buscar movimientos con misma descripción (que no sean proyectados)
+        movs_same = df[
+            (df["Es Proyectado"].fillna(False).astype(bool) == False) &
+            (df["Descripción"].str.strip().str.upper() == desc_key)
+        ]
+        if not movs_same.empty:
+            ej = float(pd.to_numeric(movs_same["Monto"], errors="coerce").fillna(0).sum())
+            if desc_key not in mapa_ejecutado:
+                mapa_ejecutado[desc_key]   = ej
+                mapa_pagado_full[desc_key] = bool(movs_same["Pagado"].all())
+            else:
+                mapa_ejecutado[desc_key]   += ej
+                mapa_pagado_full[desc_key]  = mapa_pagado_full[desc_key] and bool(movs_same["Pagado"].all())
+
+    # ── AJUSTAR PENDIENTES ─────────────────────────────────────────────────────
+    df_pend_adj = df_pendientes.copy()
+    filas_a_eliminar = []
+
+    for idx, row in df_pend_adj.iterrows():
         if not bool(row.get("Es Proyectado", False)):
-            return False
-        desc = str(row.get("Descripción", "")).strip().upper()
-        return desc in descripciones_pagadas
+            continue
+        desc_key  = str(row.get("Descripción","")).strip().upper()
+        vref_orig = float(row.get("Valor Referencia", 0) or 0)
+        ejecutado = mapa_ejecutado.get(desc_key, 0.0)
+        pagado_full = mapa_pagado_full.get(desc_key, False)
 
-    df_pend_adj = df_pendientes[
-        ~df_pendientes.apply(es_proyectado_ya_cubierto, axis=1)
-    ].copy()
+        if ejecutado == 0:
+            # Sin movimientos asociados → pendiente completo, no tocar
+            continue
+        elif pagado_full and ejecutado >= vref_orig:
+            # Totalmente cubierto y pagado → eliminar de pendientes
+            filas_a_eliminar.append(idx)
+        else:
+            # Parcialmente ejecutado → mostrar saldo restante
+            saldo = max(vref_orig - ejecutado, 0)
+            if saldo == 0:
+                filas_a_eliminar.append(idx)
+            else:
+                df_pend_adj.loc[idx, "Valor Referencia"] = saldo
 
-    # Para ítems proyectados aún pendientes: descontar lo que ya fue ejecutado
-    if "Es Proyectado" in df_pend_adj.columns and "Presupuesto Asociado" in df.columns:
-        for idx, row in df_pend_adj.iterrows():
-            if bool(row.get("Es Proyectado", False)):
-                nombre = str(row.get("Descripción",""))
-                _pa = df["Presupuesto Asociado"].astype(str).str.strip()
-                df_asoc_pend = df[
-                    (_pa == nombre.strip()) &
-                    (_pa != "nan") & (_pa != "None") & (_pa != "")
-                ].copy()
-                df_asoc_pend["_val"]  = pd.to_numeric(df_asoc_pend["Monto"], errors="coerce").fillna(0)
-                df_asoc_pend["_vref"] = pd.to_numeric(df_asoc_pend["Valor Referencia"], errors="coerce").fillna(0)
-                df_asoc_pend["_real"] = df_asoc_pend["_val"].where(df_asoc_pend["_val"] > 0, df_asoc_pend["_vref"])
-                asociados_monto = df_asoc_pend["_real"].sum()
-                vref_orig = float(row.get("Valor Referencia", 0) or 0)
-                df_pend_adj.loc[idx, "Valor Referencia"] = max(vref_orig - asociados_monto, 0)
+    df_pend_adj = df_pend_adj.drop(index=filas_a_eliminar)
+
+    # Excluir además los movimientos NO proyectados que ya están asociados a un proyectado
+    # (para que no aparezcan duplicados como pendientes por sí solos)
+    if "Presupuesto Asociado" in df_pend_adj.columns:
+        mask_asociado = (
+            df_pend_adj["Presupuesto Asociado"].notna() &
+            (~df_pend_adj["Presupuesto Asociado"].astype(str).str.strip().isin(["", "nan", "None", "NaN"])) &
+            (df_pend_adj["Es Proyectado"].fillna(False).astype(bool) == False)
+        )
+        df_pend_adj = df_pend_adj[~mask_asociado]
 
     col1, col2 = st.columns(2)
     with col1:
@@ -724,7 +761,7 @@ def render_resumen_gastos(df):
         else: st.info("Sin pagos registrados.")
     with col2:
         st.markdown('<div style="color:#e74c3c;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⏳ Obligaciones Pendientes</div>', unsafe_allow_html=True)
-        html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Val.Ref", False)
+        html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Disponible", False)
         if html_n: st.markdown(html_n, unsafe_allow_html=True)
         else: st.success("¡Sin obligaciones pendientes!")
 
@@ -950,7 +987,104 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
 
-# --- GUARDAR ---
+# ══════════════════════════════════════════════════════════
+# 🤖 ASESOR IA DE FINANZAS PERSONALES
+# ══════════════════════════════════════════════════════════
+st.markdown('<div class="section-header"><span>🤖 Asesor IA de Finanzas</span></div>', unsafe_allow_html=True)
+
+with st.expander("💡 Obtener diagnóstico y recomendaciones personalizadas", expanded=False):
+    st.caption("La IA analiza tus flujos del mes y te da recomendaciones como asesor de finanzas personales.")
+
+    # Construir resumen de gastos por categoría para el prompt
+    resumen_cats = ""
+    if not df_ed_g.empty:
+        t_df = df_ed_g.copy()
+        t_df["_v"] = t_df.apply(lambda r: r["Monto"] if r["Pagado"] else r["Valor Referencia"], axis=1)
+        por_cat = t_df.groupby("Categoría")["_v"].sum().sort_values(ascending=False)
+        for cat, val in por_cat.items():
+            if val > 0:
+                resumen_cats += f"  - {cat}: ${val:,.0f}\n"
+
+    # Construir resumen de ítems proyectados con ejecución
+    resumen_proyectados = ""
+    df_proy_ia = df_ed_g[df_ed_g["Es Proyectado"] == True].copy()
+    if not df_proy_ia.empty:
+        for _, pr in df_proy_ia.iterrows():
+            desc_p   = str(pr.get("Descripción",""))
+            vref_p   = float(pr.get("Valor Referencia", 0) or 0)
+            key_p    = desc_p.strip().upper()
+            ejec_p   = 0.0
+            if "Presupuesto Asociado" in df_ed_g.columns:
+                movs_p = df_ed_g[
+                    df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == key_p
+                ]
+                ejec_p = float(pd.to_numeric(movs_p["Monto"], errors="coerce").fillna(0).sum())
+            pct_p = (ejec_p / vref_p * 100) if vref_p > 0 else 0
+            resumen_proyectados += f"  - {desc_p}: proyectado ${vref_p:,.0f} / ejecutado ${ejec_p:,.0f} ({pct_p:.0f}%)\n"
+
+    prompt_contexto = f"""Eres un asesor experto en finanzas personales. Analiza los datos financieros del mes de {mes_s} {anio_s} y genera un diagnóstico claro, directo y útil en español. Sé específico con los números.
+
+DATOS DEL MES:
+- Ingresos totales: ${it:,.0f}
+- Saldo anterior: ${s_in:,.0f}
+- Nómina: ${n_in:,.0f}
+- Otros ingresos: ${otr_v:,.0f}
+- Obligaciones pagadas: ${vp:,.0f}
+- Obligaciones pendientes: ${vpy:,.0f}
+- Dinero disponible: ${fact:,.0f}
+- {label_ahorro}: ${bf:,.0f}
+- Eficiencia de ahorro: {ahorro_p:.1f}% (meta recomendada: 20%)
+
+GASTOS POR CATEGORÍA:
+{resumen_cats if resumen_cats else "  Sin datos"}
+
+ÍTEMS PROYECTADOS VS EJECUCIÓN:
+{resumen_proyectados if resumen_proyectados else "  Sin proyectados definidos"}
+
+Genera un diagnóstico con estas secciones (usa emojis para cada sección):
+1. 📊 Estado General del Mes (2-3 frases sobre la salud financiera)
+2. ⚠️ Alertas y Riesgos (identifica gastos problemáticos o riesgos concretos)
+3. ✅ Puntos Positivos (qué está funcionando bien)
+4. 💡 Recomendaciones (3-5 acciones concretas y priorizadas)
+5. 🎯 Meta del Próximo Mes (1 objetivo específico y alcanzable)
+
+Sé directo, usa los números reales, y habla como un asesor financiero de confianza, no como un bot genérico."""
+
+    col_btn1, col_btn2 = st.columns([1, 3])
+    with col_btn1:
+        btn_diagnostico = st.button("🔍 Generar Diagnóstico IA", key="btn_ia", use_container_width=True)
+
+    if btn_diagnostico:
+        try:
+            import anthropic as _anthropic
+            _client = _anthropic.Anthropic()
+            with st.spinner("🤖 Analizando tus finanzas..."):
+                _mensaje = _client.messages.create(
+                    model="claude-sonnet-4-20250514",
+                    max_tokens=1200,
+                    messages=[{"role": "user", "content": prompt_contexto}]
+                )
+                diagnostico_texto = _mensaje.content[0].text
+                st.session_state["ia_diagnostico"] = diagnostico_texto
+        except ImportError:
+            st.error("❌ Instala la librería anthropic: pip install anthropic")
+        except Exception as e_ia:
+            st.error(f"❌ Error al conectar con la IA: {e_ia}")
+
+    if st.session_state.get("ia_diagnostico"):
+        st.markdown("---")
+        st.markdown(
+            f'<div style="background:#2d3238;border-radius:12px;padding:20px 24px;'
+            f'border-left:4px solid #fca311;line-height:1.7;font-size:0.92rem;color:#f8f9fa">'
+            f'{st.session_state["ia_diagnostico"].replace(chr(10), "<br>")}'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+        if st.button("🗑️ Limpiar diagnóstico", key="btn_limpiar_ia"):
+            st.session_state["ia_diagnostico"] = ""
+            st.rerun()
+
+
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
