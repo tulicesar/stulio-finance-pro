@@ -135,7 +135,7 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                                 except:
                                     pass
 
-                                # ── Correo de bienvenida ───────────────────
+                                # ── Correo tutorial detallado ─────────────
                                 try:
                                     import smtplib
                                     from email.mime.text import MIMEText
@@ -144,78 +144,85 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                                     _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
                                     if _gmail_user and _gmail_pass:
                                         _msg = MIMEMultipart("alternative")
-                                        _msg["Subject"] = f"🎉 ¡Bienvenido a My FinanceApp, {nombre_completo.split()[0]}!"
+                                        _msg["Subject"] = f"📚 Tu guía completa de My FinanceApp, {nombre_completo.split()[0]}"
                                         _msg["From"]    = _gmail_user
                                         _msg["To"]      = email_reg.strip()
-                                        _html_bienvenida = f"""
+                                        _html_tutorial = f"""
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
 <div style="max-width:600px;margin:0 auto;padding:30px 20px">
 
-  <!-- Header -->
-  <div style="text-align:center;margin-bottom:30px">
+  <div style="text-align:center;margin-bottom:24px">
     <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
     <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
   </div>
 
-  <!-- Saludo -->
   <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #fca311">
-    <h2 style="color:#fff;margin:0 0 10px">¡Hola, {nombre_completo.split()[0]}! 👋</h2>
-    <p style="color:#adb5bd;margin:0;line-height:1.6">
-      Tu cuenta ha sido creada exitosamente. Estamos emocionados de acompañarte en el control de tus finanzas personales.
-      <br><br>Primero debes confirmar tu correo haciendo clic en el enlace que Supabase te envió por separado.
+    <h2 style="color:#fff;margin:0 0 8px">📚 Tu guía paso a paso</h2>
+    <p style="color:#adb5bd;margin:0;font-size:0.85rem;line-height:1.6">
+      Hola <b style="color:#fff">{nombre_completo.split()[0]}</b>, aquí tienes todo lo que necesitas saber para sacarle el máximo provecho a My FinanceApp.
     </p>
   </div>
 
-  <!-- Tutorial -->
-  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px">
-    <h3 style="color:#fca311;margin:0 0 16px">🚀 Cómo empezar — Guía rápida</h3>
+  <!-- Pasos -->
+  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:16px">
 
-    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 1 — Configura tu mes</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
-        En el panel izquierdo selecciona el <b>año y mes</b> que quieres gestionar. Ingresa tu <b>saldo anterior</b> y tu <b>nómina</b> del mes.
+    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">1️⃣ Configura tu mes</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
+        En el <b>panel izquierdo</b> selecciona el año y mes. Luego ingresa tu <b>Saldo Anterior</b> (lo que tenías del mes pasado) y tu <b>Nómina</b>. Si tienes otros ingresos, agrégalos en la sección de Ingresos Adicionales. Presiona <b>💾 Guardar</b>.
       </div>
     </div>
 
-    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 2 — Define tus gastos proyectados</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
-        En la tabla <b>"Gastos / Egresos Proyectados"</b> registra los gastos que planeas tener este mes (servicios, arriendo, etc.) con su valor estimado. Activa el check <b>📌 Referencia</b> en los ítems que quieres hacer seguimiento.
+    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">2️⃣ Define tus Gastos Proyectados</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
+        En la tabla <b>"Gastos / Egresos Proyectados"</b> registra todos los gastos que planeas tener: servicios, arriendos, seguros, etc. con su valor estimado.<br><br>
+        • Activa <b>📌 Referencia</b> en los ítems que quieres hacer seguimiento de ejecución.<br>
+        • Activa <b>🔁 Recurrente</b> en los que se repiten cada mes — aparecerán automáticamente el próximo mes.<br>
+        • Usa <b>📋 Copiar al registrar</b> para que el valor proyectado se copie automáticamente al registrar el movimiento.
       </div>
     </div>
 
-    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 3 — Registra tus movimientos diarios</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
-        En <b>"Editar / Agregar Movimientos"</b> registra cada gasto del día a día. Puedes asociarlo a un ítem proyectado para hacer seguimiento del presupuesto. Marca el check <b>✅ Pagado</b> cuando lo hayas cancelado.
+    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">3️⃣ Registra tus movimientos diarios</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
+        En <b>"Editar / Agregar Movimientos"</b> registra cada gasto del día a día con su monto real.<br><br>
+        • Asocia cada gasto a un <b>Ítem Proyectado</b> para hacer seguimiento del presupuesto.<br>
+        • Marca <b>✅ Pagado</b> cuando hayas cancelado la obligación.<br>
+        • Agrega la <b>Fecha</b> para llevar un historial detallado.
       </div>
     </div>
 
-    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 4 — Revisa tus métricas</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
-        El dashboard muestra automáticamente tus <b>KPIs financieros</b>: ingresos, obligaciones pagadas, pendientes, dinero disponible y saldo a favor. También verás gráficas de distribución por categoría.
+    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">4️⃣ Analiza tus métricas</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
+        El dashboard muestra automáticamente:<br>
+        • <b>Obligaciones Pagadas</b> — lo que ya cancelaste<br>
+        • <b>Obligaciones Pendientes</b> — lo que aún debes con saldo disponible<br>
+        • <b>Dinero Disponible</b> — ingresos menos pagado<br>
+        • <b>Saldo a Favor</b> — lo que te queda después de cubrir todo<br>
+        • Gráficas de distribución por categoría y seguimiento de proyectados
       </div>
     </div>
 
-    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 5 — Genera extractos</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
-        Descarga tu resumen mensual en <b>PDF o Excel</b> desde el sidebar. También puedes generar proyecciones semestrales.
+    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">5️⃣ Descarga tus extractos</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
+        Desde el sidebar descarga tu resumen en <b>📄 PDF</b> o <b>📊 Excel</b>. También puedes generar <b>proyecciones semestrales</b> para planear con anticipación.
       </div>
     </div>
 
-    <div style="padding:12px;background:#3a3f44;border-radius:8px">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">💡 EXTRA — Asesor IA y Finanzas Grupales</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
-        Usa el <b>🤖 Asesor IA</b> para obtener un diagnóstico personalizado de tu situación financiera. Y con <b>👥 Finanzas Grupales</b> puedes vincular tu cuenta con otra persona para ver un dashboard consolidado.
+    <div style="padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #2ecc71">
+      <div style="color:#2ecc71;font-weight:800;font-size:0.85rem;margin-bottom:6px">💡 Funciones avanzadas</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
+        • <b>🤖 Asesor IA</b> — obtén un diagnóstico financiero personalizado al final del dashboard.<br>
+        • <b>👥 Finanzas Grupales</b> — vincula tu cuenta con otra persona (pareja, socio, familiar) para ver un dashboard consolidado con extractos compartidos.
       </div>
     </div>
   </div>
 
-  <!-- CTA -->
   <div style="text-align:center;margin-bottom:24px">
     <a href="https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
        style="background:#fca311;color:#14213d;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:800;font-size:1rem;display:inline-block">
@@ -223,19 +230,17 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
     </a>
   </div>
 
-  <!-- Footer -->
   <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
     <p style="color:#6c757d;font-size:0.75rem;margin:0">
       My FinanceApp · by Stulio Designs<br>
-      Si tienes dudas escríbenos a arqtulicesar@gmail.com
+      ¿Tienes dudas? Escríbenos a arqtulicesar@gmail.com
     </p>
   </div>
 
 </div>
 </body>
-</html>
-                                        """
-                                        _msg.attach(MIMEText(_html_bienvenida, "html"))
+</html>"""
+                                        _msg.attach(MIMEText(_html_tutorial, "html"))
                                         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
                                             _smtp.login(_gmail_user, _gmail_pass)
                                             _smtp.sendmail(_gmail_user, email_reg.strip(), _msg.as_string())
