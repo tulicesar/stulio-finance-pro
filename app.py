@@ -405,13 +405,22 @@ if not st.session_state.autenticado:
                     st.error(f"❌ {msg}")
                 else:
                     try:
-                        supabase.postgrest.auth(_recovery_token)
-                        supabase.auth.update_user({"password": nueva_pwd})
-                        st.success("✅ ¡Contraseña actualizada correctamente!")
-                        st.info("Ya puedes ingresar con tu nueva contraseña.")
-                        st.query_params.clear()
-                        import time; time.sleep(2)
-                        st.rerun()
+                        # Establecer sesión con el access_token antes de actualizar
+                        _refresh_token = st.query_params.get("refresh_token", "")
+                        res_session = supabase.auth.set_session(
+                            access_token=_recovery_token,
+                            refresh_token=_refresh_token if _refresh_token else _recovery_token
+                        )
+                        if res_session and res_session.session:
+                            supabase.postgrest.auth(res_session.session.access_token)
+                            supabase.auth.update_user({"password": nueva_pwd})
+                            st.success("✅ ¡Contraseña actualizada correctamente!")
+                            st.info("Ya puedes ingresar con tu nueva contraseña.")
+                            st.query_params.clear()
+                            import time; time.sleep(2)
+                            st.rerun()
+                        else:
+                            st.error("❌ Sesión inválida. Solicita un nuevo enlace de recuperación.")
                     except Exception as e:
                         st.error(f"❌ Error: {e}. Solicita un nuevo enlace.")
     st.stop()
