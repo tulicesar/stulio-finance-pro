@@ -538,18 +538,18 @@ with st.sidebar:
                     _nombre_otro = _r_n.data[0]["nombre_completo"] if _r_n.data else "Usuario vinculado"
                 except:
                     _nombre_otro = "Usuario vinculado"
-                col_vk1, col_vk2 = st.columns([2, 1])
+                col_vk1, col_vk2 = st.columns([3, 1])
                 with col_vk1:
-                    st.caption(f"👥 {_nombre_g}\n{_nombre_otro}")
+                    st.caption(f"👥 **{_nombre_g}**  \n{_nombre_otro}")
                 with col_vk2:
-                    if st.button("🔗 Desvincular", key=f"btn_desvincular_{_v['id']}"):
+                    if st.button("🔗", key=f"btn_desvincular_{_v['id']}", help="Desvincular", use_container_width=True):
                         st.session_state[f"confirmar_desvincular_{_v['id']}"] = True
                         st.rerun()
                 if st.session_state.get(f"confirmar_desvincular_{_v['id']}"):
                     st.warning(f"⚠️ ¿Seguro que quieres desvincular **{_nombre_g}**? El otro usuario también perderá acceso a la vista consolidada.")
                     col_c1, col_c2 = st.columns(2)
                     with col_c1:
-                        if st.button("✅ Sí, desvincular", key=f"btn_ok_desv_{_v['id']}"):
+                        if st.button("✅ Sí", key=f"btn_ok_desv_{_v['id']}", use_container_width=True):
                             try:
                                 supabase.postgrest.auth(token)
                                 supabase.table("vinculos_usuarios").delete().eq("id", _v["id"]).execute()
@@ -560,7 +560,7 @@ with st.sidebar:
                             except Exception as e:
                                 st.error(f"❌ Error: {e}")
                     with col_c2:
-                        if st.button("✗ Cancelar", key=f"btn_cancel_desv_{_v['id']}"):
+                        if st.button("✗ No", key=f"btn_cancel_desv_{_v['id']}", use_container_width=True):
                             st.session_state.pop(f"confirmar_desvincular_{_v['id']}", None)
                             st.rerun()
 
