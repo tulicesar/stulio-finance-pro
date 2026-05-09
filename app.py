@@ -351,70 +351,69 @@ PLOTLY_LAYOUT = dict(
 # --- 11. PANTALLA DE LOGIN ---
 if not st.session_state.autenticado:
 
-    # ── Detectar token de recuperación en el hash de la URL via JS ──
-    # Supabase envía el token en el hash (#access_token=...&type=recovery)
-    # Streamlit no lee el hash directamente, usamos JS para pasarlo a session_state
-
-    if "recovery_access_token" not in st.session_state:
-        st.session_state["recovery_access_token"] = ""
-
-    # Inyectar JS que lee el hash y lo pasa via query param
-    st.components.v1.html("""
-    <script>
-    const hash = window.location.hash;
-    if (hash && hash.includes('type=recovery')) {
-        const params = new URLSearchParams(hash.substring(1));
-        const token = params.get('access_token');
-        if (token) {
-            // Pasar el token como query param para que Streamlit lo lea
-            const newUrl = window.location.pathname + '?recovery_token=' + encodeURIComponent(token);
-            window.location.replace(newUrl);
-        }
-    }
-    </script>
-    """, height=0)
-
+    # ── Detectar token de recuperación ──────────────────────
+    # Cuando Supabase redirige después de verificar, añade el access_token
+    # en el hash. Lo capturamos con JS y redirigimos con query param.
     _recovery_token = st.query_params.get("recovery_token", "")
 
-    if _recovery_token:
-        # ── Formulario de nueva contraseña ────────────────────
-        col1, col2, col3 = st.columns([1, 1.5, 1])
-        with col2:
-            if os.path.exists(LOGO_LOGIN):
-                st.image(LOGO_LOGIN, use_container_width=True)
-            st.markdown("### 🔓 Crear nueva contraseña")
-            st.caption("Ingresa tu nueva contraseña para acceder a tu cuenta.")
-
-            nueva_pwd  = st.text_input("Nueva contraseña", type="password", key="nueva_pwd",
-                                        placeholder="Mínimo 8 caracteres, una mayúscula y un número")
-            nueva_pwd2 = st.text_input("Confirmar contraseña", type="password", key="nueva_pwd2",
-                                        placeholder="Repite la contraseña")
-
-            if st.button("✅ Guardar nueva contraseña", use_container_width=True, key="btn_nueva_pwd"):
-                if not nueva_pwd or not nueva_pwd2:
-                    st.error("❌ Por favor completa ambos campos.")
-                elif nueva_pwd != nueva_pwd2:
-                    st.error("❌ Las contraseñas no coinciden.")
-                else:
-                    from auth import _validar_password
-                    valida, msg = _validar_password(nueva_pwd)
-                    if not valida:
-                        st.error(f"❌ {msg}")
-                    else:
-                        try:
-                            # Usar el access_token para autenticar y cambiar contraseña
-                            supabase.postgrest.auth(_recovery_token)
-                            supabase.auth.update_user({"password": nueva_pwd})
-                            st.success("✅ ¡Contraseña actualizada correctamente!")
-                            st.info("Ya puedes ingresar con tu nueva contraseña.")
-                            st.query_params.clear()
-                            import time; time.sleep(2)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"❌ Error al actualizar: {e}. Solicita un nuevo enlace de recuperación.")
+    if not _recovery_token:
+        # JS que lee el hash y redirige con query param legible por Streamlit
+        st.components.v1.html("""
+        <script>
+        (function() {
+            var hash = window.parent.location.hash || window.location.hash;
+            if (hash && hash.indexOf('type=recovery') !== -1) {
+                var pairs = hash.replace('#','').split('&');
+                var token = '';
+                for (var i = 0; i < pairs.length; i++) {
+                    var kv = pairs[i].split('=');
+                    if (kv[0] === 'access_token') { token = decodeURIComponent(kv[1]); break; }
+                }
+                if (token) {
+                    var base = window.parent.location.href.split('#')[0].split('?')[0];
+                    window.parent.location.replace(base + '?recovery_token=' + encodeURIComponent(token));
+                }
+            }
+        })();
+        </script>
+        """, height=0)
+        mostrar_login(supabase, LOGO_LOGIN)
         st.stop()
 
-    mostrar_login(supabase, LOGO_LOGIN)
+    # ── Formulario de nueva contraseña ────────────────────────
+    col1, col2, col3 = st.columns([1, 1.5, 1])
+    with col2:
+        if os.path.exists(LOGO_LOGIN):
+            st.image(LOGO_LOGIN, use_container_width=True)
+        st.markdown("### 🔓 Crear nueva contraseña")
+        st.caption("Ingresa tu nueva contraseña para acceder a tu cuenta.")
+
+        nueva_pwd  = st.text_input("Nueva contraseña", type="password", key="nueva_pwd",
+                                    placeholder="Mínimo 8 caracteres, una mayúscula y un número")
+        nueva_pwd2 = st.text_input("Confirmar contraseña", type="password", key="nueva_pwd2",
+                                    placeholder="Repite la contraseña")
+
+        if st.button("✅ Guardar nueva contraseña", use_container_width=True, key="btn_nueva_pwd"):
+            if not nueva_pwd or not nueva_pwd2:
+                st.error("❌ Por favor completa ambos campos.")
+            elif nueva_pwd != nueva_pwd2:
+                st.error("❌ Las contraseñas no coinciden.")
+            else:
+                from auth import _validar_password
+                valida, msg = _validar_password(nueva_pwd)
+                if not valida:
+                    st.error(f"❌ {msg}")
+                else:
+                    try:
+                        supabase.postgrest.auth(_recovery_token)
+                        supabase.auth.update_user({"password": nueva_pwd})
+                        st.success("✅ ¡Contraseña actualizada correctamente!")
+                        st.info("Ya puedes ingresar con tu nueva contraseña.")
+                        st.query_params.clear()
+                        import time; time.sleep(2)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}. Solicita un nuevo enlace.")
     st.stop()
 
 # --- 12. APP PRINCIPAL ---
