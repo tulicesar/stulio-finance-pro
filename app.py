@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from data    import cargar_bd, calcular_metricas, guardar_bd
+from data    import cargar_bd, calcular_metricas, guardar_bd, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
 from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
@@ -524,11 +524,280 @@ with st.sidebar:
             st.session_state.get("u_email", "")
         )
 
+        # ── Desvincular usuarios ───────────────────────────
+        _vinculos_cfg = cargar_vinculos(supabase, u_id, token)
+        _vinculos_activos_cfg = [v for v in _vinculos_cfg if v.get("estado") == "activo"]
+        if _vinculos_activos_cfg:
+            st.markdown("---")
+            st.markdown('<p style="color:#adb5bd;font-size:0.78rem;margin-bottom:6px">Vínculos activos</p>', unsafe_allow_html=True)
+            for _v in _vinculos_activos_cfg:
+                _otro_id   = _v["usuario_id_b"] if str(_v.get("usuario_id_a","")) == str(u_id) else _v["usuario_id_a"]
+                _nombre_g  = _v.get("nombre_grupo", "Finanzas Grupales")
+                try:
+                    _r_n = supabase.table("usuarios").select("nombre_completo").eq("usuario_id", _otro_id).execute()
+                    _nombre_otro = _r_n.data[0]["nombre_completo"] if _r_n.data else "Usuario vinculado"
+                except:
+                    _nombre_otro = "Usuario vinculado"
+                col_vk1, col_vk2 = st.columns([2, 1])
+                with col_vk1:
+                    st.caption(f"👥 {_nombre_g}\n{_nombre_otro}")
+                with col_vk2:
+                    if st.button("🔗 Desvincular", key=f"btn_desvincular_{_v['id']}"):
+                        st.session_state[f"confirmar_desvincular_{_v['id']}"] = True
+                        st.rerun()
+                if st.session_state.get(f"confirmar_desvincular_{_v['id']}"):
+                    st.warning(f"⚠️ ¿Seguro que quieres desvincular **{_nombre_g}**? El otro usuario también perderá acceso a la vista consolidada.")
+                    col_c1, col_c2 = st.columns(2)
+                    with col_c1:
+                        if st.button("✅ Sí, desvincular", key=f"btn_ok_desv_{_v['id']}"):
+                            try:
+                                supabase.postgrest.auth(token)
+                                supabase.table("vinculos_usuarios").delete().eq("id", _v["id"]).execute()
+                                st.session_state.pop(f"confirmar_desvincular_{_v['id']}", None)
+                                st.session_state["vista_consolidada"] = False
+                                st.success("✅ Vínculo eliminado correctamente.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error: {e}")
+                    with col_c2:
+                        if st.button("✗ Cancelar", key=f"btn_cancel_desv_{_v['id']}"):
+                            st.session_state.pop(f"confirmar_desvincular_{_v['id']}", None)
+                            st.rerun()
+
+    # ── 👥 VISTA CONSOLIDADA ───────────────────────────────
+    vinculos_activos = cargar_vinculos(supabase, u_id, token)
+    vinculos_aceptados = [v for v in vinculos_activos if v.get("estado") == "activo"]
+
+    st.divider()
+    if vinculos_aceptados:
+        if st.button("👥 Vista Consolidada", use_container_width=True):
+            st.session_state["vista_consolidada"] = not st.session_state.get("vista_consolidada", False)
+        if st.session_state.get("vista_consolidada"):
+            st.caption("✅ Vista consolidada activa")
+    else:
+        with st.expander("👥 Finanzas Grupales"):
+            st.caption("Vincula tu cuenta con otro usuario para ver un dashboard consolidado.")
+            email_vincular = st.text_input("Email del otro usuario", key="email_vincular", placeholder="usuario@ejemplo.com")
+            nombre_grupo   = st.text_input("Nombre del grupo", key="nombre_grupo", placeholder="Ej: Familia García")
+            if st.button("📨 Enviar invitación", key="btn_invitar", use_container_width=True):
+                if not email_vincular:
+                    st.error("❌ Ingresa un email.")
+                elif email_vincular.strip().lower() == st.session_state.get("u_email","").lower():
+                    st.error("❌ No puedes vincularte contigo mismo.")
+                else:
+                    try:
+                        import uuid as _uuid, smtplib
+                        from email.mime.text import MIMEText
+                        from email.mime.multipart import MIMEMultipart
+
+                        _token_inv = str(_uuid.uuid4())[:8].upper()
+                        supabase.postgrest.auth(token)
+                        supabase.table("vinculos_usuarios").insert({
+                            "usuario_id_a":      str(u_id),
+                            "email_b":           email_vincular.strip().lower(),
+                            "nombre_grupo":      nombre_grupo.strip() or "Finanzas Grupales",
+                            "estado":            "pendiente",
+                            "token_invitacion":  _token_inv
+                        }).execute()
+
+                        # Enviar correo de invitación
+                        _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                        _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+                        _nombre_a   = st.session_state.get("u_nombre_completo", "Un usuario")
+                        if _gmail_user and _gmail_pass:
+                            _msg = MIMEMultipart("alternative")
+                            _msg["Subject"] = f"👥 {_nombre_a} te invita a compartir finanzas en My FinanceApp"
+                            _msg["From"]    = _gmail_user
+                            _msg["To"]      = email_vincular.strip()
+                            _html = f"""
+                            <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+                                <h2 style="color:#fca311">👥 Invitación a Finanzas Grupales</h2>
+                                <p><b>{_nombre_a}</b> te ha invitado a compartir un dashboard financiero consolidado en <b>My FinanceApp</b>.</p>
+                                <p><b>Grupo:</b> {nombre_grupo.strip() or "Finanzas Grupales"}</p>
+                                <div style="background:#f8f9fa;border-radius:8px;padding:16px;margin:20px 0;text-align:center">
+                                    <p style="margin:0;font-size:0.9rem;color:#495057">Tu código de invitación:</p>
+                                    <p style="font-size:2rem;font-weight:800;color:#fca311;margin:8px 0;letter-spacing:0.2em">{_token_inv}</p>
+                                    <p style="margin:0;font-size:0.8rem;color:#6c757d">Ingresa este código en My FinanceApp → Finanzas Grupales → Aceptar invitación</p>
+                                </div>
+                                <p style="color:#adb5bd;font-size:0.8rem">Si no conoces a esta persona, ignora este correo.</p>
+                            </div>
+                            """
+                            _msg.attach(MIMEText(_html, "html"))
+                            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
+                                _smtp.login(_gmail_user, _gmail_pass)
+                                _smtp.sendmail(_gmail_user, email_vincular.strip(), _msg.as_string())
+                        st.success(f"✅ Invitación enviada a {email_vincular}")
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+
+            st.divider()
+            st.caption("¿Tienes un código de invitación?")
+            codigo_inv = st.text_input("Código de invitación", key="codigo_inv", placeholder="Ej: AB12CD34").upper()
+            if st.button("✅ Aceptar invitación", key="btn_aceptar_inv", use_container_width=True):
+                if not codigo_inv:
+                    st.error("❌ Ingresa el código.")
+                else:
+                    try:
+                        supabase.postgrest.auth(token)
+                        r_inv = supabase.table("vinculos_usuarios").select("*").eq("token_invitacion", codigo_inv).eq("estado", "pendiente").execute()
+                        if not r_inv.data:
+                            st.error("❌ Código inválido o ya usado.")
+                        else:
+                            vinculo = r_inv.data[0]
+                            supabase.table("vinculos_usuarios").update({
+                                "usuario_id_b": str(u_id),
+                                "estado": "activo"
+                            }).eq("id", vinculo["id"]).execute()
+                            st.success("✅ ¡Vinculación exitosa! Recarga la app para ver la Vista Consolidada.")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error: {e}")
+
     st.divider()
     if st.button("🚪 Salir"):
         cerrar_sesion()
 
 # --- CUERPO PRINCIPAL ---
+
+# ══════════════════════════════════════════════════════════
+# VISTA CONSOLIDADA (si está activa)
+# ══════════════════════════════════════════════════════════
+if st.session_state.get("vista_consolidada") and vinculos_aceptados:
+    if os.path.exists(LOGO_APP_H):
+        st.image(LOGO_APP_H, use_container_width=True)
+
+    st.markdown(f"## 👥 Dashboard Consolidado — {mes_s} {anio_s}")
+    st.caption("Vista combinada de todos los usuarios vinculados.")
+
+    # Cargar datos de todos los usuarios vinculados
+    todos_g  = [df_g_full.copy()]
+    todos_i  = [df_i_full.copy()]
+    todos_oi = [df_oi_full.copy()]
+    nombres_usuarios = [st.session_state.get("u_nombre_completo", "Yo")]
+
+    for v in vinculos_aceptados:
+        otro_id = v["usuario_id_b"] if str(v["usuario_id_a"]) == str(u_id) else v["usuario_id_a"]
+        if otro_id:
+            _g, _i, _oi = cargar_bd_usuario(supabase, otro_id, token)
+            todos_g.append(_g)
+            todos_i.append(_i)
+            todos_oi.append(_oi)
+            # Buscar nombre del otro usuario
+            try:
+                r_n = supabase.table("usuarios").select("nombre_completo").eq("usuario_id", otro_id).execute()
+                nombres_usuarios.append(r_n.data[0]["nombre_completo"] if r_n.data else "Usuario vinculado")
+            except:
+                nombres_usuarios.append("Usuario vinculado")
+
+    # Consolidar datos del mes
+    df_g_cons  = pd.concat([g[(g["Periodo"]==mes_s) & (g["Año"]==anio_s)] for g in todos_g if not g.empty], ignore_index=True) if todos_g else pd.DataFrame()
+    df_i_cons  = pd.concat([i[(i["Periodo"]==mes_s) & (i["Año"]==anio_s)] for i in todos_i if not i.empty], ignore_index=True) if todos_i else pd.DataFrame()
+    df_oi_cons = pd.concat([oi[(oi["Periodo"]==mes_s) & (oi["Año"]==anio_s)] for oi in todos_oi if not oi.empty], ignore_index=True) if todos_oi else pd.DataFrame()
+
+    # Métricas consolidadas
+    nom_cons = float(df_i_cons["Nomina"].sum()) if not df_i_cons.empty and "Nomina" in df_i_cons.columns else 0.0
+    sal_cons = float(df_i_cons["SaldoAnterior"].sum()) if not df_i_cons.empty else 0.0
+    otr_cons = float(df_oi_cons["Monto"].sum()) if not df_oi_cons.empty else 0.0
+    it_c, vp_c, vpy_c, fact_c, bf_c, aho_c = calcular_metricas(df_g_cons, nom_cons, otr_cons, sal_cons)
+    label_bf_c = "SALDO A FAVOR" if bf_c >= 0 else "DÉFICIT"
+
+    # ── KPIs consolidados ─────────────────────────────────
+    st.divider()
+    c_kpi_c = st.columns(5)
+    tarj_c = [
+        ("INGRESOS TOTALES", it_c,   "black"),
+        ("OBLIG. PAGADAS",   vp_c,   "green"),
+        ("OBLIG. PENDIENTES",vpy_c,  "red"),
+        ("DINERO DISPONIBLE",fact_c, "blue"),
+        (label_bf_c,         bf_c,   "#fca311")
+    ]
+    for i, (l, v, col) in enumerate(tarj_c):
+        c_kpi_c[i].markdown(
+            f'<div class="card"><div class="card-label">{l}</div>'
+            f'<div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>',
+            unsafe_allow_html=True
+        )
+    st.divider()
+
+    # ── Resumen por usuario ───────────────────────────────
+    st.markdown('<div class="section-header"><span>👤 Resumen por Usuario</span></div>', unsafe_allow_html=True)
+    cols_u = st.columns(len(nombres_usuarios))
+    for idx_u, (nombre_u, df_g_u, df_i_u, df_oi_u) in enumerate(zip(nombres_usuarios, todos_g, todos_i, todos_oi)):
+        df_g_m  = df_g_u[(df_g_u["Periodo"]==mes_s) & (df_g_u["Año"]==anio_s)] if not df_g_u.empty else pd.DataFrame()
+        df_i_m  = df_i_u[(df_i_u["Periodo"]==mes_s) & (df_i_u["Año"]==anio_s)] if not df_i_u.empty else pd.DataFrame()
+        df_oi_m = df_oi_u[(df_oi_u["Periodo"]==mes_s) & (df_oi_u["Año"]==anio_s)] if not df_oi_u.empty else pd.DataFrame()
+        nom_u = float(df_i_m["Nomina"].sum()) if not df_i_m.empty else 0.0
+        sal_u = float(df_i_m["SaldoAnterior"].sum()) if not df_i_m.empty else 0.0
+        otr_u = float(df_oi_m["Monto"].sum()) if not df_oi_m.empty else 0.0
+        it_u, vp_u, vpy_u, _, bf_u, _ = calcular_metricas(df_g_m, nom_u, otr_u, sal_u)
+        color_bf = "#2ecc71" if bf_u >= 0 else "#e74c3c"
+        with cols_u[idx_u]:
+            st.markdown(f"""
+            <div style="background:#3a3f44;border-radius:12px;padding:16px;border-top:3px solid #fca311;text-align:center">
+                <div style="font-size:0.85rem;font-weight:800;color:#fca311;margin-bottom:12px;text-transform:uppercase">{nombre_u}</div>
+                <div style="display:flex;justify-content:space-around;margin-bottom:8px">
+                    <div><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ingresos</div><div style="font-size:12px;font-weight:700;color:#fff">$ {it_u:,.0f}</div></div>
+                    <div><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Pagado</div><div style="font-size:12px;font-weight:700;color:#2ecc71">$ {vp_u:,.0f}</div></div>
+                    <div><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Pendiente</div><div style="font-size:12px;font-weight:700;color:#e74c3c">$ {vpy_u:,.0f}</div></div>
+                </div>
+                <div style="font-size:11px;color:#adb5bd">Saldo a favor</div>
+                <div style="font-size:1.4rem;font-weight:800;color:{color_bf}">$ {bf_u:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+
+    # ── Gastos por categoría consolidado ──────────────────
+    st.markdown('<div class="section-header"><span>📊 Gastos Consolidados por Categoría</span></div>', unsafe_allow_html=True)
+    if not df_g_cons.empty:
+        df_g_cons["_v"] = df_g_cons.apply(
+            lambda r: float(r.get("Monto",0) or 0) if float(r.get("Monto",0) or 0) > 0
+                      else float(r.get("Valor Referencia",0) or 0), axis=1
+        )
+        por_cat_c = df_g_cons.groupby("Categoría")["_v"].sum().sort_values(ascending=False)
+        total_c   = por_cat_c.sum()
+        barras_c  = ""
+        for cat_c, val_c in por_cat_c.items():
+            if val_c > 0:
+                color_c = COLOR_MAP.get(cat_c, "#6c757d")
+                pct_c   = val_c / total_c * 100 if total_c > 0 else 0
+                barras_c += f"""
+                <div style="margin-bottom:8px">
+                    <div style="display:flex;justify-content:space-between;margin-bottom:2px">
+                        <span style="font-size:0.8rem;color:#fff;font-weight:700">{cat_c}</span>
+                        <span style="font-size:0.8rem;color:#fff">$ {val_c:,.0f} <b style="color:{color_c}">{pct_c:.1f}%</b></span>
+                    </div>
+                    <div style="background:#2d3238;border-radius:6px;height:10px">
+                        <div style="background:{color_c};width:{pct_c:.1f}%;height:10px;border-radius:6px"></div>
+                    </div>
+                </div>"""
+        st.markdown(barras_c, unsafe_allow_html=True)
+
+    # ── Extractos consolidados ────────────────────────────
+    st.divider()
+    st.markdown('<div class="section-header"><span>📑 Extractos del Dashboard Consolidado</span></div>', unsafe_allow_html=True)
+    col_pdf_c, col_xls_c = st.columns(2)
+    with col_pdf_c:
+        if st.button("📄 PDF Consolidado", use_container_width=True, key="btn_pdf_cons"):
+            try:
+                pdf_c = generar_pdf_reporte(
+                    df_g_cons, df_i_cons, df_oi_cons,
+                    [mes_s], f"Consolidado {mes_s} — {' + '.join(nombres_usuarios)}", anio_s, u_id
+                )
+                st.download_button("⬇️ Descargar PDF", pdf_c, f"Consolidado_{mes_s}.pdf", key="dl_pdf_cons")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+    with col_xls_c:
+        if st.button("📊 Excel Consolidado", use_container_width=True, key="btn_xls_cons"):
+            try:
+                buf_xls_c = generar_excel_reporte(
+                    df_g_cons, df_i_cons, df_oi_cons,
+                    mes_s, anio_s, u_id, nom_cons, otr_cons, sal_cons
+                )
+                st.download_button("⬇️ Descargar Excel", buf_xls_c, f"Consolidado_{mes_s}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key="dl_xls_cons")
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
+
+    st.stop()  # No mostrar el dashboard individual si estamos en vista consolidada
 if os.path.exists(LOGO_APP_H):
     st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
