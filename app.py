@@ -1125,26 +1125,29 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
     if btn_diagnostico:
         try:
             import requests as _req
-            _gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
-            if not _gemini_key:
+            _groq_key = st.secrets.get("groq", {}).get("api_key", "")
+            if not _groq_key:
                 st.error("❌ API Key no configurada. Contacta al administrador.")
             else:
-                _url = (
-                    "https://generativelanguage.googleapis.com/v1beta"
-                    f"/models/gemini-2.0-flash-lite:generateContent?key={_gemini_key}"
-                )
+                _url = "https://api.groq.com/openai/v1/chat/completions"
+                _headers = {
+                    "Authorization": f"Bearer {_groq_key}",
+                    "Content-Type": "application/json"
+                }
                 _body = {
-                    "contents": [{"parts": [{"text": prompt_contexto}]}],
-                    "generationConfig": {"maxOutputTokens": 1200, "temperature": 0.7}
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "user", "content": prompt_contexto}],
+                    "max_tokens": 1200,
+                    "temperature": 0.7
                 }
                 with st.spinner("🤖 Analizando tus finanzas..."):
-                    _r = _req.post(_url, json=_body, timeout=30)
+                    _r = _req.post(_url, headers=_headers, json=_body, timeout=30)
                 if _r.status_code == 200:
-                    _txt = _r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    _txt = _r.json()["choices"][0]["message"]["content"]
                     st.session_state["ia_diagnostico"] = _txt
                 else:
                     _msg = _r.json().get("error", {}).get("message", _r.text)
-                    st.error(f"❌ Error Gemini: {_msg}")
+                    st.error(f"❌ Error: {_msg}")
         except Exception as e_ia:
             st.error(f"❌ Error: {str(e_ia)[:200]}")
 
