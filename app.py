@@ -1169,15 +1169,6 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
 
 
 st.markdown("<br>", unsafe_allow_html=True)
-
-# DEBUG TEMPORAL — muestra qué valores de Es Referencia van a guardarse
-with st.expander("🔍 Debug Es Referencia (temporal)", expanded=False):
-    if not df_ed_g.empty and "Es Referencia" in df_ed_g.columns:
-        _debug = df_ed_g[df_ed_g["Es Proyectado"] == True][["Descripción","Es Referencia","Valor Referencia"]].copy()
-        st.dataframe(_debug, use_container_width=True)
-    else:
-        st.write("Es Referencia no está en df_ed_g")
-
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     # df_ed_g ya es el DataFrame unificado (proyectados + movimientos)
