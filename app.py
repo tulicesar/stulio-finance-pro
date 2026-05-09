@@ -551,7 +551,8 @@ df_ed_proy = st.data_editor(
     use_container_width=True,
     num_rows="dynamic",
     column_config=config_proy,
-    key="proy_ed"
+    key="proy_ed",
+    on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
 
 # Limpiar columna 📋 (es de uso visual solamente — la lógica se aplica al registrar el movimiento)
@@ -576,10 +577,6 @@ else:
 
 # (mantener lista completa para compatibilidad interna)
 items_proyectados = items_referencia
-
-# ── Detectar cambios en tabla proyectados ──
-if not df_ed_proy.equals(df_base_proy):
-    st.session_state.datos_modificados = True
 
 # ══════════════════════════════════════════════════════════
 # TABLA 2: EDITAR / AGREGAR MOVIMIENTOS (registro diario)
@@ -606,9 +603,6 @@ df_base_mov = df_mov_rows.reindex(
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
 # ── 📋 COPIAR AL REGISTRAR ────────────────────────────────────────────────────
-# Cuando el usuario marca 📋 en un ítem proyectado, se crea automáticamente una
-# fila nueva en la tabla de movimientos con Categoría, Descripción y Monto copiados.
-# Si ya existe una fila con esa misma Descripción en movimientos, NO se duplica.
 if not df_ed_proy_clean.empty:
     proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True].copy()
     if not proy_con_copia.empty:
@@ -618,18 +612,16 @@ if not df_ed_proy_clean.empty:
             desc_proy  = str(proy_row.get("Descripción", "")).strip()
             cat_proy   = str(proy_row.get("Categoría", ""))
             val_proy   = float(proy_row.get("Valor Referencia", 0) or 0)
-            # Solo agrega si no existe ya una fila con esa descripción (sin distinción mayúsculas)
             if desc_proy.upper() not in descripciones_existentes:
                 filas_nuevas.append({
                     "Categoría":            cat_proy,
                     "Descripción":          desc_proy,
                     "Monto":                val_proy,
-                    "Presupuesto Asociado": desc_proy,  # se auto-asocia al proyectado
+                    "Presupuesto Asociado": desc_proy,
                     "Pagado":               False,
                     "Fecha Pago":           pd.NaT,
                 })
             else:
-                # Ya existe: solo actualiza el monto si está en 0
                 mask = df_base_mov["Descripción"].str.strip().str.upper() == desc_proy.upper()
                 df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = val_proy
         if filas_nuevas:
@@ -643,12 +635,9 @@ df_ed_mov = st.data_editor(
     use_container_width=True,
     num_rows="dynamic",
     column_config=config_mov,
-    key="mov_ed"
+    key="mov_ed",
+    on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
-
-# ── Detectar cambios en tabla de movimientos ──
-if not df_ed_mov.equals(df_base_mov):
-    st.session_state.datos_modificados = True
 
 # ══════════════════════════════════════════════════════════
 # RECONSTRUIR df_ed_g unificado para toda la lógica downstream
