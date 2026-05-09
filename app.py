@@ -1065,38 +1065,13 @@ with inf3:
 st.markdown('<div class="section-header"><span>🤖 Asesor IA de Finanzas</span></div>', unsafe_allow_html=True)
 
 with st.expander("💡 Obtener diagnóstico y recomendaciones personalizadas", expanded=False):
+    st.caption("Gemini analiza tus flujos del mes y actúa como tu asesor de finanzas personales.")
 
-    # ── Campo de API Key ──────────────────────────────────
-    st.markdown("""
-    <div style="background:#2d3238;border-radius:10px;padding:14px 18px;margin-bottom:14px;border-left:3px solid #fca311">
-        <div style="font-size:0.82rem;font-weight:800;color:#fca311;text-transform:uppercase;margin-bottom:6px">🔑 Tu API Key de Google AI Studio</div>
-        <div style="font-size:0.78rem;color:#adb5bd;line-height:1.5">
-            Es gratis · No requiere tarjeta · Tarda 2 minutos obtenerla<br>
-            👉 Ve a <b style="color:#ffffff">aistudio.google.com/apikey</b> → inicia sesión con Google → Create API key
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-    gemini_key = st.text_input(
-        "API Key",
-        type="password",
-        placeholder="AIzaSy...",
-        help="Tu key solo se usa en esta sesión y nunca se guarda",
-        label_visibility="collapsed"
-    )
-
-    if gemini_key:
-        st.caption("✅ Key ingresada — lista para generar el diagnóstico")
-    else:
-        st.caption("⬆️ Ingresa tu API Key para activar el asesor")
-
-    st.divider()
-
-    # ── Construir contexto financiero para el prompt ──────
+    # ── Construir contexto financiero ─────────────────────
     resumen_cats = ""
     if not df_ed_g.empty:
         t_df = df_ed_g.copy()
-        t_df["_v"] = t_df.apply(lambda r: float(r["Monto"]) if float(r.get("Monto",0) or 0) > 0 else float(r.get("Valor Referencia",0) or 0), axis=1)
+        t_df["_v"] = t_df.apply(lambda r: float(r.get("Monto",0) or 0) if float(r.get("Monto",0) or 0) > 0 else float(r.get("Valor Referencia",0) or 0), axis=1)
         por_cat = t_df.groupby("Categoría")["_v"].sum().sort_values(ascending=False)
         for cat, val in por_cat.items():
             if val > 0:
@@ -1144,35 +1119,33 @@ Genera un diagnóstico con estas secciones (usa emojis):
 
 Sé directo, usa los números reales, habla como asesor financiero de confianza."""
 
-    # ── Botón generar ─────────────────────────────────────
-    btn_diagnostico = st.button(
-        "🔍 Generar Diagnóstico IA",
-        key="btn_ia",
-        use_container_width=True,
-        disabled=not gemini_key
-    )
+    # ── Botón ─────────────────────────────────────────────
+    btn_diagnostico = st.button("🔍 Generar Diagnóstico IA", key="btn_ia", use_container_width=True)
 
-    if btn_diagnostico and gemini_key:
+    if btn_diagnostico:
         try:
             import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            modelo = genai.GenerativeModel("gemini-1.5-flash")
-            with st.spinner("🤖 Analizando tus finanzas con Gemini..."):
-                respuesta = modelo.generate_content(prompt_contexto)
-                diagnostico_texto = respuesta.text
-                st.session_state["ia_diagnostico"] = diagnostico_texto
+            _gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
+            if not _gemini_key:
+                st.error("❌ API Key de Gemini no configurada. Contacta al administrador de la app.")
+            else:
+                genai.configure(api_key=_gemini_key)
+                modelo = genai.GenerativeModel("gemini-2.0-flash")
+                with st.spinner("🤖 Analizando tus finanzas..."):
+                    respuesta = modelo.generate_content(prompt_contexto)
+                    st.session_state["ia_diagnostico"] = respuesta.text
         except ImportError:
-            st.error("❌ Falta la librería. Agrega 'google-generativeai' a tu requirements.txt")
+            st.error("❌ Falta librería. Agrega 'google-generativeai' al requirements.txt")
         except Exception as e_ia:
             msg = str(e_ia)
             if "API_KEY_INVALID" in msg or "invalid" in msg.lower():
-                st.error("❌ API Key inválida. Verifica que la copiaste correctamente desde aistudio.google.com/apikey")
+                st.error("❌ API Key inválida. Verifica la configuración en Streamlit Secrets.")
             elif "quota" in msg.lower():
-                st.error("❌ Límite de uso alcanzado. Espera unos minutos e intenta de nuevo.")
+                st.error("❌ Límite de uso alcanzado. Intenta en unos minutos.")
             else:
                 st.error(f"❌ Error: {msg}")
 
-    # ── Mostrar resultado ─────────────────────────────────
+    # ── Resultado ─────────────────────────────────────────
     if st.session_state.get("ia_diagnostico"):
         st.markdown("---")
         st.markdown(
@@ -1185,6 +1158,7 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
         if st.button("🗑️ Limpiar diagnóstico", key="btn_limpiar_ia"):
             st.session_state["ia_diagnostico"] = ""
             st.rerun()
+
 
 
 
