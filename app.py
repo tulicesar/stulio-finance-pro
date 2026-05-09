@@ -813,25 +813,33 @@ if df_mes_g.empty:
     if not gastos_hist.empty:
         p_actual = (anio_s * 12) + meses_lista.index(mes_s)
         gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
-        # ── CORRECCIÓN RECURRENTE ──────────────────────────────────────────────
-        # Solo propagar desde el mes INMEDIATAMENTE anterior (p_actual - 1),
-        # no desde el último mes con datos. Así, si en el mes anterior se desactivó
-        # un recurrente, no vuelve a aparecer en el mes actual.
-        p_anterior = p_actual - 1
+        p_anterior  = p_actual - 1
         foto_anterior = gastos_hist[gastos_hist["lt"] == p_anterior]
         if not foto_anterior.empty:
-            # Solo los que tienen Movimiento Recurrente = True en ese mes exacto
             activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
-                df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Es Proyectado","Presupuesto Asociado","Es Referencia"])
-                df_mes_g["Pagado"]               = False
-                df_mes_g["Fecha Pago"]           = pd.NaT
-                df_mes_g["Es Proyectado"]        = df_mes_g["Es Proyectado"].fillna(False)
+                df_mes_g = activos.reindex(columns=[
+                    "Categoría","Descripción","Monto","Valor Referencia",
+                    "Pagado","Movimiento Recurrente","Es Proyectado",
+                    "Presupuesto Asociado","Es Referencia"
+                ])
+                df_mes_g["Pagado"]    = False
+                df_mes_g["Fecha Pago"] = pd.NaT
+                # Para proyectados: resetear Monto a 0 pero conservar Valor Referencia y Es Referencia
+                mask_proy = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
+                df_mes_g.loc[mask_proy, "Monto"]  = 0.0
+                df_mes_g.loc[mask_proy, "Pagado"] = False
+                # Para movimientos normales: resetear monto a 0 también (se registrará en el mes)
+                df_mes_g.loc[~mask_proy, "Monto"] = 0.0
+                df_mes_g["Es Proyectado"]  = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
+                df_mes_g["Es Referencia"]  = df_mes_g["Es Referencia"].fillna(False).astype(bool)
                 df_mes_g["Presupuesto Asociado"] = df_mes_g["Presupuesto Asociado"].where(
                     df_mes_g["Presupuesto Asociado"].notna(), other=None
                 )
-                df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
-        # Si no hay datos en el mes anterior inmediato, el mes queda vacío (sin propagar)
+                df_mes_g = df_mes_g.sort_values(
+                    ["Es Proyectado","Categoría","Descripción"],
+                    ascending=[False, True, True]
+                ).reset_index(drop=True)
 
 if "Fecha Pago" not in df_mes_g.columns:
     df_mes_g["Fecha Pago"] = pd.NaT
