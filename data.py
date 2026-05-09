@@ -13,7 +13,7 @@ def cargar_bd(supabase, u_id, token):
         r_i  = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
         r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
 
-        df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame(columns=["anio","periodo","categoria","descripcion","monto","valor_referencia","pagado","recurrente","usuario_id","fecha_pago","es_proyectado","presupuesto_asociado"])
+        df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame(columns=["anio","periodo","categoria","descripcion","monto","valor_referencia","pagado","recurrente","usuario_id","fecha_pago","es_proyectado","presupuesto_asociado","es_referencia"])
         df_i  = pd.DataFrame(r_i.data)  if r_i.data  else pd.DataFrame(columns=["anio","periodo","saldo_anterior","nomina","otros","usuario_id"])
         df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio","periodo","descripcion","monto","usuario_id"])
 
@@ -23,7 +23,8 @@ def cargar_bd(supabase, u_id, token):
             "valor_referencia":"Valor Referencia","pagado":"Pagado",
             "recurrente":"Movimiento Recurrente","usuario_id":"Usuario",
             "fecha_pago":"Fecha Pago","es_proyectado":"Es Proyectado",
-            "presupuesto_asociado":"Presupuesto Asociado"
+            "presupuesto_asociado":"Presupuesto Asociado",
+            "es_referencia":"Es Referencia"
         })
         df_i  = df_i.rename(columns={
             "anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior",
@@ -139,6 +140,7 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s, df_g_limpio, df_oi_limpio, 
                 "pagado": bool(row["Pagado"]), "recurrente": bool(row["Movimiento Recurrente"]),
                 "fecha_pago": fecha_p,
                 "es_proyectado": bool(row.get("Es Proyectado", False)),
+                "es_referencia": bool(row.get("Es Referencia", False)),
                 "presupuesto_asociado": str(row["Presupuesto Asociado"]) if row.get("Presupuesto Asociado") not in [None,"None",""] else None,
                 "usuario_id": str(u_id)
             })
