@@ -239,6 +239,63 @@ def parse_moneda(texto):
     clean = re.sub(r'[^\d]', '', str(texto))
     return float(clean) if clean else 0.0
 
+def calcular_pendientes(df):
+    """
+    Lógica unificada de pendientes — usada tanto en KPIs como en la tabla visual.
+    Reglas:
+    1. Movimientos normales sin Presupuesto Asociado → pendientes normales
+    2. Proyectados con Es Referencia=True → aparecen con saldo (proyectado - ejecutado)
+       - Si saldo=0 o totalmente cubierto+pagado → desaparecen
+    3. Proyectados con Es Referencia=False → NO aparecen
+    4. Movimientos asociados a un proyectado → NO aparecen solos
+    """
+    if df.empty:
+        return pd.DataFrame(columns=df.columns)
+
+    df_pendientes = df[df["Pagado"].fillna(False).astype(bool) == False].copy()
+
+    mapa_ejecutado       = {}
+    mapa_pagado_completo = {}
+    col_pa = "Presupuesto Asociado"
+
+    if col_pa in df.columns:
+        df_con_asociado = df[
+            df[col_pa].notna() &
+            (~df[col_pa].astype(str).str.strip().isin(["", "nan", "None", "NaN"]))
+        ].copy()
+        df_con_asociado["_monto"] = pd.to_numeric(df_con_asociado["Monto"], errors="coerce").fillna(0)
+        df_con_asociado["_key"]   = df_con_asociado[col_pa].astype(str).str.strip().str.upper()
+        for key, grp in df_con_asociado.groupby("_key"):
+            mapa_ejecutado[key]       = float(grp["_monto"].sum())
+            mapa_pagado_completo[key] = bool(grp["Pagado"].fillna(False).all())
+
+    filas_pendientes = []
+    for _, row in df_pendientes.iterrows():
+        es_proy        = bool(row.get("Es Proyectado", False))
+        es_ref         = bool(row.get("Es Referencia", False))
+        col_pa_v       = str(row.get(col_pa, "")).strip() if col_pa in df.columns else ""
+        tiene_asociado = col_pa_v not in ("", "nan", "None", "NaN")
+
+        if es_proy:
+            if not es_ref:
+                continue
+            desc_key  = str(row.get("Descripción","")).strip().upper()
+            vref      = float(row.get("Valor Referencia", 0) or 0)
+            ejecutado = mapa_ejecutado.get(desc_key, 0.0)
+            pag_comp  = mapa_pagado_completo.get(desc_key, False)
+            saldo     = max(vref - ejecutado, 0)
+            if saldo == 0 or (pag_comp and ejecutado >= vref):
+                continue
+            fila = row.copy()
+            fila["Valor Referencia"] = saldo
+            filas_pendientes.append(fila)
+        elif tiene_asociado:
+            continue
+        else:
+            filas_pendientes.append(row)
+
+    return pd.DataFrame(filas_pendientes).reset_index(drop=True) if filas_pendientes else pd.DataFrame(columns=df.columns)
+
 # --- 7. LAYOUT BASE PLOTLY (con SF Pro) ---
 PLOTLY_LAYOUT = dict(
     paper_bgcolor='rgba(0,0,0,0)',
@@ -677,63 +734,6 @@ if not df_mes_g.empty:
     df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 
-def calcular_pendientes(df):
-    """
-    Devuelve df_pend_adj con la lógica unificada de pendientes.
-    Reglas:
-    1. Movimientos normales sin Presupuesto Asociado → pendientes normales
-    2. Proyectados con Es Referencia=True → aparecen con saldo (proyectado - ejecutado)
-       - Si saldo=0 o totalmente cubierto+pagado → desaparecen
-    3. Proyectados con Es Referencia=False → NO aparecen
-    4. Movimientos asociados a un proyectado → NO aparecen solos
-    """
-    if df.empty:
-        return pd.DataFrame(columns=df.columns)
-
-    df_pendientes = df[df["Pagado"].fillna(False).astype(bool) == False].copy()
-
-    # Construir mapa de ejecución por ítem referencia
-    mapa_ejecutado       = {}
-    mapa_pagado_completo = {}
-    col_pa = "Presupuesto Asociado"
-
-    if col_pa in df.columns:
-        df_con_asociado = df[
-            df[col_pa].notna() &
-            (~df[col_pa].astype(str).str.strip().isin(["", "nan", "None", "NaN"]))
-        ].copy()
-        df_con_asociado["_monto"] = pd.to_numeric(df_con_asociado["Monto"], errors="coerce").fillna(0)
-        df_con_asociado["_key"]   = df_con_asociado[col_pa].astype(str).str.strip().str.upper()
-        for key, grp in df_con_asociado.groupby("_key"):
-            mapa_ejecutado[key]       = float(grp["_monto"].sum())
-            mapa_pagado_completo[key] = bool(grp["Pagado"].fillna(False).all())
-
-    filas_pendientes = []
-    for _, row in df_pendientes.iterrows():
-        es_proy        = bool(row.get("Es Proyectado", False))
-        es_ref         = bool(row.get("Es Referencia", False))
-        col_pa_v       = str(row.get(col_pa, "")).strip() if col_pa in df.columns else ""
-        tiene_asociado = col_pa_v not in ("", "nan", "None", "NaN")
-
-        if es_proy:
-            if not es_ref:
-                continue  # proyectado sin referencia → no aparece
-            desc_key  = str(row.get("Descripción","")).strip().upper()
-            vref      = float(row.get("Valor Referencia", 0) or 0)
-            ejecutado = mapa_ejecutado.get(desc_key, 0.0)
-            pag_comp  = mapa_pagado_completo.get(desc_key, False)
-            saldo     = max(vref - ejecutado, 0)
-            if saldo == 0 or (pag_comp and ejecutado >= vref):
-                continue  # totalmente cubierto → no aparece
-            fila = row.copy()
-            fila["Valor Referencia"] = saldo
-            filas_pendientes.append(fila)
-        elif tiene_asociado:
-            continue  # asociado a proyectado → no aparece solo
-        else:
-            filas_pendientes.append(row)  # movimiento normal
-
-    return pd.DataFrame(filas_pendientes).reset_index(drop=True) if filas_pendientes else pd.DataFrame(columns=df.columns)
 
 
 def render_resumen_gastos(df):
