@@ -350,6 +350,56 @@ PLOTLY_LAYOUT = dict(
 
 # --- 11. PANTALLA DE LOGIN ---
 if not st.session_state.autenticado:
+    # ── Detectar si viene de un enlace de recuperación de contraseña ──
+    _query = st.query_params
+    _token_hash = _query.get("token_hash", "") or _query.get("token", "")
+    _type        = _query.get("type", "")
+
+    if _token_hash and _type == "recovery":
+        # Mostrar formulario de nueva contraseña
+        col1, col2, col3 = st.columns([1, 1.5, 1])
+        with col2:
+            if os.path.exists(LOGO_LOGIN):
+                st.image(LOGO_LOGIN, use_container_width=True)
+            st.markdown("### 🔓 Crear nueva contraseña")
+            st.caption("Ingresa tu nueva contraseña para acceder a tu cuenta.")
+
+            nueva_pwd  = st.text_input("Nueva contraseña", type="password", key="nueva_pwd",
+                                        placeholder="Mínimo 8 caracteres, una mayúscula y un número")
+            nueva_pwd2 = st.text_input("Confirmar contraseña", type="password", key="nueva_pwd2",
+                                        placeholder="Repite la contraseña")
+
+            if st.button("✅ Guardar nueva contraseña", use_container_width=True, key="btn_nueva_pwd"):
+                if not nueva_pwd or not nueva_pwd2:
+                    st.error("❌ Por favor completa ambos campos.")
+                elif nueva_pwd != nueva_pwd2:
+                    st.error("❌ Las contraseñas no coinciden.")
+                else:
+                    from auth import _validar_password
+                    valida, msg = _validar_password(nueva_pwd)
+                    if not valida:
+                        st.error(f"❌ {msg}")
+                    else:
+                        try:
+                            # Verificar el token y actualizar contraseña
+                            res = supabase.auth.verify_otp({
+                                "token_hash": _token_hash,
+                                "type": "recovery"
+                            })
+                            if res.session:
+                                supabase.postgrest.auth(res.session.access_token)
+                                supabase.auth.update_user({"password": nueva_pwd})
+                                st.success("✅ ¡Contraseña actualizada correctamente!")
+                                st.info("Ya puedes ingresar con tu nueva contraseña.")
+                                st.query_params.clear()
+                                import time; time.sleep(2)
+                                st.rerun()
+                            else:
+                                st.error("❌ El enlace expiró o ya fue usado. Solicita uno nuevo.")
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+        st.stop()
+
     mostrar_login(supabase, LOGO_LOGIN)
     st.stop()
 
