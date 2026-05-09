@@ -1531,11 +1531,6 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 
-# DEBUG TEMPORAL
-if not df_ed_g.empty and "Movimiento Recurrente" in df_ed_g.columns:
-    rec_count = df_ed_g[df_ed_g["Movimiento Recurrente"] == True].shape[0]
-    st.info(f"🔍 Items con Recurrente=True: {rec_count}")
-
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     # df_ed_g ya es el DataFrame unificado (proyectados + movimientos)
     # Solo descartamos filas completamente vacías
