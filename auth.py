@@ -75,7 +75,39 @@ def mostrar_login(supabase, LOGO_LOGIN):
             pwd_reg2        = st.text_input("Confirmar contraseña", type="password", key="reg_pwd2", placeholder="Repite la contraseña")
             st.caption("🔒 Mínimo 8 caracteres, una mayúscula y un número.")
 
-            if st.button("Crear cuenta", use_container_width=True, key="btn_registro"):
+            # ── Términos y condiciones ─────────────────────────
+            with st.expander("📋 Términos y Condiciones de uso"):
+                st.markdown("""
+**My FinanceApp — Términos y Condiciones**
+
+**1. Uso de la aplicación**
+My FinanceApp es una herramienta de gestión financiera personal. El usuario es el único responsable de la veracidad y exactitud de los datos que registra.
+
+**2. Privacidad y datos**
+Los datos financieros registrados son de uso exclusivo del usuario. My FinanceApp no comparte, vende ni cede información personal a terceros. Los datos se almacenan de forma segura en servidores cifrados.
+
+**3. Limitación de responsabilidad**
+My FinanceApp es una herramienta de apoyo informativo. No constituye asesoría financiera, legal ni fiscal profesional. El desarrollador no se hace responsable de decisiones financieras tomadas con base en la información registrada en la app.
+
+**4. Seguridad**
+El usuario es responsable de mantener seguras sus credenciales de acceso. My FinanceApp no almacena contraseñas en texto plano.
+
+**5. Módulo Grupal**
+Al vincular su cuenta con otro usuario, el usuario acepta que cierta información financiera consolidada será visible para el usuario vinculado. Ninguna de las partes tendrá acceso a los datos detallados del otro.
+
+**6. Modificaciones**
+My FinanceApp se reserva el derecho de modificar estos términos. Los cambios serán notificados por correo electrónico.
+
+**7. Contacto**
+Para dudas o solicitudes: arqtulicesar@gmail.com
+                """)
+
+            acepta_terminos = st.checkbox(
+                "He leído y acepto los Términos y Condiciones de uso",
+                key="check_terminos"
+            )
+
+            if st.button("Crear cuenta", use_container_width=True, key="btn_registro", disabled=not acepta_terminos):
                 if not nombre_completo or not email_reg or not pwd_reg or not pwd_reg2:
                     st.error("❌ Por favor completa todos los campos.")
                 elif pwd_reg != pwd_reg2:
@@ -102,6 +134,114 @@ def mostrar_login(supabase, LOGO_LOGIN):
                                     }).execute()
                                 except:
                                     pass
+
+                                # ── Correo de bienvenida ───────────────────
+                                try:
+                                    import smtplib
+                                    from email.mime.text import MIMEText
+                                    from email.mime.multipart import MIMEMultipart
+                                    _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                                    _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+                                    if _gmail_user and _gmail_pass:
+                                        _msg = MIMEMultipart("alternative")
+                                        _msg["Subject"] = f"🎉 ¡Bienvenido a My FinanceApp, {nombre_completo.split()[0]}!"
+                                        _msg["From"]    = _gmail_user
+                                        _msg["To"]      = email_reg.strip()
+                                        _html_bienvenida = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:30px 20px">
+
+  <!-- Header -->
+  <div style="text-align:center;margin-bottom:30px">
+    <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
+  </div>
+
+  <!-- Saludo -->
+  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #fca311">
+    <h2 style="color:#fff;margin:0 0 10px">¡Hola, {nombre_completo.split()[0]}! 👋</h2>
+    <p style="color:#adb5bd;margin:0;line-height:1.6">
+      Tu cuenta ha sido creada exitosamente. Estamos emocionados de acompañarte en el control de tus finanzas personales.
+      <br><br>Primero debes confirmar tu correo haciendo clic en el enlace que Supabase te envió por separado.
+    </p>
+  </div>
+
+  <!-- Tutorial -->
+  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px">
+    <h3 style="color:#fca311;margin:0 0 16px">🚀 Cómo empezar — Guía rápida</h3>
+
+    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 1 — Configura tu mes</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
+        En el panel izquierdo selecciona el <b>año y mes</b> que quieres gestionar. Ingresa tu <b>saldo anterior</b> y tu <b>nómina</b> del mes.
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 2 — Define tus gastos proyectados</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
+        En la tabla <b>"Gastos / Egresos Proyectados"</b> registra los gastos que planeas tener este mes (servicios, arriendo, etc.) con su valor estimado. Activa el check <b>📌 Referencia</b> en los ítems que quieres hacer seguimiento.
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 3 — Registra tus movimientos diarios</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
+        En <b>"Editar / Agregar Movimientos"</b> registra cada gasto del día a día. Puedes asociarlo a un ítem proyectado para hacer seguimiento del presupuesto. Marca el check <b>✅ Pagado</b> cuando lo hayas cancelado.
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 4 — Revisa tus métricas</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
+        El dashboard muestra automáticamente tus <b>KPIs financieros</b>: ingresos, obligaciones pagadas, pendientes, dinero disponible y saldo a favor. También verás gráficas de distribución por categoría.
+      </div>
+    </div>
+
+    <div style="margin-bottom:16px;padding:12px;background:#3a3f44;border-radius:8px">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">PASO 5 — Genera extractos</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
+        Descarga tu resumen mensual en <b>PDF o Excel</b> desde el sidebar. También puedes generar proyecciones semestrales.
+      </div>
+    </div>
+
+    <div style="padding:12px;background:#3a3f44;border-radius:8px">
+      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:4px">💡 EXTRA — Asesor IA y Finanzas Grupales</div>
+      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.5">
+        Usa el <b>🤖 Asesor IA</b> para obtener un diagnóstico personalizado de tu situación financiera. Y con <b>👥 Finanzas Grupales</b> puedes vincular tu cuenta con otra persona para ver un dashboard consolidado.
+      </div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div style="text-align:center;margin-bottom:24px">
+    <a href="https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
+       style="background:#fca311;color:#14213d;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:800;font-size:1rem;display:inline-block">
+      🚀 Ir a My FinanceApp
+    </a>
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
+    <p style="color:#6c757d;font-size:0.75rem;margin:0">
+      My FinanceApp · by Stulio Designs<br>
+      Si tienes dudas escríbenos a arqtulicesar@gmail.com
+    </p>
+  </div>
+
+</div>
+</body>
+</html>
+                                        """
+                                        _msg.attach(MIMEText(_html_bienvenida, "html"))
+                                        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
+                                            _smtp.login(_gmail_user, _gmail_pass)
+                                            _smtp.sendmail(_gmail_user, email_reg.strip(), _msg.as_string())
+                                except:
+                                    pass  # Si falla el correo, no bloquear el registro
+
                                 st.success(f"✅ ¡Cuenta creada! Revisa tu correo **{email_reg}** para confirmar tu cuenta.")
                                 st.info("Una vez confirmado tu correo, ingresa desde la pestaña 🔑 Ingresar.")
                             else:
