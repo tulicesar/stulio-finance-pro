@@ -669,6 +669,11 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
     st.markdown(f"## 👥 Dashboard Consolidado — {mes_s} {anio_s}")
     st.caption("Vista combinada de todos los usuarios vinculados.")
 
+    # Botón para volver al dashboard personal
+    if st.button("◀ Volver a mi dashboard personal", key="btn_salir_consolidado"):
+        st.session_state["vista_consolidada"] = False
+        st.rerun()
+
     # Cargar datos de todos los usuarios vinculados
     todos_g  = [df_g_full.copy()]
     todos_i  = [df_i_full.copy()]
