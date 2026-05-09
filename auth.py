@@ -188,7 +188,7 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
 
         col_a, col_b = st.columns(2)
         with col_a:
-            if st.button("✅ Confirmar solicitud", key="btn_confirmar_solicitud", disabled=not confirmar):
+            if st.button("✅ Confirmar", key="btn_confirmar_solicitud", disabled=not confirmar, use_container_width=True):
                 try:
                     # ── Guardar solicitud en Supabase ─────────
                     try:
@@ -257,7 +257,7 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
                     st.error(f"❌ Error al enviar la solicitud: {e}")
 
         with col_b:
-            if st.button("✗ Cancelar", key="btn_cancelar_solicitud"):
+            if st.button("✗ Cancelar", key="btn_cancelar_solicitud", use_container_width=True):
                 st.session_state["solicitud_eliminar_paso2"] = False
                 st.rerun()
 
