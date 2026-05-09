@@ -1124,26 +1124,29 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
 
     if btn_diagnostico:
         try:
-            import google.generativeai as genai
+            import requests as _req
             _gemini_key = st.secrets.get("gemini", {}).get("api_key", "")
             if not _gemini_key:
-                st.error("❌ API Key de Gemini no configurada. Contacta al administrador de la app.")
+                st.error("❌ API Key no configurada. Contacta al administrador.")
             else:
-                genai.configure(api_key=_gemini_key)
-                modelo = genai.GenerativeModel("gemini-1.5-flash-latest")
+                _url = (
+                    "https://generativelanguage.googleapis.com/v1beta"
+                    f"/models/gemini-2.0-flash:generateContent?key={_gemini_key}"
+                )
+                _body = {
+                    "contents": [{"parts": [{"text": prompt_contexto}]}],
+                    "generationConfig": {"maxOutputTokens": 1200, "temperature": 0.7}
+                }
                 with st.spinner("🤖 Analizando tus finanzas..."):
-                    respuesta = modelo.generate_content(prompt_contexto)
-                    st.session_state["ia_diagnostico"] = respuesta.text
-        except ImportError:
-            st.error("❌ Falta librería. Agrega 'google-generativeai' al requirements.txt")
+                    _r = _req.post(_url, json=_body, timeout=30)
+                if _r.status_code == 200:
+                    _txt = _r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                    st.session_state["ia_diagnostico"] = _txt
+                else:
+                    _msg = _r.json().get("error", {}).get("message", _r.text)
+                    st.error(f"❌ Error Gemini: {_msg}")
         except Exception as e_ia:
-            msg = str(e_ia)
-            if "API_KEY_INVALID" in msg or "invalid" in msg.lower():
-                st.error("❌ API Key inválida. Verifica la configuración en Streamlit Secrets.")
-            elif "quota" in msg.lower():
-                st.error("❌ Límite de uso alcanzado. Intenta en unos minutos.")
-            else:
-                st.error(f"❌ Error: {msg}")
+            st.error(f"❌ Error: {str(e_ia)[:200]}")
 
     # ── Resultado ─────────────────────────────────────────
     if st.session_state.get("ia_diagnostico"):
