@@ -774,7 +774,7 @@ def render_resumen_gastos(df):
         else: st.success("¡Sin obligaciones pendientes!")
 
 
-render_resumen_gastos(df_mes_g)
+render_resumen_gastos(df_ed_g)
 
 # ══════════════════════════════════════════════
 # PRESUPUESTO VS EJECUCIÓN POR CATEGORÍA
