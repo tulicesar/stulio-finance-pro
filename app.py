@@ -50,7 +50,7 @@ LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación",
     "Cuidado Personal", "Mascotas", "Viajes y Recreación", "Servicios de Streaming",
-    "Seguros", "Ahorro e Inversión", "Impuestos", "Imprevistos", "Otros"
+    "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
 ]
 
 COLOR_MAP = {
@@ -61,7 +61,7 @@ COLOR_MAP = {
     "Mascotas": "#CFCFCF", "Viajes y Recreación": "#AEC6CF",
     "Servicios de Streaming": "#cfcfc4",
     "Seguros": "#836953", "Ahorro e Inversión": "#d4af37",
-    "Impuestos": "#ffda9e", "Imprevistos": "#ff6b6b", "Otros": "#b2e2f2"
+    "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
 }
 
 # --- 5. FUENTE SF PRO DISPLAY + ESTILOS ---
@@ -470,24 +470,8 @@ with st.sidebar:
 
     s_sug = 0.0
     if not i_ant.empty:
-        # Reconstruir df_ant con Es Referencia para usar calcular_pendientes
-        _nom_ant = float(i_ant["Nomina"].sum())
-        _otr_ant = float(oi_ant["Monto"].sum()) if not oi_ant.empty else 0.0
-        _sal_ant = float(i_ant["SaldoAnterior"].iloc[0])
-        _it_ant  = _sal_ant + _nom_ant + _otr_ant
-        # Pagado del mes anterior
-        _vp_ant  = float(g_ant[g_ant["Pagado"].fillna(False).astype(bool)]["Monto"].sum()) if not g_ant.empty else 0.0
-        # Pendientes usando la misma lógica que el dashboard
-        _pend_ant = calcular_pendientes(g_ant)
-        if not _pend_ant.empty:
-            _pend_ant["_v"] = _pend_ant.apply(
-                lambda r: float(r.get("Monto",0) or 0) if float(r.get("Monto",0) or 0) > 0
-                          else float(r.get("Valor Referencia",0) or 0), axis=1
-            )
-            _vpy_ant = float(_pend_ant["_v"].sum())
-        else:
-            _vpy_ant = 0.0
-        s_sug = _it_ant - _vp_ant - _vpy_ant
+        _, _, _, _, bf_a, _ = calcular_metricas(g_ant, i_ant["Nomina"].sum(), oi_ant["Monto"].sum(), i_ant["SaldoAnterior"].iloc[0])
+        s_sug = float(bf_a)
 
     st.divider()
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
@@ -829,33 +813,25 @@ if df_mes_g.empty:
     if not gastos_hist.empty:
         p_actual = (anio_s * 12) + meses_lista.index(mes_s)
         gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
-        p_anterior  = p_actual - 1
+        # ── CORRECCIÓN RECURRENTE ──────────────────────────────────────────────
+        # Solo propagar desde el mes INMEDIATAMENTE anterior (p_actual - 1),
+        # no desde el último mes con datos. Así, si en el mes anterior se desactivó
+        # un recurrente, no vuelve a aparecer en el mes actual.
+        p_anterior = p_actual - 1
         foto_anterior = gastos_hist[gastos_hist["lt"] == p_anterior]
         if not foto_anterior.empty:
+            # Solo los que tienen Movimiento Recurrente = True en ese mes exacto
             activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
-                df_mes_g = activos.reindex(columns=[
-                    "Categoría","Descripción","Monto","Valor Referencia",
-                    "Pagado","Movimiento Recurrente","Es Proyectado",
-                    "Presupuesto Asociado","Es Referencia"
-                ])
-                df_mes_g["Pagado"]    = False
-                df_mes_g["Fecha Pago"] = pd.NaT
-                # Para proyectados: resetear Monto a 0 pero conservar Valor Referencia y Es Referencia
-                mask_proy = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
-                df_mes_g.loc[mask_proy, "Monto"]  = 0.0
-                df_mes_g.loc[mask_proy, "Pagado"] = False
-                # Para movimientos normales: resetear monto a 0 también (se registrará en el mes)
-                df_mes_g.loc[~mask_proy, "Monto"] = 0.0
-                df_mes_g["Es Proyectado"]  = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
-                df_mes_g["Es Referencia"]  = df_mes_g["Es Referencia"].fillna(False).astype(bool)
+                df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Es Proyectado","Presupuesto Asociado","Es Referencia"])
+                df_mes_g["Pagado"]               = False
+                df_mes_g["Fecha Pago"]           = pd.NaT
+                df_mes_g["Es Proyectado"]        = df_mes_g["Es Proyectado"].fillna(False)
                 df_mes_g["Presupuesto Asociado"] = df_mes_g["Presupuesto Asociado"].where(
                     df_mes_g["Presupuesto Asociado"].notna(), other=None
                 )
-                df_mes_g = df_mes_g.sort_values(
-                    ["Es Proyectado","Categoría","Descripción"],
-                    ascending=[False, True, True]
-                ).reset_index(drop=True)
+                df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
+        # Si no hay datos en el mes anterior inmediato, el mes queda vacío (sin propagar)
 
 if "Fecha Pago" not in df_mes_g.columns:
     df_mes_g["Fecha Pago"] = pd.NaT
