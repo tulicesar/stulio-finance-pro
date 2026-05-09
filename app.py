@@ -568,6 +568,11 @@ with st.sidebar:
     vinculos_activos = cargar_vinculos(supabase, u_id, token)
     vinculos_aceptados = [v for v in vinculos_activos if v.get("estado") == "activo"]
 
+    # DEBUG TEMPORAL
+    st.sidebar.caption(f"🔍 u_id: {str(u_id)[:8]}...")
+    st.sidebar.caption(f"🔍 vínculos encontrados: {len(vinculos_activos)}")
+    st.sidebar.caption(f"🔍 vínculos activos: {len(vinculos_aceptados)}")
+
     st.divider()
     if vinculos_aceptados:
         if st.button("👥 Vista Consolidada", use_container_width=True):
