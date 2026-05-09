@@ -130,7 +130,6 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                                     supabase.table("usuarios").upsert({
                                         "usuario_id":      res.user.id,
                                         "nombre_completo": nombre_completo.strip(),
-                                        "password":        "—"
                                     }).execute()
                                 except:
                                     pass
