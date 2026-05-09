@@ -186,80 +186,77 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
             key="check_solicitud_eliminar"
         )
 
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("✅ Confirmar", key="btn_confirmar_solicitud", disabled=not confirmar, use_container_width=True):
+        if st.button("✅ Confirmar solicitud", key="btn_confirmar_solicitud", disabled=not confirmar, use_container_width=True):
+            try:
+                # ── Guardar solicitud en Supabase ─────────
                 try:
-                    # ── Guardar solicitud en Supabase ─────────
-                    try:
-                        supabase.postgrest.auth(token)
-                        supabase.table("solicitudes_eliminacion").insert({
-                            "usuario_id": str(u_id),
-                            "nombre":     nombre_usuario,
-                            "email":      email_usuario,
-                            "estado":     "pendiente"
-                        }).execute()
-                    except:
-                        pass
+                    supabase.postgrest.auth(token)
+                    supabase.table("solicitudes_eliminacion").insert({
+                        "usuario_id": str(u_id),
+                        "nombre":     nombre_usuario,
+                        "email":      email_usuario,
+                        "estado":     "pendiente"
+                    }).execute()
+                except:
+                    pass
 
-                    # ── Enviar correo al administrador via Gmail SMTP ──
-                    import smtplib
-                    from email.mime.text import MIMEText
-                    from email.mime.multipart import MIMEMultipart
+                # ── Enviar correo al administrador via Gmail SMTP ──
+                import smtplib
+                from email.mime.text import MIMEText
+                from email.mime.multipart import MIMEMultipart
 
-                    _gmail_user = st.secrets.get("gmail", {}).get("email", "")
-                    _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+                _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
 
-                    if _gmail_user and _gmail_pass:
-                        _msg = MIMEMultipart("alternative")
-                        _msg["Subject"] = f"🗑️ Solicitud de eliminación de cuenta — {nombre_usuario}"
-                        _msg["From"]    = _gmail_user
-                        _msg["To"]      = _gmail_user  # se envía a ti mismo
+                if _gmail_user and _gmail_pass:
+                    _msg = MIMEMultipart("alternative")
+                    _msg["Subject"] = f"🗑️ Solicitud de eliminación de cuenta — {nombre_usuario}"
+                    _msg["From"]    = _gmail_user
+                    _msg["To"]      = _gmail_user
 
-                        _cuerpo_html = f"""
-                        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-                            <h2 style="color:#e74c3c">⚠️ Solicitud de eliminación de cuenta</h2>
-                            <p>Un usuario ha solicitado eliminar su cuenta en <b>My FinanceApp</b>.</p>
-                            <table style="width:100%;border-collapse:collapse;margin:20px 0">
-                                <tr style="background:#f8f9fa">
-                                    <td style="padding:10px;font-weight:bold">Nombre</td>
-                                    <td style="padding:10px">{nombre_usuario}</td>
-                                </tr>
-                                <tr>
-                                    <td style="padding:10px;font-weight:bold">Correo</td>
-                                    <td style="padding:10px">{email_usuario}</td>
-                                </tr>
-                                <tr style="background:#f8f9fa">
-                                    <td style="padding:10px;font-weight:bold">ID de usuario</td>
-                                    <td style="padding:10px">{u_id}</td>
-                                </tr>
-                            </table>
-                            <p>Para procesar la eliminación:</p>
-                            <ol>
-                                <li>Ve a <a href="https://supabase.com/dashboard/project/tfyrokxggpuxescvdrwf/auth/users">Supabase → Authentication → Users</a></li>
-                                <li>Busca el usuario por correo: <b>{email_usuario}</b></li>
-                                <li>Elimina el usuario y todos sus datos</li>
-                            </ol>
-                            <p style="color:#adb5bd;font-size:0.85rem">Este correo fue generado automáticamente por My FinanceApp.</p>
-                        </div>
-                        """
-                        _msg.attach(MIMEText(_cuerpo_html, "html"))
+                    _cuerpo_html = f"""
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+                        <h2 style="color:#e74c3c">⚠️ Solicitud de eliminación de cuenta</h2>
+                        <p>Un usuario ha solicitado eliminar su cuenta en <b>My FinanceApp</b>.</p>
+                        <table style="width:100%;border-collapse:collapse;margin:20px 0">
+                            <tr style="background:#f8f9fa">
+                                <td style="padding:10px;font-weight:bold">Nombre</td>
+                                <td style="padding:10px">{nombre_usuario}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:10px;font-weight:bold">Correo</td>
+                                <td style="padding:10px">{email_usuario}</td>
+                            </tr>
+                            <tr style="background:#f8f9fa">
+                                <td style="padding:10px;font-weight:bold">ID de usuario</td>
+                                <td style="padding:10px">{u_id}</td>
+                            </tr>
+                        </table>
+                        <p>Para procesar la eliminación:</p>
+                        <ol>
+                            <li>Ve a <a href="https://supabase.com/dashboard/project/tfyrokxggpuxescvdrwf/auth/users">Supabase → Authentication → Users</a></li>
+                            <li>Busca el usuario por correo: <b>{email_usuario}</b></li>
+                            <li>Elimina el usuario y todos sus datos</li>
+                        </ol>
+                        <p style="color:#adb5bd;font-size:0.85rem">Este correo fue generado automáticamente por My FinanceApp.</p>
+                    </div>
+                    """
+                    _msg.attach(MIMEText(_cuerpo_html, "html"))
 
-                        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
-                            _smtp.login(_gmail_user, _gmail_pass)
-                            _smtp.sendmail(_gmail_user, _gmail_user, _msg.as_string())
+                    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
+                        _smtp.login(_gmail_user, _gmail_pass)
+                        _smtp.sendmail(_gmail_user, _gmail_user, _msg.as_string())
 
-                    st.session_state["solicitud_eliminar_enviada"] = True
-                    st.session_state["solicitud_eliminar_paso2"]   = False
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"❌ Error al enviar la solicitud: {e}")
-
-        with col_b:
-            if st.button("✗ Cancelar", key="btn_cancelar_solicitud", use_container_width=True):
-                st.session_state["solicitud_eliminar_paso2"] = False
+                st.session_state["solicitud_eliminar_enviada"] = True
+                st.session_state["solicitud_eliminar_paso2"]   = False
                 st.rerun()
+
+            except Exception as e:
+                st.error(f"❌ Error al enviar la solicitud: {e}")
+
+        if st.button("✗ Cancelar solicitud", key="btn_cancelar_solicitud", use_container_width=True):
+            st.session_state["solicitud_eliminar_paso2"] = False
+            st.rerun()
 
     # ── CONFIRMACIÓN FINAL ────────────────────────────────
     if st.session_state.get("solicitud_eliminar_enviada"):
