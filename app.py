@@ -1130,7 +1130,7 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
                 st.error("❌ API Key de Gemini no configurada. Contacta al administrador de la app.")
             else:
                 genai.configure(api_key=_gemini_key)
-                modelo = genai.GenerativeModel("gemini-2.0-flash")
+                modelo = genai.GenerativeModel("gemini-1.5-flash-latest")
                 with st.spinner("🤖 Analizando tus finanzas..."):
                     respuesta = modelo.generate_content(prompt_contexto)
                     st.session_state["ia_diagnostico"] = respuesta.text
