@@ -1060,36 +1060,58 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# 🤖 ASESOR IA DE FINANZAS PERSONALES
+# 🤖 ASESOR IA DE FINANZAS PERSONALES (Google Gemini)
 # ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>🤖 Asesor IA de Finanzas</span></div>', unsafe_allow_html=True)
 
 with st.expander("💡 Obtener diagnóstico y recomendaciones personalizadas", expanded=False):
-    st.caption("La IA analiza tus flujos del mes y te da recomendaciones como asesor de finanzas personales.")
 
-    # Construir resumen de gastos por categoría para el prompt
+    # ── Campo de API Key ──────────────────────────────────
+    st.markdown("""
+    <div style="background:#2d3238;border-radius:10px;padding:14px 18px;margin-bottom:14px;border-left:3px solid #fca311">
+        <div style="font-size:0.82rem;font-weight:800;color:#fca311;text-transform:uppercase;margin-bottom:6px">🔑 Tu API Key de Google AI Studio</div>
+        <div style="font-size:0.78rem;color:#adb5bd;line-height:1.5">
+            Es gratis · No requiere tarjeta · Tarda 2 minutos obtenerla<br>
+            👉 Ve a <b style="color:#ffffff">aistudio.google.com/apikey</b> → inicia sesión con Google → Create API key
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    gemini_key = st.text_input(
+        "API Key",
+        type="password",
+        placeholder="AIzaSy...",
+        help="Tu key solo se usa en esta sesión y nunca se guarda",
+        label_visibility="collapsed"
+    )
+
+    if gemini_key:
+        st.caption("✅ Key ingresada — lista para generar el diagnóstico")
+    else:
+        st.caption("⬆️ Ingresa tu API Key para activar el asesor")
+
+    st.divider()
+
+    # ── Construir contexto financiero para el prompt ──────
     resumen_cats = ""
     if not df_ed_g.empty:
         t_df = df_ed_g.copy()
-        t_df["_v"] = t_df.apply(lambda r: r["Monto"] if r["Pagado"] else r["Valor Referencia"], axis=1)
+        t_df["_v"] = t_df.apply(lambda r: float(r["Monto"]) if float(r.get("Monto",0) or 0) > 0 else float(r.get("Valor Referencia",0) or 0), axis=1)
         por_cat = t_df.groupby("Categoría")["_v"].sum().sort_values(ascending=False)
         for cat, val in por_cat.items():
             if val > 0:
                 resumen_cats += f"  - {cat}: ${val:,.0f}\n"
 
-    # Construir resumen de ítems proyectados con ejecución
     resumen_proyectados = ""
     df_proy_ia = df_ed_g[df_ed_g["Es Proyectado"] == True].copy()
     if not df_proy_ia.empty:
         for _, pr in df_proy_ia.iterrows():
-            desc_p   = str(pr.get("Descripción",""))
-            vref_p   = float(pr.get("Valor Referencia", 0) or 0)
-            key_p    = desc_p.strip().upper()
-            ejec_p   = 0.0
+            desc_p = str(pr.get("Descripción",""))
+            vref_p = float(pr.get("Valor Referencia", 0) or 0)
+            key_p  = desc_p.strip().upper()
+            ejec_p = 0.0
             if "Presupuesto Asociado" in df_ed_g.columns:
-                movs_p = df_ed_g[
-                    df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == key_p
-                ]
+                movs_p = df_ed_g[df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == key_p]
                 ejec_p = float(pd.to_numeric(movs_p["Monto"], errors="coerce").fillna(0).sum())
             pct_p = (ejec_p / vref_p * 100) if vref_p > 0 else 0
             resumen_proyectados += f"  - {desc_p}: proyectado ${vref_p:,.0f} / ejecutado ${ejec_p:,.0f} ({pct_p:.0f}%)\n"
@@ -1113,41 +1135,49 @@ GASTOS POR CATEGORÍA:
 ÍTEMS PROYECTADOS VS EJECUCIÓN:
 {resumen_proyectados if resumen_proyectados else "  Sin proyectados definidos"}
 
-Genera un diagnóstico con estas secciones (usa emojis para cada sección):
+Genera un diagnóstico con estas secciones (usa emojis):
 1. 📊 Estado General del Mes (2-3 frases sobre la salud financiera)
 2. ⚠️ Alertas y Riesgos (identifica gastos problemáticos o riesgos concretos)
 3. ✅ Puntos Positivos (qué está funcionando bien)
 4. 💡 Recomendaciones (3-5 acciones concretas y priorizadas)
 5. 🎯 Meta del Próximo Mes (1 objetivo específico y alcanzable)
 
-Sé directo, usa los números reales, y habla como un asesor financiero de confianza, no como un bot genérico."""
+Sé directo, usa los números reales, habla como asesor financiero de confianza."""
 
-    col_btn1, col_btn2 = st.columns([1, 3])
-    with col_btn1:
-        btn_diagnostico = st.button("🔍 Generar Diagnóstico IA", key="btn_ia", use_container_width=True)
+    # ── Botón generar ─────────────────────────────────────
+    btn_diagnostico = st.button(
+        "🔍 Generar Diagnóstico IA",
+        key="btn_ia",
+        use_container_width=True,
+        disabled=not gemini_key
+    )
 
-    if btn_diagnostico:
+    if btn_diagnostico and gemini_key:
         try:
-            import anthropic as _anthropic
-            _client = _anthropic.Anthropic()
-            with st.spinner("🤖 Analizando tus finanzas..."):
-                _mensaje = _client.messages.create(
-                    model="claude-sonnet-4-20250514",
-                    max_tokens=1200,
-                    messages=[{"role": "user", "content": prompt_contexto}]
-                )
-                diagnostico_texto = _mensaje.content[0].text
+            import google.generativeai as genai
+            genai.configure(api_key=gemini_key)
+            modelo = genai.GenerativeModel("gemini-1.5-flash")
+            with st.spinner("🤖 Analizando tus finanzas con Gemini..."):
+                respuesta = modelo.generate_content(prompt_contexto)
+                diagnostico_texto = respuesta.text
                 st.session_state["ia_diagnostico"] = diagnostico_texto
         except ImportError:
-            st.error("❌ Instala la librería anthropic: pip install anthropic")
+            st.error("❌ Falta la librería. Agrega 'google-generativeai' a tu requirements.txt")
         except Exception as e_ia:
-            st.error(f"❌ Error al conectar con la IA: {e_ia}")
+            msg = str(e_ia)
+            if "API_KEY_INVALID" in msg or "invalid" in msg.lower():
+                st.error("❌ API Key inválida. Verifica que la copiaste correctamente desde aistudio.google.com/apikey")
+            elif "quota" in msg.lower():
+                st.error("❌ Límite de uso alcanzado. Espera unos minutos e intenta de nuevo.")
+            else:
+                st.error(f"❌ Error: {msg}")
 
+    # ── Mostrar resultado ─────────────────────────────────
     if st.session_state.get("ia_diagnostico"):
         st.markdown("---")
         st.markdown(
             f'<div style="background:#2d3238;border-radius:12px;padding:20px 24px;'
-            f'border-left:4px solid #fca311;line-height:1.7;font-size:0.92rem;color:#f8f9fa">'
+            f'border-left:4px solid #fca311;line-height:1.8;font-size:0.92rem;color:#f8f9fa">'
             f'{st.session_state["ia_diagnostico"].replace(chr(10), "<br>")}'
             f'</div>',
             unsafe_allow_html=True
@@ -1155,6 +1185,7 @@ Sé directo, usa los números reales, y habla como un asesor financiero de confi
         if st.button("🗑️ Limpiar diagnóstico", key="btn_limpiar_ia"):
             st.session_state["ia_diagnostico"] = ""
             st.rerun()
+
 
 
 st.markdown("<br>", unsafe_allow_html=True)
