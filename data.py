@@ -148,14 +148,16 @@ def cargar_vinculos(supabase, u_id, token):
     """Retorna lista de vínculos activos del usuario (como A o como B)."""
     try:
         supabase.postgrest.auth(token)
-        r = supabase.table("vinculos_usuarios").select("*").execute()
-        if not r.data:
-            return []
+        _uid = str(u_id)
+        # Buscar como usuario_a
+        r_a = supabase.table("vinculos_usuarios").select("*").eq("usuario_id_a", _uid).execute()
+        # Buscar como usuario_b
+        r_b = supabase.table("vinculos_usuarios").select("*").eq("usuario_id_b", _uid).execute()
         vinculos = []
-        for v in r.data:
-            if (str(v.get("usuario_id_a","")) == str(u_id) or
-                str(v.get("usuario_id_b","")) == str(u_id)):
-                vinculos.append(v)
+        if r_a.data:
+            vinculos.extend(r_a.data)
+        if r_b.data:
+            vinculos.extend(r_b.data)
         return vinculos
     except:
         return []
