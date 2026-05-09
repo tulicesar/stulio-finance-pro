@@ -131,7 +131,7 @@ def mostrar_login(supabase, LOGO_LOGIN):
                     try:
                         supabase.auth.reset_password_for_email(
                             email_rec.strip(),
-                            options={"redirect_to": "https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"}
+                            options={"redirect_to": "https://tulicesar.github.io/stulio-finance-pro/redirect.html"}
                         )
                         st.success(f"✅ Enlace enviado a **{email_rec}**")
                         st.info("Revisa tu bandeja de entrada y sigue el enlace para crear una nueva contraseña. Si no lo ves, revisa la carpeta de spam.")
