@@ -50,7 +50,7 @@ LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
     "Obligaciones Financieras", "Salud", "Educación",
     "Cuidado Personal", "Mascotas", "Viajes y Recreación", "Servicios de Streaming",
-    "Seguros", "Ahorro e Inversión", "Impuestos", "Otros"
+    "Seguros", "Ahorro e Inversión", "Impuestos", "Imprevistos", "Otros"
 ]
 
 COLOR_MAP = {
@@ -61,7 +61,7 @@ COLOR_MAP = {
     "Mascotas": "#CFCFCF", "Viajes y Recreación": "#AEC6CF",
     "Servicios de Streaming": "#cfcfc4",
     "Seguros": "#836953", "Ahorro e Inversión": "#d4af37",
-    "Impuestos": "#ffda9e", "Otros": "#b2e2f2"
+    "Impuestos": "#ffda9e", "Imprevistos": "#ff6b6b", "Otros": "#b2e2f2"
 }
 
 # --- 5. FUENTE SF PRO DISPLAY + ESTILOS ---
