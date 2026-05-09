@@ -114,7 +114,64 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     return it, vp, vpy, float(it - vp), bf, ahorro_p
 
 
-# --- GUARDAR EN SUPABASE ---
+
+# --- CARGAR DATOS DE OTRO USUARIO (para vista consolidada) ---
+def cargar_bd_usuario(supabase, u_id, token):
+    """Igual que cargar_bd pero sin mostrar errores en UI — para uso interno."""
+    try:
+        supabase.postgrest.auth(token)
+        r_g  = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
+        r_i  = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
+        r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+
+        df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame(columns=["anio","periodo","categoria","descripcion","monto","valor_referencia","pagado","recurrente","usuario_id","fecha_pago","es_proyectado","presupuesto_asociado","es_referencia"])
+        df_i  = pd.DataFrame(r_i.data)  if r_i.data  else pd.DataFrame(columns=["anio","periodo","saldo_anterior","nomina","otros","usuario_id"])
+        df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio","periodo","descripcion","monto","usuario_id"])
+
+        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría","descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia","pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario","fecha_pago":"Fecha Pago","es_proyectado":"Es Proyectado","presupuesto_asociado":"Presupuesto Asociado","es_referencia":"Es Referencia"})
+        df_i  = df_i.rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"})
+        df_oi = df_oi.rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripción","monto":"Monto","usuario_id":"Usuario"})
+
+        for df in [df_g, df_i, df_oi]:
+            if "Año" in df.columns:
+                df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
+        if "Fecha Pago" in df_g.columns:
+            df_g["Fecha Pago"] = pd.to_datetime(df_g["Fecha Pago"], errors="coerce")
+
+        return df_g, df_i, df_oi
+    except:
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+
+# --- CARGAR VÍNCULOS DEL USUARIO ---
+def cargar_vinculos(supabase, u_id, token):
+    """Retorna lista de vínculos activos del usuario (como A o como B)."""
+    try:
+        supabase.postgrest.auth(token)
+        r = supabase.table("vinculos_usuarios").select("*").execute()
+        if not r.data:
+            return []
+        vinculos = []
+        for v in r.data:
+            if (str(v.get("usuario_id_a","")) == str(u_id) or
+                str(v.get("usuario_id_b","")) == str(u_id)):
+                vinculos.append(v)
+        return vinculos
+    except:
+        return []
+
+
+# --- BUSCAR USUARIO POR EMAIL ---
+def buscar_usuario_por_email(supabase, email, token):
+    """Busca un usuario en la tabla usuarios por su email."""
+    try:
+        supabase.postgrest.auth(token)
+        r = supabase.table("usuarios").select("usuario_id,nombre_completo,email").eq("email", email.strip().lower()).execute()
+        if r.data:
+            return r.data[0]
+        return None
+    except:
+        return None
 def guardar_bd(supabase, token, u_id, mes_s, anio_s, df_g_limpio, df_oi_limpio, s_in, n_in, otr_v):
     supabase.postgrest.auth(token)
 
