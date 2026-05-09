@@ -350,13 +350,34 @@ PLOTLY_LAYOUT = dict(
 
 # --- 11. PANTALLA DE LOGIN ---
 if not st.session_state.autenticado:
-    # ── Detectar si viene de un enlace de recuperación de contraseña ──
-    _query = st.query_params
-    _token_hash = _query.get("token_hash", "") or _query.get("token", "")
-    _type        = _query.get("type", "")
 
-    if _token_hash and _type == "recovery":
-        # Mostrar formulario de nueva contraseña
+    # ── Detectar token de recuperación en el hash de la URL via JS ──
+    # Supabase envía el token en el hash (#access_token=...&type=recovery)
+    # Streamlit no lee el hash directamente, usamos JS para pasarlo a session_state
+
+    if "recovery_access_token" not in st.session_state:
+        st.session_state["recovery_access_token"] = ""
+
+    # Inyectar JS que lee el hash y lo pasa via query param
+    st.components.v1.html("""
+    <script>
+    const hash = window.location.hash;
+    if (hash && hash.includes('type=recovery')) {
+        const params = new URLSearchParams(hash.substring(1));
+        const token = params.get('access_token');
+        if (token) {
+            // Pasar el token como query param para que Streamlit lo lea
+            const newUrl = window.location.pathname + '?recovery_token=' + encodeURIComponent(token);
+            window.location.replace(newUrl);
+        }
+    }
+    </script>
+    """, height=0)
+
+    _recovery_token = st.query_params.get("recovery_token", "")
+
+    if _recovery_token:
+        # ── Formulario de nueva contraseña ────────────────────
         col1, col2, col3 = st.columns([1, 1.5, 1])
         with col2:
             if os.path.exists(LOGO_LOGIN):
@@ -381,23 +402,16 @@ if not st.session_state.autenticado:
                         st.error(f"❌ {msg}")
                     else:
                         try:
-                            # Verificar el token y actualizar contraseña
-                            res = supabase.auth.verify_otp({
-                                "token_hash": _token_hash,
-                                "type": "recovery"
-                            })
-                            if res.session:
-                                supabase.postgrest.auth(res.session.access_token)
-                                supabase.auth.update_user({"password": nueva_pwd})
-                                st.success("✅ ¡Contraseña actualizada correctamente!")
-                                st.info("Ya puedes ingresar con tu nueva contraseña.")
-                                st.query_params.clear()
-                                import time; time.sleep(2)
-                                st.rerun()
-                            else:
-                                st.error("❌ El enlace expiró o ya fue usado. Solicita uno nuevo.")
+                            # Usar el access_token para autenticar y cambiar contraseña
+                            supabase.postgrest.auth(_recovery_token)
+                            supabase.auth.update_user({"password": nueva_pwd})
+                            st.success("✅ ¡Contraseña actualizada correctamente!")
+                            st.info("Ya puedes ingresar con tu nueva contraseña.")
+                            st.query_params.clear()
+                            import time; time.sleep(2)
+                            st.rerun()
                         except Exception as e:
-                            st.error(f"❌ Error: {e}")
+                            st.error(f"❌ Error al actualizar: {e}. Solicita un nuevo enlace de recuperación.")
         st.stop()
 
     mostrar_login(supabase, LOGO_LOGIN)
