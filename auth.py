@@ -22,7 +22,7 @@ def mostrar_login(supabase, LOGO_LOGIN):
         if os.path.exists(LOGO_LOGIN):
             st.image(LOGO_LOGIN, use_container_width=True)
 
-        tab_login, tab_registro = st.tabs(["🔑 Ingresar", "✨ Crear cuenta"])
+        tab_login, tab_registro, tab_recuperar = st.tabs(["🔑 Ingresar", "✨ Crear cuenta", "🔓 Recuperar contraseña"])
 
         # ── LOGIN ──────────────────────────────────────────────
         with tab_login:
@@ -112,6 +112,36 @@ def mostrar_login(supabase, LOGO_LOGIN):
                                 st.error("❌ Este correo ya está registrado. Intenta ingresar.")
                             else:
                                 st.error(f"❌ Error al crear la cuenta: {e}")
+
+        # ── RECUPERAR CONTRASEÑA ───────────────────────────────
+        with tab_recuperar:
+            st.markdown("##### ¿Olvidaste tu contraseña?")
+            st.caption("Te enviaremos un enlace a tu correo para que puedas restablecerla.")
+
+            email_rec = st.text_input(
+                "Correo electrónico",
+                key="rec_email",
+                placeholder="tucorreo@ejemplo.com"
+            )
+
+            if st.button("📧 Enviar enlace de recuperación", use_container_width=True, key="btn_recuperar"):
+                if not email_rec or not re.match(r"[^@]+@[^@]+\.[^@]+", email_rec):
+                    st.error("❌ Ingresa un correo válido.")
+                else:
+                    try:
+                        supabase.auth.reset_password_for_email(
+                            email_rec.strip(),
+                            options={"redirect_to": "https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"}
+                        )
+                        st.success(f"✅ Enlace enviado a **{email_rec}**")
+                        st.info("Revisa tu bandeja de entrada y sigue el enlace para crear una nueva contraseña. Si no lo ves, revisa la carpeta de spam.")
+                    except Exception as e:
+                        err = str(e).lower()
+                        if "user not found" in err or "not found" in err:
+                            # Por seguridad, no revelamos si el correo existe o no
+                            st.success(f"✅ Si ese correo está registrado, recibirás el enlace en unos minutos.")
+                        else:
+                            st.error(f"❌ Error: {e}")
 
 
 def cerrar_sesion():
