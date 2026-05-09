@@ -246,10 +246,12 @@ def calcular_pendientes(df):
     Casos:
     A) Proyectado con Es Referencia=True  → aparece con saldo (Valor Ref - ejecutado asociado).
                                             Si saldo=0 → desaparece.
-    B) Proyectado con Es Referencia=False → aparece como pendiente normal por su Valor Referencia.
+    B) Proyectado con Es Referencia=False → aparece como pendiente normal por su Valor Referencia,
+                                            SALVO que ya exista un movimiento real PAGADO con
+                                            la misma Descripción → desaparece.
     C) Movimiento normal sin Presupuesto Asociado, no pagado → aparece normal por su Monto.
     D) Movimiento con Presupuesto Asociado cuyo proyectado tiene Es Referencia=True
-                                          → NO aparece solo (queda absorbido por el proyectado).
+                                          → NO aparece solo (absorbido por el proyectado).
     E) Movimiento con Presupuesto Asociado cuyo proyectado tiene Es Referencia=False
                                           → aparece normal por su Monto.
     """
@@ -258,7 +260,7 @@ def calcular_pendientes(df):
 
     col_pa = "Presupuesto Asociado"
 
-    # Construir set de ítems proyectados CON referencia activa
+    # ── Set de ítems proyectados CON referencia activa ────────────────────────
     items_con_referencia = set()
     if "Es Referencia" in df.columns and "Es Proyectado" in df.columns:
         items_con_referencia = set(
@@ -268,7 +270,22 @@ def calcular_pendientes(df):
             ]["Descripción"].dropna().str.strip().str.upper().tolist()
         )
 
-    # Construir mapa de ejecución para ítems con referencia activa
+    # ── Set de descripciones ya PAGADAS en movimientos reales ─────────────────
+    # (filas que NO son proyectadas y tienen Pagado=True)
+    df_movs_reales = df[df["Es Proyectado"].fillna(False).astype(bool) == False]
+    descripciones_pagadas = set(
+        df_movs_reales[df_movs_reales["Pagado"].fillna(False).astype(bool)]
+        ["Descripción"].dropna().str.strip().str.upper().tolist()
+    )
+    # También incluir ítems asociados a proyectados con referencia que estén pagados
+    if col_pa in df.columns:
+        items_proy_pagados = set(
+            df[df["Pagado"].fillna(False).astype(bool)][col_pa]
+            .dropna().astype(str).str.strip().str.upper().tolist()
+        ) - {"", "NAN", "NONE", "NAN"}
+        descripciones_pagadas = descripciones_pagadas | items_proy_pagados
+
+    # ── Mapa de ejecución para ítems CON referencia ───────────────────────────
     mapa_ejecutado       = {}
     mapa_pagado_completo = {}
     if col_pa in df.columns and items_con_referencia:
@@ -278,7 +295,6 @@ def calcular_pendientes(df):
         ].copy()
         df_asoc["_monto"] = pd.to_numeric(df_asoc["Monto"], errors="coerce").fillna(0)
         df_asoc["_key"]   = df_asoc[col_pa].astype(str).str.strip().str.upper()
-        # Solo los asociados a ítems con referencia activa
         df_asoc = df_asoc[df_asoc["_key"].isin(items_con_referencia)]
         for key, grp in df_asoc.groupby("_key"):
             mapa_ejecutado[key]       = float(grp["_monto"].sum())
@@ -292,29 +308,30 @@ def calcular_pendientes(df):
         es_ref  = bool(row.get("Es Referencia", False))
         col_pa_v = str(row.get(col_pa, "")).strip() if col_pa in df.columns else ""
         tiene_asociado = col_pa_v not in ("", "nan", "None", "NaN")
+        desc_key = str(row.get("Descripción", "")).strip().upper()
 
         if es_proy:
             if es_ref:
-                # Caso A: proyectado con referencia → mostrar saldo disponible
-                desc_key  = str(row.get("Descripción","")).strip().upper()
+                # Caso A: proyectado con referencia → saldo disponible
                 vref      = float(row.get("Valor Referencia", 0) or 0)
                 ejecutado = mapa_ejecutado.get(desc_key, 0.0)
                 pag_comp  = mapa_pagado_completo.get(desc_key, False)
                 saldo     = max(vref - ejecutado, 0)
                 if saldo == 0 or (pag_comp and ejecutado >= vref):
-                    continue  # totalmente cubierto
+                    continue
                 fila = row.copy()
                 fila["Valor Referencia"] = saldo
                 filas_pendientes.append(fila)
             else:
-                # Caso B: proyectado sin referencia → pendiente normal por Valor Referencia
+                # Caso B: proyectado sin referencia → solo si NO hay movimiento pagado igual
+                if desc_key in descripciones_pagadas:
+                    continue  # ya fue pagado → no duplicar
                 filas_pendientes.append(row)
 
         elif tiene_asociado:
-            # Casos D y E: movimiento con asociado
             key_pa = col_pa_v.upper()
             if key_pa in items_con_referencia:
-                continue  # Caso D: absorbido por el proyectado con referencia
+                continue  # Caso D: absorbido por proyectado con referencia
             else:
                 filas_pendientes.append(row)  # Caso E: aparece normal
 
