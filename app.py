@@ -487,7 +487,7 @@ if df_mes_g.empty:
             # Solo los que tienen Movimiento Recurrente = True en ese mes exacto
             activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
             if not activos.empty:
-                df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Es Proyectado","Presupuesto Asociado"])
+                df_mes_g = activos.reindex(columns=["Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Es Proyectado","Presupuesto Asociado","Es Referencia"])
                 df_mes_g["Pagado"]               = False
                 df_mes_g["Fecha Pago"]           = pd.NaT
                 df_mes_g["Es Proyectado"]        = df_mes_g["Es Proyectado"].fillna(False)
@@ -1169,6 +1169,15 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
 
 
 st.markdown("<br>", unsafe_allow_html=True)
+
+# DEBUG TEMPORAL — muestra qué valores de Es Referencia van a guardarse
+with st.expander("🔍 Debug Es Referencia (temporal)", expanded=False):
+    if not df_ed_g.empty and "Es Referencia" in df_ed_g.columns:
+        _debug = df_ed_g[df_ed_g["Es Proyectado"] == True][["Descripción","Es Referencia","Valor Referencia"]].copy()
+        st.dataframe(_debug, use_container_width=True)
+    else:
+        st.write("Es Referencia no está en df_ed_g")
+
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     # df_ed_g ya es el DataFrame unificado (proyectados + movimientos)
