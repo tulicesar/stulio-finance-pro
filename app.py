@@ -839,16 +839,19 @@ if df_mes_g.empty:
                     "Pagado","Movimiento Recurrente","Es Proyectado",
                     "Presupuesto Asociado","Es Referencia"
                 ])
-                df_mes_g["Pagado"]    = False
+                df_mes_g["Pagado"]     = False
                 df_mes_g["Fecha Pago"] = pd.NaT
-                # Para proyectados: resetear Monto a 0 pero conservar Valor Referencia y Es Referencia
-                mask_proy = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
-                df_mes_g.loc[mask_proy, "Monto"]  = 0.0
-                df_mes_g.loc[mask_proy, "Pagado"] = False
-                # Para movimientos normales: resetear monto a 0 también (se registrará en el mes)
-                df_mes_g.loc[~mask_proy, "Monto"] = 0.0
-                df_mes_g["Es Proyectado"]  = df_mes_g["Es Proyectado"].fillna(False).astype(bool)
-                df_mes_g["Es Referencia"]  = df_mes_g["Es Referencia"].fillna(False).astype(bool)
+                df_mes_g["Monto"]      = 0.0
+
+                # ── CORRECCIÓN CLAVE ──────────────────────────────────────────
+                # Ítems con Valor Referencia > 0 son proyectados aunque hayan sido
+                # guardados incorrectamente como es_proyectado=false en BD
+                df_mes_g["Es Proyectado"] = df_mes_g.apply(
+                    lambda r: True if float(r.get("Valor Referencia", 0) or 0) > 0
+                              else bool(r.get("Es Proyectado", False)),
+                    axis=1
+                )
+                df_mes_g["Es Referencia"] = df_mes_g["Es Referencia"].fillna(False).astype(bool)
                 df_mes_g["Presupuesto Asociado"] = df_mes_g["Presupuesto Asociado"].where(
                     df_mes_g["Presupuesto Asociado"].notna(), other=None
                 )
