@@ -1815,11 +1815,7 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     if modulo_billeteras_activo and lista_billeteras:
         if not bill_nomina:
             _errores_bill.append("❌ El **Ingreso Fijo** no tiene billetera asignada.")
-        _oi_sin_bill = df_oi_limpio[
-            df_oi_limpio["Billetera"].fillna("").astype(str).str.strip() == ""
-        ] if "Billetera" in df_oi_limpio.columns else pd.DataFrame()
-        if not _oi_sin_bill.empty:
-            _errores_bill.append(f"❌ **{len(_oi_sin_bill)} ingreso(s) adicional(es)** sin billetera asignada.")
+        # Ingresos adicionales: billetera opcional (permite ajustes de nivelación)
         _mov_pagados_sin_bill = df_g_limpio[
             (df_g_limpio["Pagado"].fillna(False).astype(bool)) &
             (df_g_limpio["Es Proyectado"].fillna(False).astype(bool) == False) &
