@@ -25,6 +25,7 @@ for key, default in {
     "usuario_id": None,
     "u_nombre_completo": "",
     "mostrar_eliminar": False,
+    "cierre_mes_activo": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -668,6 +669,29 @@ with st.sidebar:
                         st.error(f"❌ Error: {e}")
 
     st.divider()
+
+    # ── 🔒 CIERRE DE MES ──────────────────────────────────
+    st.markdown(
+        '<p style="color:#fca311;font-weight:800;font-size:0.78rem;'
+        'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">'
+        '🔒 Cierre de Mes</p>',
+        unsafe_allow_html=True
+    )
+    _cierre_nuevo = st.toggle(
+        "Activar cierre de mes",
+        value=st.session_state.get("cierre_mes_activo", False),
+        key="toggle_cierre_mes",
+        help="Nivela los ítems proyectados con remanente al final del mes: "
+             "los excedentes no gastados dejan de contarse como obligaciones pendientes, "
+             "igualando Dinero Disponible con Saldo a Favor."
+    )
+    if _cierre_nuevo != st.session_state.get("cierre_mes_activo", False):
+        st.session_state["cierre_mes_activo"] = _cierre_nuevo
+        st.rerun()
+    if st.session_state.get("cierre_mes_activo", False):
+        st.caption("✅ Remanentes proyectados excluidos de pendientes.")
+
+    st.divider()
     if st.button("🚪 Salir"):
         cerrar_sesion()
 
@@ -1082,6 +1106,16 @@ it, vp, _vpy_old, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s
 
 # ── vpy desde calcular_pendientes → mismo número que la tabla visual ──
 _df_pend_kpi = calcular_pendientes(df_ed_g)
+
+# ── CIERRE DE MES: excluir remanentes de proyectados con monto parcial ──
+# Un remanente = ítem proyectado NO pagado donde ya se gastó algo (Monto > 0)
+# pero no alcanzó el Valor Referencia. Al cierre, ese delta no es deuda real.
+if st.session_state.get("cierre_mes_activo", False) and not _df_pend_kpi.empty:
+    _df_pend_kpi = _df_pend_kpi[~(
+        (_df_pend_kpi["Es Proyectado"].fillna(False).astype(bool)) &
+        (pd.to_numeric(_df_pend_kpi["Monto"], errors="coerce").fillna(0) == 0)
+    )].copy()
+
 if not _df_pend_kpi.empty:
     _df_pend_kpi["_val"] = _df_pend_kpi.apply(
         lambda r: float(r.get("Monto", 0) or 0) if float(r.get("Monto", 0) or 0) > 0
@@ -1181,6 +1215,13 @@ def render_resumen_gastos(df):
 
     df_pagados_t = df[df["Pagado"].fillna(False).astype(bool) == True].copy()
     df_pend_adj  = calcular_pendientes(df)  # ← usa la función unificada
+
+    # ── CIERRE DE MES: excluir remanentes proyectados de la tabla visual ──
+    if st.session_state.get("cierre_mes_activo", False) and not df_pend_adj.empty:
+        df_pend_adj = df_pend_adj[~(
+            (df_pend_adj["Es Proyectado"].fillna(False).astype(bool)) &
+            (pd.to_numeric(df_pend_adj["Monto"], errors="coerce").fillna(0) == 0)
+        )].copy()
 
     col1, col2 = st.columns(2)
     with col1:
