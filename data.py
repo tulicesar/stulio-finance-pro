@@ -5,51 +5,156 @@ import pandas as pd
 import streamlit as st
 
 
-# --- CARGAR BASE DE DATOS ---
+# ── CARGAR BASE DE DATOS ──────────────────────────────────────────────────────
 def cargar_bd(supabase, u_id, token):
     try:
         supabase.postgrest.auth(token)
-        r_g  = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
-        r_i  = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
-        r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+        r_g   = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
+        r_i   = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
+        r_oi  = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+        r_b   = supabase.table("billeteras").select("*").eq("usuario_id", u_id).order("created_at").execute()
+        r_sab = supabase.table("saldo_anterior_billetera").select("*").eq("usuario_id", u_id).execute()
 
-        df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame(columns=["anio","periodo","categoria","descripcion","monto","valor_referencia","pagado","recurrente","usuario_id","fecha_pago","es_proyectado","presupuesto_asociado","es_referencia"])
-        df_i  = pd.DataFrame(r_i.data)  if r_i.data  else pd.DataFrame(columns=["anio","periodo","saldo_anterior","nomina","otros","usuario_id"])
-        df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio","periodo","descripcion","monto","usuario_id"])
+        df_g = pd.DataFrame(r_g.data) if r_g.data else pd.DataFrame(columns=[
+            "anio","periodo","categoria","descripcion","monto","valor_referencia",
+            "pagado","recurrente","usuario_id","fecha_pago","es_proyectado",
+            "presupuesto_asociado","es_referencia","billetera_pago"
+        ])
+        df_i = pd.DataFrame(r_i.data) if r_i.data else pd.DataFrame(columns=[
+            "anio","periodo","saldo_anterior","nomina","otros","usuario_id","billetera"
+        ])
+        df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=[
+            "anio","periodo","descripcion","monto","usuario_id","billetera"
+        ])
+        df_b = pd.DataFrame(r_b.data) if r_b.data else pd.DataFrame(columns=[
+            "id","usuario_id","nombre","created_at"
+        ])
+        df_sab = pd.DataFrame(r_sab.data) if r_sab.data else pd.DataFrame(columns=[
+            "id","usuario_id","periodo","anio","billetera","monto"
+        ])
 
-        df_g  = df_g.rename(columns={
-            "anio":"Año","periodo":"Periodo","categoria":"Categoría",
-            "descripcion":"Descripción","monto":"Monto",
-            "valor_referencia":"Valor Referencia","pagado":"Pagado",
-            "recurrente":"Movimiento Recurrente","usuario_id":"Usuario",
-            "fecha_pago":"Fecha Pago","es_proyectado":"Es Proyectado",
+        df_g = df_g.rename(columns={
+            "anio":"Año", "periodo":"Periodo", "categoria":"Categoría",
+            "descripcion":"Descripción", "monto":"Monto",
+            "valor_referencia":"Valor Referencia", "pagado":"Pagado",
+            "recurrente":"Movimiento Recurrente", "usuario_id":"Usuario",
+            "fecha_pago":"Fecha Pago", "es_proyectado":"Es Proyectado",
             "presupuesto_asociado":"Presupuesto Asociado",
-            "es_referencia":"Es Referencia"
+            "es_referencia":"Es Referencia",
+            "billetera_pago":"Billetera Pago"
         })
-        df_i  = df_i.rename(columns={
-            "anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior",
-            "nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"
+        df_i = df_i.rename(columns={
+            "anio":"Año", "periodo":"Periodo", "saldo_anterior":"SaldoAnterior",
+            "nomina":"Nomina", "otros":"Otros", "usuario_id":"Usuario",
+            "billetera":"Billetera"
         })
         df_oi = df_oi.rename(columns={
-            "anio":"Año","periodo":"Periodo","descripcion":"Descripción",
-            "monto":"Monto","usuario_id":"Usuario"
+            "anio":"Año", "periodo":"Periodo", "descripcion":"Descripción",
+            "monto":"Monto", "usuario_id":"Usuario", "billetera":"Billetera"
         })
+        if "anio" in df_sab.columns:
+            df_sab = df_sab.rename(columns={"anio":"Año","periodo":"Periodo"})
 
-        for df in [df_g, df_i, df_oi]:
+        for df in [df_g, df_i, df_oi, df_sab]:
             if "Año" in df.columns:
                 df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
 
         if "Fecha Pago" in df_g.columns:
             df_g["Fecha Pago"] = pd.to_datetime(df_g["Fecha Pago"], errors="coerce")
 
-        return df_g, df_i, df_oi
+        return df_g, df_i, df_oi, df_b, df_sab
 
     except Exception as e:
         st.error(f"Error al cargar datos: {e}")
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+
+# ── CARGAR DATOS DE OTRO USUARIO (vista consolidada) ─────────────────────────
+def cargar_bd_usuario(supabase, u_id, token):
+    try:
+        supabase.postgrest.auth(token)
+        r_g  = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
+        r_i  = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
+        r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+
+        df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame()
+        df_i  = pd.DataFrame(r_i.data)  if r_i.data  else pd.DataFrame()
+        df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame()
+
+        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría",
+            "descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia",
+            "pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario",
+            "fecha_pago":"Fecha Pago","es_proyectado":"Es Proyectado",
+            "presupuesto_asociado":"Presupuesto Asociado","es_referencia":"Es Referencia",
+            "billetera_pago":"Billetera Pago"})
+        df_i  = df_i.rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior",
+            "nomina":"Nomina","otros":"Otros","usuario_id":"Usuario","billetera":"Billetera"})
+        df_oi = df_oi.rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripción",
+            "monto":"Monto","usuario_id":"Usuario","billetera":"Billetera"})
+
+        for df in [df_g, df_i, df_oi]:
+            if "Año" in df.columns:
+                df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
+        if "Fecha Pago" in df_g.columns:
+            df_g["Fecha Pago"] = pd.to_datetime(df_g["Fecha Pago"], errors="coerce")
+
+        return df_g, df_i, df_oi
+    except:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
-# --- CALCULAR MÉTRICAS (vectorizado con pandas) ---
+# ── CALCULAR SALDO REAL POR BILLETERA ────────────────────────────────────────
+def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s):
+    """
+    Retorna dict {nombre_billetera: saldo_real} para el periodo dado.
+    Saldo real = saldo_anterior + ingresos_recibidos - gastos_pagados
+    Solo cuenta movimientos PAGADOS en gastos.
+    """
+    saldos = {b: 0.0 for b in lista_billeteras}
+    if not lista_billeteras:
+        return saldos
+
+    # 1. Saldo anterior distribuido por billetera
+    if not df_sab.empty:
+        filtro = (df_sab["Periodo"] == mes_s) & (df_sab["Año"] == anio_s)
+        for _, row in df_sab[filtro].iterrows():
+            b = str(row.get("billetera") or row.get("Billetera", "")).strip()
+            if b in saldos:
+                saldos[b] += float(row.get("monto") or row.get("Monto", 0) or 0)
+
+    # 2. Ingreso fijo (nómina) del mes
+    if not df_i.empty:
+        filtro_i = (df_i["Periodo"] == mes_s) & (df_i["Año"] == anio_s)
+        for _, row in df_i[filtro_i].iterrows():
+            b = str(row.get("Billetera", "") or "").strip()
+            if b in saldos:
+                saldos[b] += float(row.get("Nomina", 0) or 0)
+
+    # 3. Otros ingresos del mes
+    if not df_oi.empty:
+        filtro_oi = (df_oi["Periodo"] == mes_s) & (df_oi["Año"] == anio_s)
+        for _, row in df_oi[filtro_oi].iterrows():
+            b = str(row.get("Billetera", "") or "").strip()
+            if b in saldos:
+                saldos[b] += float(row.get("Monto", 0) or 0)
+
+    # 4. Gastos PAGADOS del mes (restan)
+    if not df_g.empty:
+        filtro_g = (
+            (df_g["Periodo"] == mes_s) &
+            (df_g["Año"] == anio_s) &
+            (df_g["Pagado"].fillna(False).astype(bool)) &
+            (df_g["Es Proyectado"].fillna(False).astype(bool) == False)
+        )
+        for _, row in df_g[filtro_g].iterrows():
+            b = str(row.get("Billetera Pago", "") or "").strip()
+            if b in saldos:
+                saldos[b] -= float(row.get("Monto", 0) or 0)
+
+    return saldos
+
+
+# ── CALCULAR MÉTRICAS ─────────────────────────────────────────────────────────
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
 
@@ -61,39 +166,26 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     df["Valor Referencia"] = pd.to_numeric(df["Valor Referencia"], errors="coerce").fillna(0)
     df["Pagado"]           = df["Pagado"].fillna(False).astype(bool)
 
-    # Pagado
     vp = float(df.loc[df["Pagado"], "Monto"].sum())
 
-    # Pendiente
     df_pend = df[~df["Pagado"]].copy()
-
     if df_pend.empty:
         vpy = 0.0
     else:
         df_pend["_base"] = df_pend["Monto"].where(
             df_pend["Monto"] > 0, df_pend["Valor Referencia"]
         )
-
         tiene_proyectados = (
             "Es Proyectado" in df.columns and
             "Presupuesto Asociado" in df.columns and
             df_pend.get("Es Proyectado", pd.Series(False)).any()
         )
-
         if tiene_proyectados:
             _pa    = df["Presupuesto Asociado"].astype(str).str.strip()
             validos = ~_pa.isin(["nan", "None", "NaN", ""])
-            # ✅ Usar Monto si > 0, sino Valor Referencia para los asociados
             df_asoc = df[validos].copy()
-            df_asoc["_val"] = df_asoc["Monto"].where(
-                df_asoc["Monto"] > 0, df_asoc["Valor Referencia"]
-            )
-            asociados_map = (
-                df_asoc
-                .groupby(_pa[validos])["_val"]
-                .sum()
-                .to_dict()
-            )
+            df_asoc["_val"] = df_asoc["Monto"].where(df_asoc["Monto"] > 0, df_asoc["Valor Referencia"])
+            asociados_map = df_asoc.groupby(_pa[validos])["_val"].sum().to_dict()
 
             def pendiente_proyectado(row):
                 nombre    = str(row.get("Descripción", "")).strip()
@@ -101,12 +193,10 @@ def calcular_metricas(df_g, nom, otr, s_ant):
                 asociados = float(asociados_map.get(nombre, 0))
                 return max(vref - asociados, 0)
 
-            es_proy = df_pend.get("Es Proyectado", pd.Series(False)).fillna(False).astype(bool)
             df_pend["_base"] = df_pend.apply(
                 lambda r: pendiente_proyectado(r) if bool(r.get("Es Proyectado", False)) else r["_base"],
                 axis=1
             )
-
         vpy = float(df_pend["_base"].sum())
 
     bf       = it - vp - vpy
@@ -114,73 +204,47 @@ def calcular_metricas(df_g, nom, otr, s_ant):
     return it, vp, vpy, float(it - vp), bf, ahorro_p
 
 
-
-# --- CARGAR DATOS DE OTRO USUARIO (para vista consolidada) ---
-def cargar_bd_usuario(supabase, u_id, token):
-    """Igual que cargar_bd pero sin mostrar errores en UI — para uso interno."""
-    try:
-        supabase.postgrest.auth(token)
-        r_g  = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
-        r_i  = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
-        r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
-
-        df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame(columns=["anio","periodo","categoria","descripcion","monto","valor_referencia","pagado","recurrente","usuario_id","fecha_pago","es_proyectado","presupuesto_asociado","es_referencia"])
-        df_i  = pd.DataFrame(r_i.data)  if r_i.data  else pd.DataFrame(columns=["anio","periodo","saldo_anterior","nomina","otros","usuario_id"])
-        df_oi = pd.DataFrame(r_oi.data) if r_oi.data else pd.DataFrame(columns=["anio","periodo","descripcion","monto","usuario_id"])
-
-        df_g  = df_g.rename(columns={"anio":"Año","periodo":"Periodo","categoria":"Categoría","descripcion":"Descripción","monto":"Monto","valor_referencia":"Valor Referencia","pagado":"Pagado","recurrente":"Movimiento Recurrente","usuario_id":"Usuario","fecha_pago":"Fecha Pago","es_proyectado":"Es Proyectado","presupuesto_asociado":"Presupuesto Asociado","es_referencia":"Es Referencia"})
-        df_i  = df_i.rename(columns={"anio":"Año","periodo":"Periodo","saldo_anterior":"SaldoAnterior","nomina":"Nomina","otros":"Otros","usuario_id":"Usuario"})
-        df_oi = df_oi.rename(columns={"anio":"Año","periodo":"Periodo","descripcion":"Descripción","monto":"Monto","usuario_id":"Usuario"})
-
-        for df in [df_g, df_i, df_oi]:
-            if "Año" in df.columns:
-                df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
-        if "Fecha Pago" in df_g.columns:
-            df_g["Fecha Pago"] = pd.to_datetime(df_g["Fecha Pago"], errors="coerce")
-
-        return df_g, df_i, df_oi
-    except:
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-
-# --- CARGAR VÍNCULOS DEL USUARIO ---
+# ── CARGAR VÍNCULOS ───────────────────────────────────────────────────────────
 def cargar_vinculos(supabase, u_id, token):
-    """Retorna lista de vínculos activos del usuario (como A o como B)."""
     try:
         supabase.postgrest.auth(token)
         _uid = str(u_id)
-        # Buscar como usuario_a
         r_a = supabase.table("vinculos_usuarios").select("*").eq("usuario_id_a", _uid).execute()
-        # Buscar como usuario_b
         r_b = supabase.table("vinculos_usuarios").select("*").eq("usuario_id_b", _uid).execute()
         vinculos = []
-        if r_a.data:
-            vinculos.extend(r_a.data)
-        if r_b.data:
-            vinculos.extend(r_b.data)
+        if r_a.data: vinculos.extend(r_a.data)
+        if r_b.data: vinculos.extend(r_b.data)
         return vinculos
     except:
         return []
 
 
-# --- BUSCAR USUARIO POR EMAIL ---
+# ── BUSCAR USUARIO POR EMAIL ──────────────────────────────────────────────────
 def buscar_usuario_por_email(supabase, email, token):
-    """Busca un usuario en la tabla usuarios por su email."""
     try:
         supabase.postgrest.auth(token)
         r = supabase.table("usuarios").select("usuario_id,nombre_completo,email").eq("email", email.strip().lower()).execute()
-        if r.data:
-            return r.data[0]
-        return None
+        return r.data[0] if r.data else None
     except:
         return None
-def guardar_bd(supabase, token, u_id, mes_s, anio_s, df_g_limpio, df_oi_limpio, s_in, n_in, otr_v):
+
+
+# ── GUARDAR BD ────────────────────────────────────────────────────────────────
+def guardar_bd(supabase, token, u_id, mes_s, anio_s,
+               df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
+               bill_nomina="", df_sab_nuevo=None):
+    """
+    Parámetros nuevos:
+      bill_nomina   — nombre de billetera asignada al ingreso fijo
+      df_sab_nuevo  — DataFrame con columnas [billetera, monto] del saldo anterior
+    """
     supabase.postgrest.auth(token)
 
     # Borrar registros anteriores del mes
     supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
     supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
     supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+    supabase.table("saldo_anterior_billetera").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
 
     # Insertar gastos
     if not df_g_limpio.empty:
@@ -192,6 +256,7 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s, df_g_limpio, df_oi_limpio, 
                 if fp is not None and str(fp) not in ["None","NaT",""]:
                     try: fecha_p = str(fp)[:10]
                     except: fecha_p = None
+            bill_pago = str(row.get("Billetera Pago", "") or "").strip()
             gastos_db.append({
                 "anio": int(anio_s), "periodo": str(mes_s),
                 "categoria": str(row["Categoría"]), "descripcion": str(row["Descripción"]),
@@ -201,22 +266,60 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s, df_g_limpio, df_oi_limpio, 
                 "es_proyectado": bool(row.get("Es Proyectado", False)),
                 "es_referencia": bool(row.get("Es Referencia", False)),
                 "presupuesto_asociado": str(row["Presupuesto Asociado"]) if row.get("Presupuesto Asociado") not in [None,"None",""] else None,
+                "billetera_pago": bill_pago if bill_pago else None,
                 "usuario_id": str(u_id)
             })
         supabase.table("gastos").insert(gastos_db).execute()
 
     # Insertar otros ingresos
     if not df_oi_limpio.empty:
-        otros_db = [{
-            "anio": int(anio_s), "periodo": str(mes_s),
-            "descripcion": str(row["Descripción"]), "monto": float(row["Monto"]),
-            "usuario_id": str(u_id)
-        } for _, row in df_oi_limpio.iterrows()]
+        otros_db = []
+        for _, row in df_oi_limpio.iterrows():
+            bill_oi = str(row.get("Billetera", "") or "").strip()
+            otros_db.append({
+                "anio": int(anio_s), "periodo": str(mes_s),
+                "descripcion": str(row["Descripción"]), "monto": float(row["Monto"]),
+                "billetera": bill_oi if bill_oi else None,
+                "usuario_id": str(u_id)
+            })
         supabase.table("otros_ingresos").insert(otros_db).execute()
 
     # Insertar ingreso base
     supabase.table("ingresos_base").insert({
         "anio": int(anio_s), "periodo": str(mes_s),
         "saldo_anterior": float(s_in), "nomina": float(n_in),
-        "otros": float(otr_v), "usuario_id": str(u_id)
+        "otros": float(otr_v),
+        "billetera": bill_nomina if bill_nomina else None,
+        "usuario_id": str(u_id)
     }).execute()
+
+    # Insertar saldo anterior por billetera
+    if df_sab_nuevo is not None and not df_sab_nuevo.empty:
+        sab_db = []
+        for _, row in df_sab_nuevo.iterrows():
+            b = str(row.get("billetera","")).strip()
+            m = float(row.get("monto", 0) or 0)
+            if b and m != 0:
+                sab_db.append({
+                    "usuario_id": str(u_id), "periodo": str(mes_s),
+                    "anio": int(anio_s), "billetera": b, "monto": m
+                })
+        if sab_db:
+            supabase.table("saldo_anterior_billetera").insert(sab_db).execute()
+
+
+# ── GUARDAR BILLETERAS ────────────────────────────────────────────────────────
+def guardar_billeteras(supabase, token, u_id, nombres_lista):
+    """Sincroniza la lista completa de billeteras del usuario."""
+    try:
+        supabase.postgrest.auth(token)
+        supabase.table("billeteras").delete().eq("usuario_id", str(u_id)).execute()
+        if nombres_lista:
+            rows = [{"usuario_id": str(u_id), "nombre": n.strip()}
+                    for n in nombres_lista if n.strip()]
+            if rows:
+                supabase.table("billeteras").insert(rows).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar billeteras: {e}")
+        return False
