@@ -69,6 +69,31 @@ def cargar_bd(supabase, u_id, token):
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
+# ── CARGAR / GUARDAR CONFIG DE USUARIO ───────────────────────────────────────
+def cargar_config(supabase, u_id, token):
+    """Retorna dict con configuración del usuario. Claves: billeteras_desde_periodo, billeteras_desde_anio."""
+    try:
+        supabase.postgrest.auth(token)
+        r = supabase.table("config_usuario").select("*").eq("usuario_id", str(u_id)).execute()
+        if r.data:
+            return r.data[0]
+        return {}
+    except:
+        return {}
+
+
+def guardar_config(supabase, u_id, token, **kwargs):
+    """Upsert de configuración del usuario. Pasar como kwargs los campos a actualizar."""
+    try:
+        supabase.postgrest.auth(token)
+        payload = {"usuario_id": str(u_id), **kwargs}
+        supabase.table("config_usuario").upsert(payload, on_conflict="usuario_id").execute()
+        return True
+    except Exception as e:
+        st.error(f"Error al guardar configuración: {e}")
+        return False
+
+
 # ── CARGAR DATOS DE OTRO USUARIO (vista consolidada) ─────────────────────────
 def cargar_bd_usuario(supabase, u_id, token):
     try:
