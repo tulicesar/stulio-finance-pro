@@ -722,28 +722,38 @@ with st.sidebar:
     # ── 💳 GESTIÓN DE BILLETERAS ──────────────────────────
     with st.expander("💳 Mis Billeteras"):
         _nombres_actuales = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+
+        # Mostrar billeteras existentes con botón eliminar
         if _nombres_actuales:
-            st.markdown(
-                "**Billeteras registradas:**  \n" +
-                "  \n".join([f"• {n}" for n in _nombres_actuales])
-            )
+            st.markdown("**Billeteras registradas:**")
+            for _bn in _nombres_actuales:
+                _col_n, _col_x = st.columns([5, 1])
+                _col_n.markdown(f"💳 {_bn}")
+                if _col_x.button("🗑", key=f"del_bill_{_bn}", help=f"Eliminar {_bn}"):
+                    _lista_nueva = [x for x in _nombres_actuales if x != _bn]
+                    if guardar_billeteras(supabase, token, u_id, _lista_nueva):
+                        st.rerun()
             st.markdown("---")
         else:
-            st.caption("Aún no tienes billeteras. Agrégalas abajo.")
-        _bill_text = st.text_area(
-            "Editar lista (una billetera por línea):",
-            value="\n".join(_nombres_actuales),
-            height=110,
-            key="ta_billeteras",
-            placeholder="Cuenta Ahorros\nNequi\nEfectivo"
+            st.caption("Aún no tienes billeteras.")
+
+        # Agregar nueva billetera
+        _nueva_bill = st.text_input(
+            "Nueva billetera",
+            key="input_nueva_bill",
+            placeholder="Ej: Cuenta Ahorros, Nequi, Efectivo"
         )
-        if st.button("💾 Guardar billeteras", key="btn_save_bill", use_container_width=True):
-            _nuevas = [n.strip() for n in _bill_text.splitlines() if n.strip()]
-            if not _nuevas:
-                st.error("❌ Escribe al menos una billetera.")
-            elif guardar_billeteras(supabase, token, u_id, _nuevas):
-                st.success(f"✅ {len(_nuevas)} billetera(s) guardada(s).")
-                st.rerun()
+        if st.button("➕ Agregar", key="btn_add_bill", use_container_width=True):
+            _nueva_bill = _nueva_bill.strip()
+            if not _nueva_bill:
+                st.error("❌ Escribe un nombre.")
+            elif _nueva_bill in _nombres_actuales:
+                st.error(f"❌ Ya existe una billetera llamada **{_nueva_bill}**.")
+            else:
+                _lista_nueva = _nombres_actuales + [_nueva_bill]
+                if guardar_billeteras(supabase, token, u_id, _lista_nueva):
+                    st.success(f"✅ '{_nueva_bill}' agregada.")
+                    st.rerun()
 
     # ── 🔒 CIERRE DE MES ──────────────────────────────────
     st.markdown(
