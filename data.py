@@ -116,8 +116,14 @@ def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s
 
     # 1. Saldo anterior distribuido por billetera
     if not df_sab.empty:
-        filtro = (df_sab["Periodo"] == mes_s) & (df_sab["Año"] == anio_s)
-        for _, row in df_sab[filtro].iterrows():
+        # df_sab puede venir como tabla completa de BD (con Periodo/Año)
+        # o como df_sab_input local (solo columnas billetera/monto sin filtrar)
+        if "Periodo" in df_sab.columns and "Año" in df_sab.columns:
+            filtro = (df_sab["Periodo"] == mes_s) & (df_sab["Año"] == anio_s)
+            _df_sab_iter = df_sab[filtro]
+        else:
+            _df_sab_iter = df_sab  # ya viene filtrado por periodo desde el sidebar
+        for _, row in _df_sab_iter.iterrows():
             b = str(row.get("billetera") or row.get("Billetera", "")).strip()
             if b in saldos:
                 saldos[b] += float(row.get("monto") or row.get("Monto", 0) or 0)
@@ -313,12 +319,16 @@ def guardar_billeteras(supabase, token, u_id, nombres_lista):
     """Sincroniza la lista completa de billeteras del usuario."""
     try:
         supabase.postgrest.auth(token)
+        # Borrar todas las existentes
         supabase.table("billeteras").delete().eq("usuario_id", str(u_id)).execute()
-        if nombres_lista:
-            rows = [{"usuario_id": str(u_id), "nombre": n.strip()}
-                    for n in nombres_lista if n.strip()]
-            if rows:
-                supabase.table("billeteras").insert(rows).execute()
+        # Insertar una por una para evitar fallos silenciosos de RLS en batch
+        for n in nombres_lista:
+            n = n.strip()
+            if n:
+                supabase.table("billeteras").insert({
+                    "usuario_id": str(u_id),
+                    "nombre": n
+                }).execute()
         return True
     except Exception as e:
         st.error(f"Error al guardar billeteras: {e}")
