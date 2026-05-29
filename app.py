@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from data    import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
+from data    import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
 from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
@@ -433,6 +433,7 @@ token = st.session_state.token
 supabase.postgrest.auth(token)
 try:
     df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full = cargar_bd(supabase, u_id, token)
+    cfg_usuario = cargar_config(supabase, u_id, token)
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower():
         st.warning("⚠️ Tu sesión expiró. Por favor inicia sesión nuevamente.")
@@ -505,26 +506,42 @@ with st.sidebar:
 
     # ── Lista de billeteras del usuario ───────────────────
     lista_billeteras = df_b_full["nombre"].tolist() if not df_b_full.empty else []
-    opciones_bill    = [""] + lista_billeteras  # opción vacía al inicio
+    opciones_bill    = [""] + lista_billeteras
 
-    # Billetera asignada al ingreso fijo
-    _bill_nom_saved = ""
-    if not i_m_act.empty and "Billetera" in i_m_act.columns:
-        _bill_nom_saved = str(i_m_act["Billetera"].iloc[0] or "")
-    _bill_nom_idx = opciones_bill.index(_bill_nom_saved) if _bill_nom_saved in opciones_bill else 0
-    bill_nomina = st.selectbox(
-        "Billetera del ingreso fijo",
-        options=opciones_bill,
-        index=_bill_nom_idx,
-        key="sel_bill_nomina"
-    )
+    # ── Determinar si billeteras están activas para este periodo ──
+    # Activo si este mes/año >= periodo en que se activó
+    _bill_desde_p = cfg_usuario.get("billeteras_desde_periodo", None)
+    _bill_desde_a = cfg_usuario.get("billeteras_desde_anio", None)
+    if _bill_desde_p and _bill_desde_a:
+        _idx_act  = meses_lista.index(mes_s)   if mes_s   in meses_lista else 0
+        _idx_desd = meses_lista.index(_bill_desde_p) if _bill_desde_p in meses_lista else 0
+        modulo_billeteras_activo = (
+            int(anio_s) > int(_bill_desde_a) or
+            (int(anio_s) == int(_bill_desde_a) and _idx_act >= _idx_desd)
+        )
+    else:
+        modulo_billeteras_activo = False
 
-    placeholder_otros = st.empty()
+    # Billetera nómina y saldo input (valores vacíos si módulo inactivo)
+    bill_nomina  = ""
+    df_sab_input = pd.DataFrame(columns=["billetera","monto"])
 
-    # Saldo anterior distribuido por billetera
-    if lista_billeteras:
-        with st.expander("💳 Saldo anterior por billetera"):
-            st.caption(f"Distribuye los ${s_in:,.0f} del saldo anterior entre tus billeteras.")
+    if modulo_billeteras_activo and lista_billeteras:
+        # Billetera del ingreso fijo
+        _bill_nom_saved = ""
+        if not i_m_act.empty and "Billetera" in i_m_act.columns:
+            _bill_nom_saved = str(i_m_act["Billetera"].iloc[0] or "")
+        _bill_nom_idx = opciones_bill.index(_bill_nom_saved) if _bill_nom_saved in opciones_bill else 0
+        bill_nomina = st.selectbox(
+            "💳 Billetera del ingreso fijo",
+            options=opciones_bill,
+            index=_bill_nom_idx,
+            key="sel_bill_nomina"
+        )
+
+        # Saldo inicial por billetera (digitable directo)
+        with st.expander("💳 Saldo por billetera", expanded=True):
+            st.caption("Digita el saldo actual de cada billetera.")
             _sab_mes = df_sab_full[
                 (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
             ] if not df_sab_full.empty else pd.DataFrame()
@@ -534,6 +551,7 @@ with st.sidebar:
                     _b = str(_r.get("billetera") or _r.get("Billetera","")).strip()
                     _sab_dict[_b] = float(_r.get("monto") or _r.get("Monto", 0) or 0)
             sab_rows = []
+            _total_dist = 0.0
             for _b in lista_billeteras:
                 _m = _sab_dict.get(_b, 0.0)
                 _m_new = st.number_input(
@@ -541,16 +559,10 @@ with st.sidebar:
                     format="%.0f", key=f"sab_{_b}_{mes_s}_{anio_s}"
                 )
                 sab_rows.append({"billetera": _b, "monto": _m_new})
+                _total_dist += _m_new
             df_sab_input = pd.DataFrame(sab_rows)
-            _total_dist = df_sab_input["monto"].sum()
-            _diff = s_in - _total_dist
-            if abs(_diff) > 1:
-                st.warning(f"⚠️ Distribuido: ${_total_dist:,.0f} / Total: ${s_in:,.0f}  (diferencia: ${_diff:,.0f})")
-            else:
-                st.success(f"✅ Saldo distribuido correctamente: ${_total_dist:,.0f}")
-    else:
-        df_sab_input  = pd.DataFrame(columns=["billetera","monto"])
-        bill_nomina   = ""
+
+    placeholder_otros = st.empty()
 
     st.divider()
     st.subheader("📑 Extractos")
@@ -722,6 +734,32 @@ with st.sidebar:
     # ── 💳 GESTIÓN DE BILLETERAS ──────────────────────────
     with st.expander("💳 Mis Billeteras"):
         _nombres_actuales = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+
+        # ── Toggle de activación por periodo ──────────────
+        st.markdown(
+            '<p style="color:#fca311;font-weight:800;font-size:0.78rem;'
+            'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">'
+            'Módulo Billeteras</p>', unsafe_allow_html=True
+        )
+        if modulo_billeteras_activo:
+            st.caption(f"✅ Activo desde {_bill_desde_p} {_bill_desde_a}")
+            if st.button("🔴 Desactivar billeteras", key="btn_desact_bill", use_container_width=True):
+                guardar_config(supabase, u_id, token,
+                               billeteras_desde_periodo=None,
+                               billeteras_desde_anio=None)
+                st.rerun()
+        else:
+            st.caption(f"Inactivo para {mes_s} {anio_s}. Al activar, aplica a este mes y los siguientes.")
+            if _nombres_actuales:
+                if st.button(f"🟢 Activar desde {mes_s} {anio_s}", key="btn_act_bill", use_container_width=True):
+                    guardar_config(supabase, u_id, token,
+                                   billeteras_desde_periodo=mes_s,
+                                   billeteras_desde_anio=int(anio_s))
+                    st.rerun()
+            else:
+                st.warning("Primero crea al menos una billetera.")
+
+        st.markdown("---")
 
         # Mostrar billeteras existentes con botón eliminar
         if _nombres_actuales:
@@ -1070,14 +1108,22 @@ config_mov = {
     "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
     "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
                                 help="Ítem proyectado al que pertenece este gasto"),
-    "Billetera Pago":       st.column_config.SelectboxColumn("💳 Billetera", options=opciones_bill, width="medium",
-                                help="Billetera con la que pagas este gasto"),
     "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
     "Fecha Pago":           st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
 }
+if modulo_billeteras_activo and lista_billeteras:
+    config_mov["Billetera Pago"] = st.column_config.SelectboxColumn(
+        "💳 Billetera", options=opciones_bill, width="medium",
+        help="Billetera con la que pagas este gasto"
+    )
+
+_cols_mov = ["Categoría", "Descripción", "Monto", "Presupuesto Asociado"]
+if modulo_billeteras_activo and lista_billeteras:
+    _cols_mov.append("Billetera Pago")
+_cols_mov += ["Pagado", "Fecha Pago"]
 
 df_base_mov = df_mov_rows.reindex(
-    columns=["Categoría", "Descripción", "Monto", "Presupuesto Asociado", "Billetera Pago", "Pagado", "Fecha Pago"]
+    columns=_cols_mov
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
 # ── 📋 COPIAR AL REGISTRAR ────────────────────────────────────────────────────
@@ -1180,14 +1226,15 @@ df_base = df_ed_g.copy()
 
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-_oi_base  = df_mes_oi.reindex(columns=["Descripción","Monto","Billetera"]).reset_index(drop=True)
-_oi_config = {
-    "Monto":      st.column_config.NumberColumn("Monto", format="$ %,.0f"),
-    "Billetera":  st.column_config.SelectboxColumn("💳 Billetera", options=opciones_bill, width="medium",
-                      help="Cuenta donde recibes este ingreso"),
-}
-df_ed_oi  = st.data_editor(
-    _oi_base,
+_oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
+_oi_config = {"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")}
+if modulo_billeteras_activo and lista_billeteras:
+    _oi_config["Billetera"] = st.column_config.SelectboxColumn(
+        "💳 Billetera", options=opciones_bill, width="medium",
+        help="Cuenta donde recibes este ingreso"
+    )
+df_ed_oi = st.data_editor(
+    df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True),
     use_container_width=True, num_rows="dynamic",
     column_config=_oi_config,
     key="oi_ed"
@@ -1257,7 +1304,7 @@ st.divider()
 # ══════════════════════════════════════════════════════════
 # 💳 SECCIÓN BILLETERAS — entre KPIs y tablas de movimientos
 # ══════════════════════════════════════════════════════════
-if lista_billeteras:
+if modulo_billeteras_activo and lista_billeteras:
     st.markdown('<div class="section-header"><span>💳 Estado de Billeteras</span></div>', unsafe_allow_html=True)
 
     # Calcular saldo real por billetera con los datos del mes en memoria
@@ -1763,9 +1810,9 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     ].copy()
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción","Monto"], how="all")
 
-    # ── Validación billeteras (solo si hay billeteras configuradas) ──
+    # ── Validación billeteras (solo si módulo activo) ──
     _errores_bill = []
-    if lista_billeteras:
+    if modulo_billeteras_activo and lista_billeteras:
         if not bill_nomina:
             _errores_bill.append("❌ El **Ingreso Fijo** no tiene billetera asignada.")
         _oi_sin_bill = df_oi_limpio[
