@@ -679,17 +679,21 @@ with st.sidebar:
         '🔒 Cierre de Mes</p>',
         unsafe_allow_html=True
     )
-    _cierre_nuevo = st.toggle(
+
+    # Sincronizar el widget key con el valor guardado para este periodo
+    st.session_state["toggle_cierre_mes"] = st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False)
+
+    def _on_cierre_change():
+        st.session_state["cierre_mes_por_periodo"][_periodo_key] = st.session_state["toggle_cierre_mes"]
+
+    st.toggle(
         "Activar cierre de mes",
-        value=st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False),
         key="toggle_cierre_mes",
+        on_change=_on_cierre_change,
         help="Nivela los ítems proyectados con remanente al final del mes: "
              "los excedentes no gastados dejan de contarse como obligaciones pendientes, "
              "igualando Dinero Disponible con Saldo a Favor."
     )
-    if _cierre_nuevo != st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False):
-        st.session_state["cierre_mes_por_periodo"][_periodo_key] = _cierre_nuevo
-        st.rerun()
     if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False):
         st.caption("✅ Remanentes proyectados excluidos de pendientes.")
 
