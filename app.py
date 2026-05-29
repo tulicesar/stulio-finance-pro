@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from data    import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
+from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
 from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
