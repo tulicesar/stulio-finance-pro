@@ -721,19 +721,28 @@ with st.sidebar:
 
     # ── 💳 GESTIÓN DE BILLETERAS ──────────────────────────
     with st.expander("💳 Mis Billeteras"):
-        st.caption("Registra las cuentas donde guardas tu dinero.")
         _nombres_actuales = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+        if _nombres_actuales:
+            st.markdown(
+                "**Billeteras registradas:**  \n" +
+                "  \n".join([f"• {n}" for n in _nombres_actuales])
+            )
+            st.markdown("---")
+        else:
+            st.caption("Aún no tienes billeteras. Agrégalas abajo.")
         _bill_text = st.text_area(
-            "Una billetera por línea",
+            "Editar lista (una billetera por línea):",
             value="\n".join(_nombres_actuales),
-            height=100,
+            height=110,
             key="ta_billeteras",
             placeholder="Cuenta Ahorros\nNequi\nEfectivo"
         )
         if st.button("💾 Guardar billeteras", key="btn_save_bill", use_container_width=True):
             _nuevas = [n.strip() for n in _bill_text.splitlines() if n.strip()]
-            if guardar_billeteras(supabase, token, u_id, _nuevas):
-                st.success("✅ Billeteras guardadas.")
+            if not _nuevas:
+                st.error("❌ Escribe al menos una billetera.")
+            elif guardar_billeteras(supabase, token, u_id, _nuevas):
+                st.success(f"✅ {len(_nuevas)} billetera(s) guardada(s).")
                 st.rerun()
 
     # ── 🔒 CIERRE DE MES ──────────────────────────────────
