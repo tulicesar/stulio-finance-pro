@@ -1332,8 +1332,9 @@ inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
 with inf1:
     st.markdown('<div class="chart-card"><div class="chart-title">Desglose de Gastos</div>', unsafe_allow_html=True)
-    t_df = df_ed_g.copy()
-    t_df['V'] = t_df.apply(lambda r: r['Monto'] if r['Pagado'] else r['Valor Referencia'], axis=1)
+    # Solo movimientos reales ejecutados (excluye proyectados)
+    t_df = df_ed_g[df_ed_g["Es Proyectado"].fillna(False).astype(bool) == False].copy()
+    t_df['V'] = pd.to_numeric(t_df['Monto'], errors='coerce').fillna(0)
     if not t_df.empty and t_df['V'].sum() > 0:
         total_v = t_df['V'].sum()
         res = t_df.groupby("Categoría")['V'].sum().reset_index()
