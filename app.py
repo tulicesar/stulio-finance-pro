@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from data    import cargar_bd, calcular_metricas, guardar_bd, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
+from data    import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
 from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
@@ -432,7 +432,7 @@ token = st.session_state.token
 
 supabase.postgrest.auth(token)
 try:
-    df_g_full, df_i_full, df_oi_full = cargar_bd(supabase, u_id, token)
+    df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full = cargar_bd(supabase, u_id, token)
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower():
         st.warning("⚠️ Tu sesión expiró. Por favor inicia sesión nuevamente.")
@@ -503,7 +503,54 @@ with st.sidebar:
     n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
     n_in  = parse_moneda(n_txt)
 
+    # ── Lista de billeteras del usuario ───────────────────
+    lista_billeteras = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+    opciones_bill    = [""] + lista_billeteras  # opción vacía al inicio
+
+    # Billetera asignada al ingreso fijo
+    _bill_nom_saved = ""
+    if not i_m_act.empty and "Billetera" in i_m_act.columns:
+        _bill_nom_saved = str(i_m_act["Billetera"].iloc[0] or "")
+    _bill_nom_idx = opciones_bill.index(_bill_nom_saved) if _bill_nom_saved in opciones_bill else 0
+    bill_nomina = st.selectbox(
+        "Billetera del ingreso fijo",
+        options=opciones_bill,
+        index=_bill_nom_idx,
+        key="sel_bill_nomina"
+    )
+
     placeholder_otros = st.empty()
+
+    # Saldo anterior distribuido por billetera
+    if lista_billeteras:
+        with st.expander("💳 Saldo anterior por billetera"):
+            st.caption(f"Distribuye los ${s_in:,.0f} del saldo anterior entre tus billeteras.")
+            _sab_mes = df_sab_full[
+                (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
+            ] if not df_sab_full.empty else pd.DataFrame()
+            _sab_dict = {}
+            if not _sab_mes.empty:
+                for _, _r in _sab_mes.iterrows():
+                    _b = str(_r.get("billetera") or _r.get("Billetera","")).strip()
+                    _sab_dict[_b] = float(_r.get("monto") or _r.get("Monto", 0) or 0)
+            sab_rows = []
+            for _b in lista_billeteras:
+                _m = _sab_dict.get(_b, 0.0)
+                _m_new = st.number_input(
+                    f"{_b}", value=_m, step=1000.0,
+                    format="%.0f", key=f"sab_{_b}_{mes_s}_{anio_s}"
+                )
+                sab_rows.append({"billetera": _b, "monto": _m_new})
+            df_sab_input = pd.DataFrame(sab_rows)
+            _total_dist = df_sab_input["monto"].sum()
+            _diff = s_in - _total_dist
+            if abs(_diff) > 1:
+                st.warning(f"⚠️ Distribuido: ${_total_dist:,.0f} / Total: ${s_in:,.0f}  (diferencia: ${_diff:,.0f})")
+            else:
+                st.success(f"✅ Saldo distribuido correctamente: ${_total_dist:,.0f}")
+    else:
+        df_sab_input  = pd.DataFrame(columns=["billetera","monto"])
+        bill_nomina   = ""
 
     st.divider()
     st.subheader("📑 Extractos")
@@ -671,6 +718,23 @@ with st.sidebar:
                         st.error(f"❌ Error: {e}")
 
     st.divider()
+
+    # ── 💳 GESTIÓN DE BILLETERAS ──────────────────────────
+    with st.expander("💳 Mis Billeteras"):
+        st.caption("Registra las cuentas donde guardas tu dinero.")
+        _nombres_actuales = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+        _bill_text = st.text_area(
+            "Una billetera por línea",
+            value="\n".join(_nombres_actuales),
+            height=100,
+            key="ta_billeteras",
+            placeholder="Cuenta Ahorros\nNequi\nEfectivo"
+        )
+        if st.button("💾 Guardar billeteras", key="btn_save_bill", use_container_width=True):
+            _nuevas = [n.strip() for n in _bill_text.splitlines() if n.strip()]
+            if guardar_billeteras(supabase, token, u_id, _nuevas):
+                st.success("✅ Billeteras guardadas.")
+                st.rerun()
 
     # ── 🔒 CIERRE DE MES ──────────────────────────────────
     st.markdown(
@@ -987,12 +1051,14 @@ config_mov = {
     "Monto":                st.column_config.NumberColumn("Monto", format="$ %,.0f", width="small"),
     "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
                                 help="Ítem proyectado al que pertenece este gasto"),
+    "Billetera Pago":       st.column_config.SelectboxColumn("💳 Billetera", options=opciones_bill, width="medium",
+                                help="Billetera con la que pagas este gasto"),
     "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
     "Fecha Pago":           st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
 }
 
 df_base_mov = df_mov_rows.reindex(
-    columns=["Categoría", "Descripción", "Monto", "Presupuesto Asociado", "Pagado", "Fecha Pago"]
+    columns=["Categoría", "Descripción", "Monto", "Presupuesto Asociado", "Billetera Pago", "Pagado", "Fecha Pago"]
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
 # ── 📋 COPIAR AL REGISTRAR ────────────────────────────────────────────────────
@@ -1095,10 +1161,16 @@ df_base = df_ed_g.copy()
 
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+_oi_base  = df_mes_oi.reindex(columns=["Descripción","Monto","Billetera"]).reset_index(drop=True)
+_oi_config = {
+    "Monto":      st.column_config.NumberColumn("Monto", format="$ %,.0f"),
+    "Billetera":  st.column_config.SelectboxColumn("💳 Billetera", options=opciones_bill, width="medium",
+                      help="Cuenta donde recibes este ingreso"),
+}
 df_ed_oi  = st.data_editor(
-    df_mes_oi.reindex(columns=["Descripción","Monto"]).reset_index(drop=True),
+    _oi_base,
     use_container_width=True, num_rows="dynamic",
-    column_config={"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")},
+    column_config=_oi_config,
     key="oi_ed"
 )
 
@@ -1162,6 +1234,90 @@ for i, (l, v, col) in enumerate(tarj):
         unsafe_allow_html=True
     )
 st.divider()
+
+# ══════════════════════════════════════════════════════════
+# 💳 SECCIÓN BILLETERAS — entre KPIs y tablas de movimientos
+# ══════════════════════════════════════════════════════════
+if lista_billeteras:
+    st.markdown('<div class="section-header"><span>💳 Estado de Billeteras</span></div>', unsafe_allow_html=True)
+
+    # Calcular saldo real por billetera con los datos del mes en memoria
+    _df_g_mes   = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
+    _df_i_mes   = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
+    _df_oi_mes  = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+    # Usar los datos en memoria (editor) si hay cambios sin guardar
+    _df_g_calc  = df_ed_g.copy()
+    _df_g_calc["Periodo"] = mes_s
+    _df_g_calc["Año"]     = anio_s
+    _df_i_calc  = _df_i_mes.copy()
+    if not _df_i_calc.empty:
+        _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]   = n_in
+        _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
+    else:
+        _df_i_calc = pd.DataFrame([{
+            "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
+            "Billetera": bill_nomina, "SaldoAnterior": s_in
+        }])
+    # Otros ingresos en memoria
+    _df_oi_calc = df_ed_oi.copy()
+    _df_oi_calc["Periodo"] = mes_s
+    _df_oi_calc["Año"]     = anio_s
+
+    saldos_bill = calcular_saldo_billeteras(
+        _df_g_calc, _df_i_calc, _df_oi_calc,
+        df_sab_input, lista_billeteras, mes_s, anio_s
+    )
+
+    total_bill = sum(saldos_bill.values())
+
+    # Tarjetas de billeteras
+    _ncols = min(len(lista_billeteras), 4)
+    _cols_bill = st.columns(_ncols)
+    _colores_bill = ["#4361ee","#fca311","#2ecc71","#e74c3c","#9b5de5","#00b4d8"]
+    for _i, _b in enumerate(lista_billeteras):
+        _saldo = saldos_bill.get(_b, 0.0)
+        _col   = _colores_bill[_i % len(_colores_bill)]
+        _col_idx = _i % _ncols
+        _cols_bill[_col_idx].markdown(
+            f'<div class="card" style="border-bottom: 5px solid {_col}">'
+            f'<div class="card-label">💳 {_b}</div>'
+            f'<div class="card-value" style="color:{_col}; font-size:1.3rem">$ {_saldo:,.0f}</div>'
+            f'</div>',
+            unsafe_allow_html=True
+        )
+
+    # Gráfico de barras horizontales
+    if total_bill != 0:
+        import plotly.graph_objects as _go
+        _fig_bill = _go.Figure()
+        _colores_usados = [_colores_bill[i % len(_colores_bill)] for i in range(len(lista_billeteras))]
+        _saldos_vals = [saldos_bill.get(b, 0) for b in lista_billeteras]
+        _fig_bill.add_trace(_go.Bar(
+            x=lista_billeteras,
+            y=_saldos_vals,
+            marker_color=_colores_usados,
+            text=[f"$ {v:,.0f}" for v in _saldos_vals],
+            textposition="outside",
+            textfont=dict(color="#ffffff", size=12),
+        ))
+        _fig_bill.update_layout(
+            **PLOTLY_LAYOUT,
+            height=220,
+            margin=dict(t=10, b=10, l=10, r=10),
+            xaxis=dict(showgrid=False),
+            yaxis=dict(showgrid=False, showticklabels=False),
+            showlegend=False,
+        )
+        st.markdown('<div class="chart-card"><div class="chart-title">Distribución de fondos por billetera</div>', unsafe_allow_html=True)
+        st.plotly_chart(_fig_bill, use_container_width=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+
+        # Verificación total
+        _diff_bill = fact - total_bill
+        if abs(_diff_bill) < 1:
+            st.success(f"✅ Total billeteras coincide con Dinero Disponible: **$ {total_bill:,.0f}**")
+        else:
+            st.warning(f"⚠️ Total billeteras **$ {total_bill:,.0f}** vs Dinero Disponible **$ {fact:,.0f}** — diferencia: **$ {_diff_bill:,.0f}**")
 
 st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span></div>', unsafe_allow_html=True)
 
@@ -1581,22 +1737,43 @@ st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
-    # df_ed_g ya es el DataFrame unificado (proyectados + movimientos)
-    # Solo descartamos filas completamente vacías
     df_g_limpio = df_ed_g.dropna(subset=["Categoría", "Descripción"], how="all")
-    # Para proyectados sin monto (monto = 0) los mantenemos, son válidos si tienen Valor Referencia
     df_g_limpio = df_g_limpio[
         (df_g_limpio["Valor Referencia"] > 0) | (df_g_limpio["Monto"] > 0) |
         (df_g_limpio["Descripción"].notna() & (df_g_limpio["Descripción"].str.strip() != ""))
     ].copy()
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción","Monto"], how="all")
-    if df_g_limpio.empty and df_oi_limpio.empty and n_in == 0:
+
+    # ── Validación billeteras (solo si hay billeteras configuradas) ──
+    _errores_bill = []
+    if lista_billeteras:
+        if not bill_nomina:
+            _errores_bill.append("❌ El **Ingreso Fijo** no tiene billetera asignada.")
+        _oi_sin_bill = df_oi_limpio[
+            df_oi_limpio["Billetera"].fillna("").astype(str).str.strip() == ""
+        ] if "Billetera" in df_oi_limpio.columns else pd.DataFrame()
+        if not _oi_sin_bill.empty:
+            _errores_bill.append(f"❌ **{len(_oi_sin_bill)} ingreso(s) adicional(es)** sin billetera asignada.")
+        _mov_pagados_sin_bill = df_g_limpio[
+            (df_g_limpio["Pagado"].fillna(False).astype(bool)) &
+            (df_g_limpio["Es Proyectado"].fillna(False).astype(bool) == False) &
+            (df_g_limpio["Billetera Pago"].fillna("").astype(str).str.strip() == "")
+        ] if "Billetera Pago" in df_g_limpio.columns else pd.DataFrame()
+        if not _mov_pagados_sin_bill.empty:
+            _errores_bill.append(f"❌ **{len(_mov_pagados_sin_bill)} gasto(s) pagado(s)** sin billetera asignada.")
+
+    if _errores_bill:
+        for _e in _errores_bill:
+            st.error(_e)
+    elif df_g_limpio.empty and df_oi_limpio.empty and n_in == 0:
         st.error("🛑 No hay datos suficientes para guardar.")
     else:
         try:
             with st.spinner("Sincronizando con Supabase..."):
                 guardar_bd(supabase, token, u_id, mes_s, anio_s,
-                           df_g_limpio, df_oi_limpio, s_in, n_in, otr_v)
+                           df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
+                           bill_nomina=bill_nomina,
+                           df_sab_nuevo=df_sab_input)
                 st.session_state.datos_modificados = False
                 st.balloons()
                 st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
