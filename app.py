@@ -26,6 +26,7 @@ for key, default in {
     "u_nombre_completo": "",
     "mostrar_eliminar": False,
     "cierre_mes_activo": False,
+    "_periodo_cierre": "",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = default
@@ -458,6 +459,12 @@ with st.sidebar:
 
     anio_s = st.selectbox("Año", [2026, 2027, 2028], index=0)
     mes_s  = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month - 1)
+
+    # ── Resetear Cierre de Mes automáticamente al cambiar de periodo ──
+    _periodo_key = f"{mes_s}_{anio_s}"
+    if st.session_state.get("_periodo_cierre") != _periodo_key:
+        st.session_state["cierre_mes_activo"] = False
+        st.session_state["_periodo_cierre"]   = _periodo_key
 
     i_m_act = df_i_full[(df_i_full["Periodo"] == mes_s) & (df_i_full["Año"] == anio_s)]
 
@@ -1108,8 +1115,6 @@ it, vp, _vpy_old, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s
 _df_pend_kpi = calcular_pendientes(df_ed_g)
 
 # ── CIERRE DE MES: excluir remanentes de proyectados con monto parcial ──
-# Un remanente = ítem proyectado NO pagado donde ya se gastó algo (Monto > 0)
-# pero no alcanzó el Valor Referencia. Al cierre, ese delta no es deuda real.
 if st.session_state.get("cierre_mes_activo", False) and not _df_pend_kpi.empty:
     _df_pend_kpi = _df_pend_kpi[~(
         (_df_pend_kpi["Es Proyectado"].fillna(False).astype(bool)) &
