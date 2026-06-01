@@ -1,6 +1,6 @@
 """
 auth.py — Autenticación, registro y gestión de sesión
-Flujo de registro con aprobación del administrador.
+Registro con aprobación manual del administrador.
 """
 import streamlit as st
 import os
@@ -8,7 +8,7 @@ import re
 
 
 ADMIN_EMAIL = "arqtulicesar@gmail.com"
-APP_URL     = "https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
+APP_URL = "https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
 
 
 def _validar_password(pwd):
@@ -21,25 +21,24 @@ def _validar_password(pwd):
     return True, ""
 
 
-def _enviar_correo_html(gmail_user, gmail_pass, destinatario, asunto, html_body):
-    """Envía un correo HTML via Gmail SMTP SSL."""
+def _enviar_correo_html(gmail_user, gmail_pass, destinatario, asunto, html):
     import smtplib
     from email.mime.text import MIMEText
     from email.mime.multipart import MIMEMultipart
     msg = MIMEMultipart("alternative")
     msg["Subject"] = asunto
-    msg["From"]    = gmail_user
-    msg["To"]      = destinatario
-    msg.attach(MIMEText(html_body, "html"))
+    msg["From"] = gmail_user
+    msg["To"] = destinatario
+    msg.attach(MIMEText(html, "html"))
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
         smtp.login(gmail_user, gmail_pass)
         smtp.sendmail(gmail_user, destinatario, msg.as_string())
 
 
-def _notificar_admin_solicitud(gmail_user, gmail_pass, nombre, email, solicitud_id):
+def _notificar_admin_nuevo_registro(gmail_user, gmail_pass, nombre, email, token_aprobacion):
     """Envía correo al admin con botones Aprobar / Rechazar."""
-    aprobar_url  = f"{APP_URL}?accion=aprobar&id={solicitud_id}"
-    rechazar_url = f"{APP_URL}?accion=rechazar&id={solicitud_id}"
+    aprobar_url  = f"{APP_URL}/?accion=aprobar&token={token_aprobacion}"
+    rechazar_url = f"{APP_URL}/?accion=rechazar&token={token_aprobacion}"
 
     html = f"""
 <!DOCTYPE html>
@@ -48,43 +47,36 @@ def _notificar_admin_solicitud(gmail_user, gmail_pass, nombre, email, solicitud_
 <div style="max-width:600px;margin:0 auto;padding:30px 20px">
 
   <div style="text-align:center;margin-bottom:24px">
-    <h1 style="color:#fca311;font-size:1.6rem;margin:0">My FinanceApp</h1>
-    <p style="color:#adb5bd;font-size:0.8rem;margin:4px 0">by Stulio Designs</p>
+    <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
   </div>
 
   <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #fca311">
-    <h2 style="color:#fff;margin:0 0 8px">🙋 Nueva solicitud de registro</h2>
-    <p style="color:#adb5bd;margin:0;font-size:0.85rem">
-      Un usuario quiere unirse a <b style="color:#fff">My FinanceApp</b> y necesita tu aprobación.
-    </p>
-  </div>
-
-  <div style="background:#2d3238;border-radius:12px;padding:20px;margin-bottom:20px">
+    <h2 style="color:#fff;margin:0 0 12px">🔔 Nueva solicitud de registro</h2>
     <table style="width:100%;border-collapse:collapse">
-      <tr style="border-bottom:1px solid #3a3f44">
-        <td style="padding:10px 8px;color:#adb5bd;font-size:0.82rem;width:40%">Nombre</td>
-        <td style="padding:10px 8px;color:#fff;font-size:0.85rem;font-weight:700">{nombre}</td>
+      <tr>
+        <td style="padding:8px 0;color:#adb5bd;font-size:0.85rem;width:140px">Nombre:</td>
+        <td style="padding:8px 0;color:#fff;font-size:0.85rem"><b>{nombre}</b></td>
       </tr>
       <tr>
-        <td style="padding:10px 8px;color:#adb5bd;font-size:0.82rem">Correo</td>
-        <td style="padding:10px 8px;color:#fca311;font-size:0.85rem">{email}</td>
+        <td style="padding:8px 0;color:#adb5bd;font-size:0.85rem">Correo:</td>
+        <td style="padding:8px 0;color:#fff;font-size:0.85rem"><b>{email}</b></td>
       </tr>
     </table>
   </div>
 
-  <div style="text-align:center;margin-bottom:24px">
-    <p style="color:#adb5bd;font-size:0.82rem;margin-bottom:16px">
-      Haz clic en una opción para gestionar la solicitud:
-    </p>
+  <div style="text-align:center;margin-bottom:16px">
     <a href="{aprobar_url}"
-       style="background:#2ecc71;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;
-              font-weight:800;font-size:0.95rem;display:inline-block;margin:0 8px 8px">
-      ✅ Aprobar
+       style="background:#27ae60;color:#fff;padding:14px 40px;border-radius:8px;
+              text-decoration:none;font-weight:800;font-size:1rem;display:inline-block">
+      ✅ Aprobar registro
     </a>
+  </div>
+  <div style="text-align:center;margin-bottom:24px">
     <a href="{rechazar_url}"
-       style="background:#e74c3c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;
-              font-weight:800;font-size:0.95rem;display:inline-block;margin:0 8px 8px">
-      ❌ Rechazar
+       style="background:#e74c3c;color:#fff;padding:10px 28px;border-radius:8px;
+              text-decoration:none;font-weight:700;font-size:0.9rem;display:inline-block">
+      ❌ Rechazar solicitud
     </a>
   </div>
 
@@ -94,171 +86,223 @@ def _notificar_admin_solicitud(gmail_user, gmail_pass, nombre, email, solicitud_
       Este correo fue generado automáticamente.
     </p>
   </div>
-
 </div>
 </body>
 </html>"""
     _enviar_correo_html(gmail_user, gmail_pass, ADMIN_EMAIL,
-                        f"🙋 Solicitud de registro — {nombre}", html)
+                        f"🔔 Solicitud de registro — {nombre}", html)
 
 
-def _notificar_usuario_aprobado(gmail_user, gmail_pass, nombre, email_usuario):
-    """Notifica al usuario que fue aprobado y puede crear su cuenta."""
+def _notificar_usuario_pendiente(gmail_user, gmail_pass, nombre, email):
     html = f"""
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
 <div style="max-width:600px;margin:0 auto;padding:30px 20px">
-
   <div style="text-align:center;margin-bottom:24px">
-    <h1 style="color:#fca311;font-size:1.6rem;margin:0">My FinanceApp</h1>
-    <p style="color:#adb5bd;font-size:0.8rem;margin:4px 0">by Stulio Designs</p>
+    <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
   </div>
-
-  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #2ecc71">
-    <h2 style="color:#2ecc71;margin:0 0 8px">✅ ¡Tu solicitud fue aprobada!</h2>
-    <p style="color:#adb5bd;margin:0;font-size:0.85rem;line-height:1.6">
-      Hola <b style="color:#fff">{nombre.split()[0]}</b>, el administrador ha aprobado tu acceso a
-      <b style="color:#fca311">My FinanceApp</b>. Ya puedes crear tu cuenta.
+  <div style="background:#2d3238;border-radius:12px;padding:24px;border-left:4px solid #fca311">
+    <h2 style="color:#fff;margin:0 0 10px">⏳ Solicitud recibida</h2>
+    <p style="color:#dee2e6;font-size:0.85rem;line-height:1.7;margin:0">
+      Hola <b>{nombre.split()[0]}</b>, recibimos tu solicitud para unirte a <b>My FinanceApp</b>.<br><br>
+      El administrador revisará tu solicitud y te notificará por este correo
+      cuando tu cuenta esté lista.<br><br>
+      Gracias por tu paciencia 🙏
     </p>
   </div>
-
-  <div style="text-align:center;margin-bottom:24px">
-    <a href="{APP_URL}"
-       style="background:#fca311;color:#14213d;padding:14px 32px;border-radius:8px;text-decoration:none;
-              font-weight:800;font-size:1rem;display:inline-block">
-      🚀 Crear mi cuenta ahora
-    </a>
-  </div>
-
-  <div style="background:#2d3238;border-radius:12px;padding:16px;margin-bottom:20px">
-    <p style="color:#adb5bd;font-size:0.82rem;margin:0;line-height:1.6">
-      ℹ️ Al ingresar a la app, ve a la pestaña <b style="color:#fff">✨ Crear cuenta</b> y
-      regístrate con este correo: <b style="color:#fca311">{email_usuario}</b>
-    </p>
-  </div>
-
-  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
+  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px;margin-top:24px">
     <p style="color:#6c757d;font-size:0.75rem;margin:0">
-      My FinanceApp · by Stulio Designs<br>
       ¿Tienes dudas? Escríbenos a {ADMIN_EMAIL}
     </p>
   </div>
-
 </div>
 </body>
 </html>"""
-    _enviar_correo_html(gmail_user, gmail_pass, email_usuario,
-                        "✅ ¡Tu acceso a My FinanceApp fue aprobado!", html)
+    _enviar_correo_html(gmail_user, gmail_pass, email,
+                        "⏳ Tu solicitud está en revisión — My FinanceApp", html)
 
 
-def _notificar_usuario_rechazado(gmail_user, gmail_pass, nombre, email_usuario):
-    """Notifica al usuario que su solicitud fue rechazada."""
+def _notificar_usuario_aprobado(gmail_user, gmail_pass, nombre, email):
     html = f"""
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
 <div style="max-width:600px;margin:0 auto;padding:30px 20px">
-
   <div style="text-align:center;margin-bottom:24px">
-    <h1 style="color:#fca311;font-size:1.6rem;margin:0">My FinanceApp</h1>
-    <p style="color:#adb5bd;font-size:0.8rem;margin:4px 0">by Stulio Designs</p>
+    <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
   </div>
-
-  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #e74c3c">
-    <h2 style="color:#e74c3c;margin:0 0 8px">❌ Solicitud no aprobada</h2>
-    <p style="color:#adb5bd;margin:0;font-size:0.85rem;line-height:1.6">
-      Hola <b style="color:#fff">{nombre.split()[0]}</b>, en este momento tu solicitud de acceso
-      a <b style="color:#fca311">My FinanceApp</b> no fue aprobada.<br><br>
-      Si crees que es un error, contáctanos directamente a
-      <b style="color:#fca311">{ADMIN_EMAIL}</b>.
+  <div style="background:#2d3238;border-radius:12px;padding:24px;border-left:4px solid #27ae60;margin-bottom:20px">
+    <h2 style="color:#fff;margin:0 0 10px">🎉 ¡Tu cuenta fue aprobada!</h2>
+    <p style="color:#dee2e6;font-size:0.85rem;line-height:1.7;margin:0">
+      Hola <b>{nombre.split()[0]}</b>, el administrador aprobó tu acceso a <b>My FinanceApp</b>.<br><br>
+      Revisa tu bandeja de entrada — te enviamos un correo de confirmación de Supabase.
+      Haz clic en ese enlace para activar tu cuenta, luego usa la opción
+      <b>"🔓 Recuperar contraseña"</b> en la app para crear tu contraseña personal.
     </p>
   </div>
-
+  <div style="text-align:center;margin-bottom:24px">
+    <a href="{APP_URL}"
+       style="background:#fca311;color:#14213d;padding:14px 32px;border-radius:8px;
+              text-decoration:none;font-weight:800;font-size:1rem;display:inline-block">
+      🚀 Ir a My FinanceApp
+    </a>
+  </div>
   <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
     <p style="color:#6c757d;font-size:0.75rem;margin:0">
-      My FinanceApp · by Stulio Designs
+      ¿Tienes dudas? Escríbenos a {ADMIN_EMAIL}
     </p>
   </div>
-
 </div>
 </body>
 </html>"""
-    _enviar_correo_html(gmail_user, gmail_pass, email_usuario,
-                        "Solicitud de acceso a My FinanceApp", html)
+    _enviar_correo_html(gmail_user, gmail_pass, email,
+                        "🎉 ¡Tu cuenta en My FinanceApp fue aprobada!", html)
 
 
-def _procesar_accion_admin(supabase):
+def _notificar_usuario_rechazado(gmail_user, gmail_pass, nombre, email):
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:30px 20px">
+  <div style="text-align:center;margin-bottom:24px">
+    <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
+  </div>
+  <div style="background:#2d3238;border-radius:12px;padding:24px;border-left:4px solid #e74c3c">
+    <h2 style="color:#fff;margin:0 0 10px">❌ Solicitud no aprobada</h2>
+    <p style="color:#dee2e6;font-size:0.85rem;line-height:1.7;margin:0">
+      Hola <b>{nombre.split()[0]}</b>, lamentablemente tu solicitud de acceso a
+      <b>My FinanceApp</b> no fue aprobada en este momento.<br><br>
+      Si crees que es un error, puedes escribirnos directamente a {ADMIN_EMAIL}.
+    </p>
+  </div>
+  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px;margin-top:24px">
+    <p style="color:#6c757d;font-size:0.75rem;margin:0">My FinanceApp · by Stulio Designs</p>
+  </div>
+</div>
+</body>
+</html>"""
+    _enviar_correo_html(gmail_user, gmail_pass, email,
+                        "Actualización sobre tu solicitud — My FinanceApp", html)
+
+
+def _procesar_accion_url(supabase):
     """
-    Detecta si la URL contiene ?accion=aprobar&id=... o ?accion=rechazar&id=...
-    y procesa la solicitud de registro. Se llama desde mostrar_login() al inicio.
+    Lee ?accion=aprobar|rechazar&token=... de la URL y actúa.
+    Se llama al inicio de mostrar_login().
     """
+    params = st.query_params
+    accion = params.get("accion", "")
+    token  = params.get("token", "")
+
+    if accion not in ("aprobar", "rechazar") or not token:
+        return
+
+    st.query_params.clear()
+
     try:
-        params = st.query_params
-        accion = params.get("accion", "")
-        sol_id = params.get("id", "")
-        if not accion or not sol_id:
-            return
+        res = supabase.table("solicitudes_registro") \
+            .select("*").eq("token_aprobacion", token).execute()
+    except Exception as e:
+        st.error(f"❌ Error consultando la solicitud: {e}")
+        return
 
-        _gmail_user = st.secrets.get("gmail", {}).get("email", "")
-        _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+    if not res.data:
+        st.warning("⚠️ Token inválido o solicitud no encontrada.")
+        return
 
-        # Buscar la solicitud
-        res = supabase.table("solicitudes_registro").select("*").eq("id", sol_id).execute()
-        if not res.data:
-            st.warning("⚠️ Solicitud no encontrada o ya fue procesada.")
-            st.query_params.clear()
-            return
+    solicitud = res.data[0]
 
-        sol = res.data[0]
-        if sol["estado"] != "pendiente":
-            st.info(f"ℹ️ Esta solicitud ya fue procesada (estado: {sol['estado']}).")
-            st.query_params.clear()
-            return
+    if solicitud["estado"] != "pendiente":
+        st.info(f"ℹ️ Esta solicitud ya fue procesada (estado: {solicitud['estado']}).")
+        return
 
-        nombre = sol["nombre_completo"]
-        email  = sol["email"]
+    nombre = solicitud["nombre_completo"]
+    email  = solicitud["email"]
 
-        if accion == "aprobar":
-            # Marcar como aprobada
-            supabase.table("solicitudes_registro").update({"estado": "aprobada"}).eq("id", sol_id).execute()
-            # Notificar al usuario
-            if _gmail_user and _gmail_pass:
+    _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+    _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+
+    if accion == "aprobar":
+        try:
+            import secrets as _sec, string
+            tmp_pwd = "Tmp!" + "".join(_sec.choice(string.ascii_letters + string.digits) for _ in range(10))
+
+            sign_res = supabase.auth.admin.create_user({
+                "email": email,
+                "password": tmp_pwd,
+                "email_confirm": False,
+                "user_metadata": {"nombre_completo": nombre}
+            })
+
+            if sign_res.user:
                 try:
-                    _notificar_usuario_aprobado(_gmail_user, _gmail_pass, nombre, email)
+                    supabase.table("usuarios").upsert({
+                        "usuario_id":      sign_res.user.id,
+                        "nombre_completo": nombre,
+                    }).execute()
                 except:
                     pass
-            st.success(f"✅ Solicitud de **{nombre}** ({email}) aprobada. Se le notificó por correo.")
 
-        elif accion == "rechazar":
-            supabase.table("solicitudes_registro").update({"estado": "rechazada"}).eq("id", sol_id).execute()
+                supabase.table("solicitudes_registro") \
+                    .update({"estado": "aprobado"}) \
+                    .eq("token_aprobacion", token).execute()
+
+                if _gmail_user and _gmail_pass:
+                    try:
+                        _notificar_usuario_aprobado(_gmail_user, _gmail_pass, nombre, email)
+                    except:
+                        pass
+
+                st.success(f"✅ Cuenta de **{nombre}** ({email}) aprobada y creada correctamente.")
+                st.info("Se le envió un correo de confirmación para que active su cuenta y cree su contraseña.")
+            else:
+                st.error("❌ No se pudo crear la cuenta en Supabase Auth.")
+        except Exception as e:
+            err = str(e).lower()
+            if "already registered" in err or "already exists" in err:
+                st.warning(f"⚠️ El correo {email} ya tiene una cuenta registrada.")
+                supabase.table("solicitudes_registro") \
+                    .update({"estado": "aprobado"}) \
+                    .eq("token_aprobacion", token).execute()
+            else:
+                st.error(f"❌ Error al crear la cuenta: {e}")
+
+    elif accion == "rechazar":
+        try:
+            supabase.table("solicitudes_registro") \
+                .update({"estado": "rechazado"}) \
+                .eq("token_aprobacion", token).execute()
+
             if _gmail_user and _gmail_pass:
                 try:
                     _notificar_usuario_rechazado(_gmail_user, _gmail_pass, nombre, email)
                 except:
                     pass
-            st.info(f"ℹ️ Solicitud de **{nombre}** ({email}) rechazada. Se le notificó por correo.")
 
-        st.query_params.clear()
+            st.info(f"🚫 Solicitud de **{nombre}** ({email}) rechazada. Se le notificó por correo.")
+        except Exception as e:
+            st.error(f"❌ Error al rechazar: {e}")
 
-    except Exception as e:
-        st.error(f"❌ Error al procesar la acción: {e}")
-        try:
-            st.query_params.clear()
-        except:
-            pass
 
+# ══════════════════════════════════════════════════════════════
+#  FUNCIÓN PRINCIPAL
+# ══════════════════════════════════════════════════════════════
 
 def mostrar_login(supabase, LOGO_LOGIN):
-    # ── Procesar acciones del admin (aprobar/rechazar desde correo) ──
-    _procesar_accion_admin(supabase)
+
+    _procesar_accion_url(supabase)
 
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN):
             st.image(LOGO_LOGIN, use_container_width=True)
 
-        tab_login, tab_registro, tab_recuperar = st.tabs(["🔑 Ingresar", "✨ Crear cuenta", "🔓 Recuperar contraseña"])
+        tab_login, tab_registro, tab_recuperar = st.tabs(["🔑 Ingresar", "✨ Solicitar acceso", "🔓 Recuperar contraseña"])
 
         # ── LOGIN ──────────────────────────────────────────────
         with tab_login:
@@ -300,18 +344,14 @@ def mostrar_login(supabase, LOGO_LOGIN):
                         else:
                             st.error(f"❌ Error técnico: {e}")
 
-        # ── REGISTRO ───────────────────────────────────────────
+        # ── SOLICITUD DE REGISTRO ──────────────────────────────
         with tab_registro:
-            st.markdown("##### Solicitar acceso a My FinanceApp")
-            st.info("📋 El acceso requiere aprobación del administrador. Te notificaremos por correo.")
+            st.markdown("##### Solicita tu acceso a My FinanceApp")
+            st.info("📋 El acceso a la app es por invitación. Completa el formulario y el administrador revisará tu solicitud.")
 
             nombre_completo = st.text_input("Nombre completo", key="reg_nombre", placeholder="Ej: Juan Pérez")
             email_reg       = st.text_input("Correo electrónico", key="reg_email", placeholder="tucorreo@ejemplo.com")
-            pwd_reg         = st.text_input("Contraseña", type="password", key="reg_pwd", placeholder="Mínimo 8 caracteres")
-            pwd_reg2        = st.text_input("Confirmar contraseña", type="password", key="reg_pwd2", placeholder="Repite la contraseña")
-            st.caption("🔒 Mínimo 8 caracteres, una mayúscula y un número.")
 
-            # ── Términos y condiciones ─────────────────────────
             with st.expander("📋 Términos y Condiciones de uso"):
                 st.markdown("""
 **My FinanceApp — Términos y Condiciones**
@@ -329,7 +369,7 @@ My FinanceApp es una herramienta de apoyo informativo. No constituye asesoría f
 El usuario es responsable de mantener seguras sus credenciales de acceso. My FinanceApp no almacena contraseñas en texto plano.
 
 **5. Módulo Grupal**
-Al vincular su cuenta con otro usuario, el usuario acepta que cierta información financiera consolidada será visible para el usuario vinculado. Ninguna de las partes tendrá acceso a los datos detallados del otro.
+Al vincular su cuenta con otro usuario, el usuario acepta que cierta información financiera consolidada será visible para el usuario vinculado.
 
 **6. Modificaciones**
 My FinanceApp se reserva el derecho de modificar estos términos. Los cambios serán notificados por correo electrónico.
@@ -343,75 +383,57 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                 key="check_terminos"
             )
 
-            if st.button("📨 Enviar solicitud de acceso", use_container_width=True,
-                         key="btn_registro", disabled=not acepta_terminos):
-                if not nombre_completo or not email_reg or not pwd_reg or not pwd_reg2:
+            if st.button("📨 Enviar solicitud", use_container_width=True, key="btn_registro", disabled=not acepta_terminos):
+                if not nombre_completo or not email_reg:
                     st.error("❌ Por favor completa todos los campos.")
-                elif pwd_reg != pwd_reg2:
-                    st.error("❌ Las contraseñas no coinciden.")
                 elif not re.match(r"[^@]+@[^@]+\.[^@]+", email_reg):
                     st.error("❌ El correo no tiene un formato válido.")
                 else:
-                    valida, msg = _validar_password(pwd_reg)
-                    if not valida:
-                        st.error(f"❌ {msg}")
-                    else:
-                        try:
-                            # ── Verificar si ya tiene solicitud pendiente o aprobada ──
-                            existing = supabase.table("solicitudes_registro") \
-                                .select("estado") \
-                                .eq("email", email_reg.strip()) \
-                                .execute()
+                    try:
+                        existe = supabase.table("solicitudes_registro") \
+                            .select("estado") \
+                            .eq("email", email_reg.strip()) \
+                            .in_("estado", ["pendiente", "aprobado"]) \
+                            .execute()
 
-                            if existing.data:
-                                estado_actual = existing.data[0]["estado"]
-                                if estado_actual == "pendiente":
-                                    st.warning("⏳ Ya tienes una solicitud pendiente. Te avisaremos pronto.")
-                                elif estado_actual == "aprobada":
-                                    st.success("✅ Tu solicitud ya fue aprobada. Revisa tu correo y crea tu cuenta.")
-                                elif estado_actual == "rechazada":
-                                    st.error("❌ Tu solicitud fue rechazada. Contáctanos a arqtulicesar@gmail.com.")
-                                # No procesamos más en ninguno de estos casos
-                            else:
-                                # ── Verificar si ya está registrado en Supabase Auth ──
-                                # (no podemos chequearlo directamente, lo manejamos en el catch)
+                        if existe.data:
+                            estado_actual = existe.data[0]["estado"]
+                            if estado_actual == "pendiente":
+                                st.warning("⏳ Ya tienes una solicitud pendiente de revisión. Te avisaremos cuando sea procesada.")
+                            elif estado_actual == "aprobado":
+                                st.info("✅ Tu correo ya fue aprobado. Si aún no tienes contraseña, usa la pestaña '🔓 Recuperar contraseña'.")
+                        else:
+                            ins = supabase.table("solicitudes_registro").insert({
+                                "nombre_completo": nombre_completo.strip(),
+                                "email":           email_reg.strip(),
+                                "estado":          "pendiente"
+                            }).execute()
 
-                                # ── Guardar solicitud en tabla ──
-                                ins = supabase.table("solicitudes_registro").insert({
-                                    "nombre_completo": nombre_completo.strip(),
-                                    "email":           email_reg.strip(),
-                                    "estado":          "pendiente",
-                                    "password_hash":   pwd_reg,   # se guarda temporalmente; admin aprueba y usuario crea cuenta
-                                }).execute()
+                            token_gen = ins.data[0]["token_aprobacion"] if ins.data else None
 
-                                solicitud_id = ins.data[0]["id"] if ins.data else "N/A"
+                            _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                            _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
 
-                                # ── Notificar al admin ──
-                                _gmail_user = st.secrets.get("gmail", {}).get("email", "")
-                                _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
-                                if _gmail_user and _gmail_pass:
-                                    try:
-                                        _notificar_admin_solicitud(
-                                            _gmail_user, _gmail_pass,
-                                            nombre_completo.strip(),
-                                            email_reg.strip(),
-                                            solicitud_id
-                                        )
-                                    except:
-                                        pass  # No bloquear si falla el correo
+                            if _gmail_user and _gmail_pass and token_gen:
+                                try:
+                                    _notificar_admin_nuevo_registro(
+                                        _gmail_user, _gmail_pass,
+                                        nombre_completo.strip(), email_reg.strip(), token_gen
+                                    )
+                                except:
+                                    pass
+                                try:
+                                    _notificar_usuario_pendiente(
+                                        _gmail_user, _gmail_pass,
+                                        nombre_completo.strip(), email_reg.strip()
+                                    )
+                                except:
+                                    pass
 
-                                st.success(
-                                    f"✅ ¡Solicitud enviada, {nombre_completo.split()[0]}! "
-                                    "Te notificaremos a tu correo cuando sea aprobada."
-                                )
-                                st.info("⏳ El administrador revisará tu solicitud pronto.")
+                            st.success("✅ ¡Solicitud enviada! Recibirás un correo cuando el administrador la revise.")
 
-                        except Exception as e:
-                            err = str(e).lower()
-                            if "duplicate" in err or "unique" in err:
-                                st.warning("⏳ Ya existe una solicitud con ese correo. Espera la revisión del administrador.")
-                            else:
-                                st.error(f"❌ Error al enviar la solicitud: {e}")
+                    except Exception as e:
+                        st.error(f"❌ Error al enviar la solicitud: {e}")
 
         # ── RECUPERAR CONTRASEÑA ───────────────────────────────
         with tab_recuperar:
@@ -434,7 +456,7 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                             options={"redirect_to": "https://tulicesar.github.io/stulio-finance-pro/redirect.html"}
                         )
                         st.success(f"✅ Enlace enviado a **{email_rec}**")
-                        st.info("Revisa tu bandeja de entrada y sigue el enlace para crear una nueva contraseña. Si no lo ves, revisa la carpeta de spam.")
+                        st.info("Revisa tu bandeja de entrada y sigue el enlace. Si no lo ves, revisa la carpeta de spam.")
                     except Exception as e:
                         err = str(e).lower()
                         if "user not found" in err or "not found" in err:
@@ -442,6 +464,8 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                         else:
                             st.error(f"❌ Error: {e}")
 
+
+# ══════════════════════════════════════════════════════════════
 
 def cerrar_sesion():
     for key in ["autenticado", "token", "usuario_id", "u_nombre_completo"]:
@@ -481,8 +505,7 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
             key="check_solicitud_eliminar"
         )
 
-        if st.button("✅ Confirmar solicitud", key="btn_confirmar_solicitud",
-                     disabled=not confirmar, use_container_width=True):
+        if st.button("✅ Confirmar solicitud", key="btn_confirmar_solicitud", disabled=not confirmar, use_container_width=True):
             try:
                 try:
                     supabase.postgrest.auth(token)
@@ -532,10 +555,10 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
                             <li>Busca el usuario por correo: <b>{email_usuario}</b></li>
                             <li>Elimina el usuario y todos sus datos</li>
                         </ol>
-                        <p style="color:#adb5bd;font-size:0.85rem">Este correo fue generado automáticamente por My FinanceApp.</p>
                     </div>
                     """
                     _msg.attach(MIMEText(_cuerpo_html, "html"))
+
                     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
                         _smtp.login(_gmail_user, _gmail_pass)
                         _smtp.sendmail(_gmail_user, _gmail_user, _msg.as_string())
