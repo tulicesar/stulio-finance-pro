@@ -229,8 +229,13 @@ def _procesar_accion_url(supabase):
 
     if accion == "aprobar":
         try:
-            # Invitar usuario — Supabase envía correo con link para crear contraseña
-            sign_res = supabase.auth.admin.invite_user_by_email(
+            # Usar service_role para crear usuario con permisos de admin
+            from supabase import create_client
+            _service_key = st.secrets.get("supabase", {}).get("service_role_key", "")
+            _url          = st.secrets.get("supabase", {}).get("url", "")
+            supabase_admin = create_client(_url, _service_key)
+
+            sign_res = supabase_admin.auth.admin.invite_user_by_email(
                 email,
                 options={"data": {"nombre_completo": nombre}}
             )
