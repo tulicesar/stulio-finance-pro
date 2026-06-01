@@ -229,15 +229,11 @@ def _procesar_accion_url(supabase):
 
     if accion == "aprobar":
         try:
-            import secrets as _sec, string
-            tmp_pwd = "Tmp!" + "".join(_sec.choice(string.ascii_letters + string.digits) for _ in range(10))
-
-            sign_res = supabase.auth.admin.create_user({
-                "email": email,
-                "password": tmp_pwd,
-                "email_confirm": False,
-                "user_metadata": {"nombre_completo": nombre}
-            })
+            # Invitar usuario — Supabase envía correo con link para crear contraseña
+            sign_res = supabase.auth.admin.invite_user_by_email(
+                email,
+                options={"data": {"nombre_completo": nombre}}
+            )
 
             if sign_res.user:
                 try:
@@ -255,11 +251,11 @@ def _procesar_accion_url(supabase):
                 if _gmail_user and _gmail_pass:
                     try:
                         _notificar_usuario_aprobado(_gmail_user, _gmail_pass, nombre, email)
-                    except:
-                        pass
+                    except Exception as e_mail:
+                        st.error(f"❌ Error enviando correo al usuario: {e_mail}")
 
-                st.success(f"✅ Cuenta de **{nombre}** ({email}) aprobada y creada correctamente.")
-                st.info("Se le envió un correo de confirmación para que active su cuenta y cree su contraseña.")
+                st.success(f"✅ Cuenta de **{nombre}** ({email}) aprobada.")
+                st.info("Se le envió un correo de invitación para que cree su contraseña e ingrese.")
             else:
                 st.error("❌ No se pudo crear la cuenta en Supabase Auth.")
         except Exception as e:
@@ -420,15 +416,15 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                                         _gmail_user, _gmail_pass,
                                         nombre_completo.strip(), email_reg.strip(), token_gen
                                     )
-                                except:
-                                    pass
+                                except Exception as e_mail:
+                                    st.error(f"❌ Error enviando correo al admin: {e_mail}")
                                 try:
                                     _notificar_usuario_pendiente(
                                         _gmail_user, _gmail_pass,
                                         nombre_completo.strip(), email_reg.strip()
                                     )
-                                except:
-                                    pass
+                                except Exception as e_mail2:
+                                    st.error(f"❌ Error enviando correo al usuario: {e_mail2}")
 
                             st.success("✅ ¡Solicitud enviada! Recibirás un correo cuando el administrador la revise.")
 
