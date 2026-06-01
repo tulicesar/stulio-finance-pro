@@ -1,9 +1,14 @@
 """
 auth.py — Autenticación, registro y gestión de sesión
+Flujo de registro con aprobación del administrador.
 """
 import streamlit as st
 import os
 import re
+
+
+ADMIN_EMAIL = "arqtulicesar@gmail.com"
+APP_URL     = "https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
 
 
 def _validar_password(pwd):
@@ -16,7 +21,238 @@ def _validar_password(pwd):
     return True, ""
 
 
+def _enviar_correo_html(gmail_user, gmail_pass, destinatario, asunto, html_body):
+    """Envía un correo HTML via Gmail SMTP SSL."""
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = asunto
+    msg["From"]    = gmail_user
+    msg["To"]      = destinatario
+    msg.attach(MIMEText(html_body, "html"))
+    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+        smtp.login(gmail_user, gmail_pass)
+        smtp.sendmail(gmail_user, destinatario, msg.as_string())
+
+
+def _notificar_admin_solicitud(gmail_user, gmail_pass, nombre, email, solicitud_id):
+    """Envía correo al admin con botones Aprobar / Rechazar."""
+    aprobar_url  = f"{APP_URL}?accion=aprobar&id={solicitud_id}"
+    rechazar_url = f"{APP_URL}?accion=rechazar&id={solicitud_id}"
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:30px 20px">
+
+  <div style="text-align:center;margin-bottom:24px">
+    <h1 style="color:#fca311;font-size:1.6rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.8rem;margin:4px 0">by Stulio Designs</p>
+  </div>
+
+  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #fca311">
+    <h2 style="color:#fff;margin:0 0 8px">🙋 Nueva solicitud de registro</h2>
+    <p style="color:#adb5bd;margin:0;font-size:0.85rem">
+      Un usuario quiere unirse a <b style="color:#fff">My FinanceApp</b> y necesita tu aprobación.
+    </p>
+  </div>
+
+  <div style="background:#2d3238;border-radius:12px;padding:20px;margin-bottom:20px">
+    <table style="width:100%;border-collapse:collapse">
+      <tr style="border-bottom:1px solid #3a3f44">
+        <td style="padding:10px 8px;color:#adb5bd;font-size:0.82rem;width:40%">Nombre</td>
+        <td style="padding:10px 8px;color:#fff;font-size:0.85rem;font-weight:700">{nombre}</td>
+      </tr>
+      <tr>
+        <td style="padding:10px 8px;color:#adb5bd;font-size:0.82rem">Correo</td>
+        <td style="padding:10px 8px;color:#fca311;font-size:0.85rem">{email}</td>
+      </tr>
+    </table>
+  </div>
+
+  <div style="text-align:center;margin-bottom:24px">
+    <p style="color:#adb5bd;font-size:0.82rem;margin-bottom:16px">
+      Haz clic en una opción para gestionar la solicitud:
+    </p>
+    <a href="{aprobar_url}"
+       style="background:#2ecc71;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;
+              font-weight:800;font-size:0.95rem;display:inline-block;margin:0 8px 8px">
+      ✅ Aprobar
+    </a>
+    <a href="{rechazar_url}"
+       style="background:#e74c3c;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;
+              font-weight:800;font-size:0.95rem;display:inline-block;margin:0 8px 8px">
+      ❌ Rechazar
+    </a>
+  </div>
+
+  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
+    <p style="color:#6c757d;font-size:0.75rem;margin:0">
+      My FinanceApp · by Stulio Designs<br>
+      Este correo fue generado automáticamente.
+    </p>
+  </div>
+
+</div>
+</body>
+</html>"""
+    _enviar_correo_html(gmail_user, gmail_pass, ADMIN_EMAIL,
+                        f"🙋 Solicitud de registro — {nombre}", html)
+
+
+def _notificar_usuario_aprobado(gmail_user, gmail_pass, nombre, email_usuario):
+    """Notifica al usuario que fue aprobado y puede crear su cuenta."""
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:30px 20px">
+
+  <div style="text-align:center;margin-bottom:24px">
+    <h1 style="color:#fca311;font-size:1.6rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.8rem;margin:4px 0">by Stulio Designs</p>
+  </div>
+
+  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #2ecc71">
+    <h2 style="color:#2ecc71;margin:0 0 8px">✅ ¡Tu solicitud fue aprobada!</h2>
+    <p style="color:#adb5bd;margin:0;font-size:0.85rem;line-height:1.6">
+      Hola <b style="color:#fff">{nombre.split()[0]}</b>, el administrador ha aprobado tu acceso a
+      <b style="color:#fca311">My FinanceApp</b>. Ya puedes crear tu cuenta.
+    </p>
+  </div>
+
+  <div style="text-align:center;margin-bottom:24px">
+    <a href="{APP_URL}"
+       style="background:#fca311;color:#14213d;padding:14px 32px;border-radius:8px;text-decoration:none;
+              font-weight:800;font-size:1rem;display:inline-block">
+      🚀 Crear mi cuenta ahora
+    </a>
+  </div>
+
+  <div style="background:#2d3238;border-radius:12px;padding:16px;margin-bottom:20px">
+    <p style="color:#adb5bd;font-size:0.82rem;margin:0;line-height:1.6">
+      ℹ️ Al ingresar a la app, ve a la pestaña <b style="color:#fff">✨ Crear cuenta</b> y
+      regístrate con este correo: <b style="color:#fca311">{email_usuario}</b>
+    </p>
+  </div>
+
+  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
+    <p style="color:#6c757d;font-size:0.75rem;margin:0">
+      My FinanceApp · by Stulio Designs<br>
+      ¿Tienes dudas? Escríbenos a {ADMIN_EMAIL}
+    </p>
+  </div>
+
+</div>
+</body>
+</html>"""
+    _enviar_correo_html(gmail_user, gmail_pass, email_usuario,
+                        "✅ ¡Tu acceso a My FinanceApp fue aprobado!", html)
+
+
+def _notificar_usuario_rechazado(gmail_user, gmail_pass, nombre, email_usuario):
+    """Notifica al usuario que su solicitud fue rechazada."""
+    html = f"""
+<!DOCTYPE html>
+<html>
+<body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
+<div style="max-width:600px;margin:0 auto;padding:30px 20px">
+
+  <div style="text-align:center;margin-bottom:24px">
+    <h1 style="color:#fca311;font-size:1.6rem;margin:0">My FinanceApp</h1>
+    <p style="color:#adb5bd;font-size:0.8rem;margin:4px 0">by Stulio Designs</p>
+  </div>
+
+  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #e74c3c">
+    <h2 style="color:#e74c3c;margin:0 0 8px">❌ Solicitud no aprobada</h2>
+    <p style="color:#adb5bd;margin:0;font-size:0.85rem;line-height:1.6">
+      Hola <b style="color:#fff">{nombre.split()[0]}</b>, en este momento tu solicitud de acceso
+      a <b style="color:#fca311">My FinanceApp</b> no fue aprobada.<br><br>
+      Si crees que es un error, contáctanos directamente a
+      <b style="color:#fca311">{ADMIN_EMAIL}</b>.
+    </p>
+  </div>
+
+  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
+    <p style="color:#6c757d;font-size:0.75rem;margin:0">
+      My FinanceApp · by Stulio Designs
+    </p>
+  </div>
+
+</div>
+</body>
+</html>"""
+    _enviar_correo_html(gmail_user, gmail_pass, email_usuario,
+                        "Solicitud de acceso a My FinanceApp", html)
+
+
+def _procesar_accion_admin(supabase):
+    """
+    Detecta si la URL contiene ?accion=aprobar&id=... o ?accion=rechazar&id=...
+    y procesa la solicitud de registro. Se llama desde mostrar_login() al inicio.
+    """
+    try:
+        params = st.query_params
+        accion = params.get("accion", "")
+        sol_id = params.get("id", "")
+        if not accion or not sol_id:
+            return
+
+        _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+        _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+
+        # Buscar la solicitud
+        res = supabase.table("solicitudes_registro").select("*").eq("id", sol_id).execute()
+        if not res.data:
+            st.warning("⚠️ Solicitud no encontrada o ya fue procesada.")
+            st.query_params.clear()
+            return
+
+        sol = res.data[0]
+        if sol["estado"] != "pendiente":
+            st.info(f"ℹ️ Esta solicitud ya fue procesada (estado: {sol['estado']}).")
+            st.query_params.clear()
+            return
+
+        nombre = sol["nombre_completo"]
+        email  = sol["email"]
+
+        if accion == "aprobar":
+            # Marcar como aprobada
+            supabase.table("solicitudes_registro").update({"estado": "aprobada"}).eq("id", sol_id).execute()
+            # Notificar al usuario
+            if _gmail_user and _gmail_pass:
+                try:
+                    _notificar_usuario_aprobado(_gmail_user, _gmail_pass, nombre, email)
+                except:
+                    pass
+            st.success(f"✅ Solicitud de **{nombre}** ({email}) aprobada. Se le notificó por correo.")
+
+        elif accion == "rechazar":
+            supabase.table("solicitudes_registro").update({"estado": "rechazada"}).eq("id", sol_id).execute()
+            if _gmail_user and _gmail_pass:
+                try:
+                    _notificar_usuario_rechazado(_gmail_user, _gmail_pass, nombre, email)
+                except:
+                    pass
+            st.info(f"ℹ️ Solicitud de **{nombre}** ({email}) rechazada. Se le notificó por correo.")
+
+        st.query_params.clear()
+
+    except Exception as e:
+        st.error(f"❌ Error al procesar la acción: {e}")
+        try:
+            st.query_params.clear()
+        except:
+            pass
+
+
 def mostrar_login(supabase, LOGO_LOGIN):
+    # ── Procesar acciones del admin (aprobar/rechazar desde correo) ──
+    _procesar_accion_admin(supabase)
+
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN):
@@ -42,7 +278,6 @@ def mostrar_login(supabase, LOGO_LOGIN):
                             if r_user.data and r_user.data[0]["nombre_completo"]:
                                 nombre = r_user.data[0]["nombre_completo"]
                             else:
-                                # Intentar desde metadatos de Supabase Auth
                                 meta = res.user.user_metadata or {}
                                 nombre = meta.get("nombre_completo") or email.split("@")[0].title()
                         except:
@@ -63,12 +298,13 @@ def mostrar_login(supabase, LOGO_LOGIN):
                         elif "invalid" in err:
                             st.error("❌ Correo o contraseña incorrectos.")
                         else:
-                            # 🔴 AQUÍ ESTÁ EL CAMBIO CLAVE 🔴
-                            st.error(f"❌ Error técnico de Supabase: {e}")
+                            st.error(f"❌ Error técnico: {e}")
 
         # ── REGISTRO ───────────────────────────────────────────
         with tab_registro:
-            st.markdown("##### Crea tu cuenta en My FinanceApp")
+            st.markdown("##### Solicitar acceso a My FinanceApp")
+            st.info("📋 El acceso requiere aprobación del administrador. Te notificaremos por correo.")
+
             nombre_completo = st.text_input("Nombre completo", key="reg_nombre", placeholder="Ej: Juan Pérez")
             email_reg       = st.text_input("Correo electrónico", key="reg_email", placeholder="tucorreo@ejemplo.com")
             pwd_reg         = st.text_input("Contraseña", type="password", key="reg_pwd", placeholder="Mínimo 8 caracteres")
@@ -107,7 +343,8 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                 key="check_terminos"
             )
 
-            if st.button("Crear cuenta", use_container_width=True, key="btn_registro", disabled=not acepta_terminos):
+            if st.button("📨 Enviar solicitud de acceso", use_container_width=True,
+                         key="btn_registro", disabled=not acepta_terminos):
                 if not nombre_completo or not email_reg or not pwd_reg or not pwd_reg2:
                     st.error("❌ Por favor completa todos los campos.")
                 elif pwd_reg != pwd_reg2:
@@ -120,142 +357,61 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                         st.error(f"❌ {msg}")
                     else:
                         try:
-                            res = supabase.auth.sign_up({
-                                "email": email_reg.strip(),
-                                "password": pwd_reg,
-                                "options": {"data": {"nombre_completo": nombre_completo.strip()}}
-                            })
-                            if res.user:
-                                try:
-                                    supabase.table("usuarios").upsert({
-                                        "usuario_id":      res.user.id,
-                                        "nombre_completo": nombre_completo.strip(),
-                                    }).execute()
-                                except:
-                                    pass
+                            # ── Verificar si ya tiene solicitud pendiente o aprobada ──
+                            existing = supabase.table("solicitudes_registro") \
+                                .select("estado") \
+                                .eq("email", email_reg.strip()) \
+                                .execute()
 
-                                # ── Correo tutorial detallado ─────────────
-                                try:
-                                    import smtplib
-                                    from email.mime.text import MIMEText
-                                    from email.mime.multipart import MIMEMultipart
-                                    _gmail_user = st.secrets.get("gmail", {}).get("email", "")
-                                    _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
-                                    if _gmail_user and _gmail_pass:
-                                        _msg = MIMEMultipart("alternative")
-                                        _msg["Subject"] = f"📚 Tu guía completa de My FinanceApp, {nombre_completo.split()[0]}"
-                                        _msg["From"]    = _gmail_user
-                                        _msg["To"]      = email_reg.strip()
-                                        _html_tutorial = f"""
-<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:0;background:#1a1e23;font-family:Arial,sans-serif">
-<div style="max-width:600px;margin:0 auto;padding:30px 20px">
-
-  <div style="text-align:center;margin-bottom:24px">
-    <h1 style="color:#fca311;font-size:1.8rem;margin:0">My FinanceApp</h1>
-    <p style="color:#adb5bd;font-size:0.85rem;margin:4px 0">by Stulio Designs</p>
-  </div>
-
-  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:20px;border-left:4px solid #fca311">
-    <h2 style="color:#fff;margin:0 0 8px">📚 Tu guía paso a paso</h2>
-    <p style="color:#adb5bd;margin:0;font-size:0.85rem;line-height:1.6">
-      Hola <b style="color:#fff">{nombre_completo.split()[0]}</b>, aquí tienes todo lo que necesitas saber para sacarle el máximo provecho a My FinanceApp.
-    </p>
-  </div>
-
-  <!-- Pasos -->
-  <div style="background:#2d3238;border-radius:12px;padding:24px;margin-bottom:16px">
-
-    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">1️⃣ Configura tu mes</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
-        En el <b>panel izquierdo</b> selecciona el año y mes. Luego ingresa tu <b>Saldo Anterior</b> (lo que tenías del mes pasado) y tu <b>Nómina</b>. Si tienes otros ingresos, agrégalos en la sección de Ingresos Adicionales. Presiona <b>💾 Guardar</b>.
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">2️⃣ Define tus Gastos Proyectados</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
-        En la tabla <b>"Gastos / Egresos Proyectados"</b> registra todos los gastos que planeas tener: servicios, arriendos, seguros, etc. con su valor estimado.<br><br>
-        • Activa <b>📌 Referencia</b> en los ítems que quieres hacer seguimiento de ejecución.<br>
-        • Activa <b>🔁 Recurrente</b> en los que se repiten cada mes — aparecerán automáticamente el próximo mes.<br>
-        • Usa <b>📋 Copiar al registrar</b> para que el valor proyectado se copie automáticamente al registrar el movimiento.
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">3️⃣ Registra tus movimientos diarios</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
-        En <b>"Editar / Agregar Movimientos"</b> registra cada gasto del día a día con su monto real.<br><br>
-        • Asocia cada gasto a un <b>Ítem Proyectado</b> para hacer seguimiento del presupuesto.<br>
-        • Marca <b>✅ Pagado</b> cuando hayas cancelado la obligación.<br>
-        • Agrega la <b>Fecha</b> para llevar un historial detallado.
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">4️⃣ Analiza tus métricas</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
-        El dashboard muestra automáticamente:<br>
-        • <b>Obligaciones Pagadas</b> — lo que ya cancelaste<br>
-        • <b>Obligaciones Pendientes</b> — lo que aún debes con saldo disponible<br>
-        • <b>Dinero Disponible</b> — ingresos menos pagado<br>
-        • <b>Saldo a Favor</b> — lo que te queda después de cubrir todo<br>
-        • Gráficas de distribución por categoría y seguimiento de proyectados
-      </div>
-    </div>
-
-    <div style="margin-bottom:16px;padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #fca311">
-      <div style="color:#fca311;font-weight:800;font-size:0.85rem;margin-bottom:6px">5️⃣ Descarga tus extractos</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
-        Desde el sidebar descarga tu resumen en <b>📄 PDF</b> o <b>📊 Excel</b>. También puedes generar <b>proyecciones semestrales</b> para planear con anticipación.
-      </div>
-    </div>
-
-    <div style="padding:14px;background:#3a3f44;border-radius:8px;border-left:3px solid #2ecc71">
-      <div style="color:#2ecc71;font-weight:800;font-size:0.85rem;margin-bottom:6px">💡 Funciones avanzadas</div>
-      <div style="color:#dee2e6;font-size:0.82rem;line-height:1.6">
-        • <b>🤖 Asesor IA</b> — obtén un diagnóstico financiero personalizado al final del dashboard.<br>
-        • <b>👥 Finanzas Grupales</b> — vincula tu cuenta con otra persona (pareja, socio, familiar) para ver un dashboard consolidado con extractos compartidos.
-      </div>
-    </div>
-  </div>
-
-  <div style="text-align:center;margin-bottom:24px">
-    <a href="https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
-       style="background:#fca311;color:#14213d;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:800;font-size:1rem;display:inline-block">
-      🚀 Ir a My FinanceApp
-    </a>
-  </div>
-
-  <div style="text-align:center;border-top:1px solid #3a3f44;padding-top:16px">
-    <p style="color:#6c757d;font-size:0.75rem;margin:0">
-      My FinanceApp · by Stulio Designs<br>
-      ¿Tienes dudas? Escríbenos a arqtulicesar@gmail.com
-    </p>
-  </div>
-
-</div>
-</body>
-</html>"""
-                                        _msg.attach(MIMEText(_html_tutorial, "html"))
-                                        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
-                                            _smtp.login(_gmail_user, _gmail_pass)
-                                            _smtp.sendmail(_gmail_user, email_reg.strip(), _msg.as_string())
-                                except:
-                                    pass  # Si falla el correo, no bloquear el registro
-
-                                st.success(f"✅ ¡Cuenta creada! Revisa tu correo **{email_reg}** para confirmar tu cuenta.")
-                                st.info("Una vez confirmado tu correo, ingresa desde la pestaña 🔑 Ingresar.")
+                            if existing.data:
+                                estado_actual = existing.data[0]["estado"]
+                                if estado_actual == "pendiente":
+                                    st.warning("⏳ Ya tienes una solicitud pendiente. Te avisaremos pronto.")
+                                elif estado_actual == "aprobada":
+                                    st.success("✅ Tu solicitud ya fue aprobada. Revisa tu correo y crea tu cuenta.")
+                                elif estado_actual == "rechazada":
+                                    st.error("❌ Tu solicitud fue rechazada. Contáctanos a arqtulicesar@gmail.com.")
+                                # No procesamos más en ninguno de estos casos
                             else:
-                                st.error("❌ No se pudo crear la cuenta. Intenta de nuevo.")
+                                # ── Verificar si ya está registrado en Supabase Auth ──
+                                # (no podemos chequearlo directamente, lo manejamos en el catch)
+
+                                # ── Guardar solicitud en tabla ──
+                                ins = supabase.table("solicitudes_registro").insert({
+                                    "nombre_completo": nombre_completo.strip(),
+                                    "email":           email_reg.strip(),
+                                    "estado":          "pendiente",
+                                    "password_hash":   pwd_reg,   # se guarda temporalmente; admin aprueba y usuario crea cuenta
+                                }).execute()
+
+                                solicitud_id = ins.data[0]["id"] if ins.data else "N/A"
+
+                                # ── Notificar al admin ──
+                                _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                                _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+                                if _gmail_user and _gmail_pass:
+                                    try:
+                                        _notificar_admin_solicitud(
+                                            _gmail_user, _gmail_pass,
+                                            nombre_completo.strip(),
+                                            email_reg.strip(),
+                                            solicitud_id
+                                        )
+                                    except:
+                                        pass  # No bloquear si falla el correo
+
+                                st.success(
+                                    f"✅ ¡Solicitud enviada, {nombre_completo.split()[0]}! "
+                                    "Te notificaremos a tu correo cuando sea aprobada."
+                                )
+                                st.info("⏳ El administrador revisará tu solicitud pronto.")
+
                         except Exception as e:
                             err = str(e).lower()
-                            if "already registered" in err or "already exists" in err:
-                                st.error("❌ Este correo ya está registrado. Intenta ingresar.")
+                            if "duplicate" in err or "unique" in err:
+                                st.warning("⏳ Ya existe una solicitud con ese correo. Espera la revisión del administrador.")
                             else:
-                                st.error(f"❌ Error al crear la cuenta: {e}")
+                                st.error(f"❌ Error al enviar la solicitud: {e}")
 
         # ── RECUPERAR CONTRASEÑA ───────────────────────────────
         with tab_recuperar:
@@ -282,8 +438,7 @@ Para dudas o solicitudes: arqtulicesar@gmail.com
                     except Exception as e:
                         err = str(e).lower()
                         if "user not found" in err or "not found" in err:
-                            # Por seguridad, no revelamos si el correo existe o no
-                            st.success(f"✅ Si ese correo está registrado, recibirás el enlace en unos minutos.")
+                            st.success("✅ Si ese correo está registrado, recibirás el enlace en unos minutos.")
                         else:
                             st.error(f"❌ Error: {e}")
 
@@ -296,8 +451,6 @@ def cerrar_sesion():
 
 def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
     """Solicitud de eliminación de cuenta — notifica al administrador por correo."""
-    import requests as _req
-
     st.markdown(
         '<p style="color:#adb5bd;font-size:0.78rem;margin-bottom:10px">'
         'Opciones avanzadas de tu cuenta</p>',
@@ -305,12 +458,10 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
     )
 
     if not st.session_state.get("solicitud_eliminar_paso2"):
-        # ── PASO 1: botón inicial ─────────────────────────────
         if st.button("🗑️ Solicitar eliminar cuenta", key="btn_solicitar_eliminar_cuenta"):
             st.session_state["solicitud_eliminar_paso2"] = True
             st.rerun()
     else:
-        # ── PASO 2: advertencia + confirmación ────────────────
         st.markdown("""
         <div style="background:#3a1a1a;border-radius:10px;padding:16px;border-left:4px solid #e74c3c;margin-bottom:12px">
             <div style="font-size:0.9rem;font-weight:800;color:#e74c3c;margin-bottom:8px">⚠️ ADVERTENCIA — Acción irreversible</div>
@@ -330,9 +481,9 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
             key="check_solicitud_eliminar"
         )
 
-        if st.button("✅ Confirmar solicitud", key="btn_confirmar_solicitud", disabled=not confirmar, use_container_width=True):
+        if st.button("✅ Confirmar solicitud", key="btn_confirmar_solicitud",
+                     disabled=not confirmar, use_container_width=True):
             try:
-                # ── Guardar solicitud en Supabase ─────────
                 try:
                     supabase.postgrest.auth(token)
                     supabase.table("solicitudes_eliminacion").insert({
@@ -344,7 +495,6 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
                 except:
                     pass
 
-                # ── Enviar correo al administrador via Gmail SMTP ──
                 import smtplib
                 from email.mime.text import MIMEText
                 from email.mime.multipart import MIMEMultipart
@@ -386,7 +536,6 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
                     </div>
                     """
                     _msg.attach(MIMEText(_cuerpo_html, "html"))
-
                     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
                         _smtp.login(_gmail_user, _gmail_pass)
                         _smtp.sendmail(_gmail_user, _gmail_user, _msg.as_string())
@@ -402,10 +551,9 @@ def mostrar_eliminar_cuenta(supabase, token, u_id, email_usuario):
             st.session_state["solicitud_eliminar_paso2"] = False
             st.rerun()
 
-    # ── CONFIRMACIÓN FINAL ────────────────────────────────
     if st.session_state.get("solicitud_eliminar_enviada"):
         st.success("✅ Solicitud enviada correctamente.")
-        st.info("El administrador procesará tu solicitud en las próximas 24-48 horas. Puedes seguir usando la app hasta entonces.")
+        st.info("El administrador procesará tu solicitud en las próximas 24-48 horas.")
         if st.button("Cerrar", key="btn_cerrar_solicitud"):
             st.session_state["solicitud_eliminar_enviada"] = False
             st.rerun()
