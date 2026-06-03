@@ -241,27 +241,11 @@ def parse_moneda(texto):
     return float(clean) if clean else 0.0
 
 def calcular_pendientes(df):
-    """
-    Lógica unificada de pendientes — usada tanto en KPIs como en la tabla visual.
-
-    Casos:
-    A) Proyectado con Es Referencia=True  → aparece con saldo (Valor Ref - ejecutado asociado).
-                                            Si saldo=0 → desaparece.
-    B) Proyectado con Es Referencia=False → aparece como pendiente normal por su Valor Referencia,
-                                            SALVO que ya exista un movimiento real PAGADO con
-                                            la misma Descripción → desaparece.
-    C) Movimiento normal sin Presupuesto Asociado, no pagado → aparece normal por su Monto.
-    D) Movimiento con Presupuesto Asociado cuyo proyectado tiene Es Referencia=True
-                                          → NO aparece solo (absorbido por el proyectado).
-    E) Movimiento con Presupuesto Asociado cuyo proyectado tiene Es Referencia=False
-                                          → aparece normal por su Monto.
-    """
     if df.empty:
         return pd.DataFrame(columns=df.columns)
 
     col_pa = "Presupuesto Asociado"
 
-    # ── Set de ítems proyectados CON referencia activa ────────────────────────
     items_con_referencia = set()
     if "Es Referencia" in df.columns and "Es Proyectado" in df.columns:
         items_con_referencia = set(
@@ -271,14 +255,11 @@ def calcular_pendientes(df):
             ]["Descripción"].dropna().str.strip().str.upper().tolist()
         )
 
-    # ── Set de descripciones ya PAGADAS en movimientos reales ─────────────────
-    # (filas que NO son proyectadas y tienen Pagado=True)
     df_movs_reales = df[df["Es Proyectado"].fillna(False).astype(bool) == False]
     descripciones_pagadas = set(
         df_movs_reales[df_movs_reales["Pagado"].fillna(False).astype(bool)]
         ["Descripción"].dropna().str.strip().str.upper().tolist()
     )
-    # También incluir ítems asociados a proyectados con referencia que estén pagados
     if col_pa in df.columns:
         items_proy_pagados = set(
             df[df["Pagado"].fillna(False).astype(bool)][col_pa]
@@ -286,7 +267,6 @@ def calcular_pendientes(df):
         ) - {"", "NAN", "NONE", "NAN"}
         descripciones_pagadas = descripciones_pagadas | items_proy_pagados
 
-    # ── Mapa de ejecución para ítems CON referencia ───────────────────────────
     mapa_ejecutado       = {}
     mapa_pagado_completo = {}
     if col_pa in df.columns and items_con_referencia:
@@ -305,15 +285,14 @@ def calcular_pendientes(df):
     filas_pendientes = []
 
     for _, row in df_pendientes.iterrows():
-        es_proy = bool(row.get("Es Proyectado", False))
-        es_ref  = bool(row.get("Es Referencia", False))
+        es_proy  = bool(row.get("Es Proyectado", False))
+        es_ref   = bool(row.get("Es Referencia", False))
         col_pa_v = str(row.get(col_pa, "")).strip() if col_pa in df.columns else ""
         tiene_asociado = col_pa_v not in ("", "nan", "None", "NaN")
         desc_key = str(row.get("Descripción", "")).strip().upper()
 
         if es_proy:
             if es_ref:
-                # Caso A: proyectado con referencia → saldo disponible
                 vref      = float(row.get("Valor Referencia", 0) or 0)
                 ejecutado = mapa_ejecutado.get(desc_key, 0.0)
                 pag_comp  = mapa_pagado_completo.get(desc_key, False)
@@ -324,25 +303,21 @@ def calcular_pendientes(df):
                 fila["Valor Referencia"] = saldo
                 filas_pendientes.append(fila)
             else:
-                # Caso B: proyectado sin referencia → solo si NO hay movimiento pagado igual
                 if desc_key in descripciones_pagadas:
-                    continue  # ya fue pagado → no duplicar
+                    continue
                 filas_pendientes.append(row)
-
         elif tiene_asociado:
             key_pa = col_pa_v.upper()
             if key_pa in items_con_referencia:
-                continue  # Caso D: absorbido por proyectado con referencia
+                continue
             else:
-                filas_pendientes.append(row)  # Caso E: aparece normal
-
+                filas_pendientes.append(row)
         else:
-            # Caso C: movimiento normal sin asociado
             filas_pendientes.append(row)
 
     return pd.DataFrame(filas_pendientes).reset_index(drop=True) if filas_pendientes else pd.DataFrame(columns=df.columns)
 
-# --- 7. LAYOUT BASE PLOTLY (con SF Pro) ---
+# --- 7. LAYOUT BASE PLOTLY ---
 PLOTLY_LAYOUT = dict(
     paper_bgcolor='rgba(0,0,0,0)',
     plot_bgcolor='rgba(0,0,0,0)',
@@ -352,13 +327,9 @@ PLOTLY_LAYOUT = dict(
 # --- 11. PANTALLA DE LOGIN ---
 if not st.session_state.autenticado:
 
-    # ── Detectar token de recuperación ──────────────────────
-    # Cuando Supabase redirige después de verificar, añade el access_token
-    # en el hash. Lo capturamos con JS y redirigimos con query param.
     _recovery_token = st.query_params.get("recovery_token", "")
 
     if not _recovery_token:
-        # JS que lee el hash y redirige con query param legible por Streamlit
         st.components.v1.html("""
         <script>
         (function() {
@@ -381,7 +352,6 @@ if not st.session_state.autenticado:
         mostrar_login(supabase, LOGO_LOGIN)
         st.stop()
 
-    # ── Formulario de nueva contraseña ────────────────────────
     col1, col2, col3 = st.columns([1, 1.5, 1])
     with col2:
         if os.path.exists(LOGO_LOGIN):
@@ -406,7 +376,6 @@ if not st.session_state.autenticado:
                     st.error(f"❌ {msg}")
                 else:
                     try:
-                        # Establecer sesión con el access_token antes de actualizar
                         _refresh_token = st.query_params.get("refresh_token", "")
                         res_session = supabase.auth.set_session(
                             access_token=_recovery_token,
@@ -442,6 +411,7 @@ except Exception as e:
     else:
         st.error(f"Error al cargar datos: {e}")
         st.stop()
+
 if "Periodo" not in df_i_full.columns:
     df_i_full = pd.DataFrame(columns=["Periodo","Año","Nomina","SaldoAnterior"])
 if "Periodo" not in df_g_full.columns:
@@ -474,14 +444,11 @@ with st.sidebar:
 
     s_sug = 0.0
     if not i_ant.empty:
-        # Reconstruir df_ant con Es Referencia para usar calcular_pendientes
         _nom_ant = float(i_ant["Nomina"].sum())
         _otr_ant = float(oi_ant["Monto"].sum()) if not oi_ant.empty else 0.0
         _sal_ant = float(i_ant["SaldoAnterior"].iloc[0])
         _it_ant  = _sal_ant + _nom_ant + _otr_ant
-        # Pagado del mes anterior
         _vp_ant  = float(g_ant[g_ant["Pagado"].fillna(False).astype(bool)]["Monto"].sum()) if not g_ant.empty else 0.0
-        # Pendientes usando la misma lógica que el dashboard
         _pend_ant = calcular_pendientes(g_ant)
         if not _pend_ant.empty:
             _pend_ant["_v"] = _pend_ant.apply(
@@ -509,7 +476,6 @@ with st.sidebar:
     opciones_bill    = [""] + lista_billeteras
 
     # ── Determinar si billeteras están activas para este periodo ──
-    # Activo si este mes/año >= periodo en que se activó
     _bill_desde_p = cfg_usuario.get("billeteras_desde_periodo", None)
     _bill_desde_a = cfg_usuario.get("billeteras_desde_anio", None)
     if _bill_desde_p and _bill_desde_a:
@@ -522,7 +488,6 @@ with st.sidebar:
     else:
         modulo_billeteras_activo = False
 
-    # Billetera nómina y saldo input (valores vacíos si módulo inactivo)
     bill_nomina  = ""
     df_sab_input = pd.DataFrame(columns=["billetera","monto"])
 
@@ -539,9 +504,11 @@ with st.sidebar:
             key="sel_bill_nomina"
         )
 
-        # Saldo inicial por billetera (digitable directo)
+        # ── Saldo inicial por billetera ───────────────────
         with st.expander("💳 Saldo por billetera", expanded=True):
             st.caption("Digita el saldo actual de cada billetera.")
+
+            # Leer saldos guardados para el mes actual
             _sab_mes = df_sab_full[
                 (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
             ] if not df_sab_full.empty else pd.DataFrame()
@@ -550,6 +517,25 @@ with st.sidebar:
                 for _, _r in _sab_mes.iterrows():
                     _b = str(_r.get("billetera") or _r.get("Billetera","")).strip()
                     _sab_dict[_b] = float(_r.get("monto") or _r.get("Monto", 0) or 0)
+
+            # ── FIX: Si el mes actual no tiene saldos guardados y "Arrastrar"
+            #    está ON, calcular saldos finales del mes anterior como sugerencia ──
+            if not _sab_dict and arr_on and lista_billeteras:
+                _sab_ant_mes = df_sab_full[
+                    (df_sab_full["Periodo"] == m_ant) & (df_sab_full["Año"] == a_ant)
+                ] if not df_sab_full.empty else pd.DataFrame()
+                _sab_ant_existe = not _sab_ant_mes.empty
+
+                if _sab_ant_existe:
+                    # Calcular saldo real final del mes anterior por billetera
+                    _saldos_fin_ant = calcular_saldo_billeteras(
+                        df_g_full, df_i_full, df_oi_full,
+                        df_sab_full, lista_billeteras, m_ant, a_ant
+                    )
+                    if any(v != 0 for v in _saldos_fin_ant.values()):
+                        _sab_dict = {b: _saldos_fin_ant.get(b, 0.0) for b in lista_billeteras}
+                        st.caption(f"💡 Saldos calculados de {m_ant} {a_ant} — edita si es necesario.")
+
             sab_rows = []
             _total_dist = 0.0
             for _b in lista_billeteras:
@@ -602,7 +588,6 @@ with st.sidebar:
             st.session_state.get("u_email", "")
         )
 
-        # ── Desvincular usuarios ───────────────────────────
         _vinculos_cfg = cargar_vinculos(supabase, u_id, token)
         _vinculos_activos_cfg = [v for v in _vinculos_cfg if v.get("estado") == "activo"]
         if _vinculos_activos_cfg:
@@ -640,7 +625,7 @@ with st.sidebar:
                         st.rerun()
 
     # ── 👥 VISTA CONSOLIDADA ───────────────────────────────
-    vinculos_activos  = cargar_vinculos(supabase, u_id, token)
+    vinculos_activos   = cargar_vinculos(supabase, u_id, token)
     vinculos_aceptados = [v for v in vinculos_activos if v.get("estado") == "activo"]
 
     st.divider()
@@ -676,7 +661,6 @@ with st.sidebar:
                             "token_invitacion":  _token_inv
                         }).execute()
 
-                        # Enviar correo de invitación
                         _gmail_user = st.secrets.get("gmail", {}).get("email", "")
                         _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
                         _nombre_a   = st.session_state.get("u_nombre_completo", "Un usuario")
@@ -735,7 +719,6 @@ with st.sidebar:
     with st.expander("💳 Mis Billeteras"):
         _nombres_actuales = df_b_full["nombre"].tolist() if not df_b_full.empty else []
 
-        # ── Toggle de activación por periodo ──────────────
         st.markdown(
             '<p style="color:#fca311;font-weight:800;font-size:0.78rem;'
             'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">'
@@ -761,7 +744,6 @@ with st.sidebar:
 
         st.markdown("---")
 
-        # Mostrar billeteras existentes con botón eliminar
         if _nombres_actuales:
             st.markdown("**Billeteras registradas:**")
             for _bn in _nombres_actuales:
@@ -775,7 +757,6 @@ with st.sidebar:
         else:
             st.caption("Aún no tienes billeteras.")
 
-        # Agregar nueva billetera
         _nueva_bill = st.text_input(
             "Nueva billetera",
             key="input_nueva_bill",
@@ -801,7 +782,6 @@ with st.sidebar:
         unsafe_allow_html=True
     )
 
-    # Sincronizar el widget key con el valor guardado para este periodo
     st.session_state["toggle_cierre_mes"] = st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False)
 
     def _on_cierre_change():
@@ -811,9 +791,7 @@ with st.sidebar:
         "Activar cierre de mes",
         key="toggle_cierre_mes",
         on_change=_on_cierre_change,
-        help="Nivela los ítems proyectados con remanente al final del mes: "
-             "los excedentes no gastados dejan de contarse como obligaciones pendientes, "
-             "igualando Dinero Disponible con Saldo a Favor."
+        help="Nivela los ítems proyectados con remanente al final del mes."
     )
     if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False):
         st.caption("✅ Remanentes proyectados excluidos de pendientes.")
@@ -825,7 +803,7 @@ with st.sidebar:
 # --- CUERPO PRINCIPAL ---
 
 # ══════════════════════════════════════════════════════════
-# VISTA CONSOLIDADA (si está activa)
+# VISTA CONSOLIDADA
 # ══════════════════════════════════════════════════════════
 if st.session_state.get("vista_consolidada") and vinculos_aceptados:
     if os.path.exists(LOGO_APP_H):
@@ -834,12 +812,10 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
     st.markdown(f"## 👥 Dashboard Consolidado — {mes_s} {anio_s}")
     st.caption("Vista combinada de todos los usuarios vinculados.")
 
-    # Botón para volver al dashboard personal
     if st.button("◀ Volver a mi dashboard personal", key="btn_salir_consolidado"):
         st.session_state["vista_consolidada"] = False
         st.rerun()
 
-    # Cargar datos de todos los usuarios vinculados
     todos_g  = [df_g_full.copy()]
     todos_i  = [df_i_full.copy()]
     todos_oi = [df_oi_full.copy()]
@@ -852,26 +828,22 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
             todos_g.append(_g)
             todos_i.append(_i)
             todos_oi.append(_oi)
-            # Buscar nombre del otro usuario
             try:
                 r_n = supabase.table("usuarios").select("nombre_completo").eq("usuario_id", otro_id).execute()
                 nombres_usuarios.append(r_n.data[0]["nombre_completo"] if r_n.data else "Usuario vinculado")
             except:
                 nombres_usuarios.append("Usuario vinculado")
 
-    # Consolidar datos del mes
     df_g_cons  = pd.concat([g[(g["Periodo"]==mes_s) & (g["Año"]==anio_s)] for g in todos_g if not g.empty], ignore_index=True) if todos_g else pd.DataFrame()
     df_i_cons  = pd.concat([i[(i["Periodo"]==mes_s) & (i["Año"]==anio_s)] for i in todos_i if not i.empty], ignore_index=True) if todos_i else pd.DataFrame()
     df_oi_cons = pd.concat([oi[(oi["Periodo"]==mes_s) & (oi["Año"]==anio_s)] for oi in todos_oi if not oi.empty], ignore_index=True) if todos_oi else pd.DataFrame()
 
-    # Métricas consolidadas
     nom_cons = float(df_i_cons["Nomina"].sum()) if not df_i_cons.empty and "Nomina" in df_i_cons.columns else 0.0
     sal_cons = float(df_i_cons["SaldoAnterior"].sum()) if not df_i_cons.empty else 0.0
     otr_cons = float(df_oi_cons["Monto"].sum()) if not df_oi_cons.empty else 0.0
     it_c, vp_c, vpy_c, fact_c, bf_c, aho_c = calcular_metricas(df_g_cons, nom_cons, otr_cons, sal_cons)
     label_bf_c = "SALDO A FAVOR" if bf_c >= 0 else "DÉFICIT"
 
-    # ── KPIs consolidados ─────────────────────────────────
     st.divider()
     c_kpi_c = st.columns(5)
     tarj_c = [
@@ -889,7 +861,6 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
         )
     st.divider()
 
-    # ── Resumen por usuario ───────────────────────────────
     st.markdown('<div class="section-header"><span>👤 Resumen por Usuario</span></div>', unsafe_allow_html=True)
     cols_u = st.columns(len(nombres_usuarios))
     for idx_u, (nombre_u, df_g_u, df_i_u, df_oi_u) in enumerate(zip(nombres_usuarios, todos_g, todos_i, todos_oi)):
@@ -915,7 +886,6 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
             </div>
             """, unsafe_allow_html=True)
 
-    # ── Gastos por categoría consolidado ──────────────────
     st.markdown('<div class="section-header"><span>📊 Gastos Consolidados por Categoría</span></div>', unsafe_allow_html=True)
     if not df_g_cons.empty:
         df_g_cons["_v"] = df_g_cons.apply(
@@ -941,7 +911,6 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
                 </div>"""
         st.markdown(barras_c, unsafe_allow_html=True)
 
-    # ── Extractos consolidados ────────────────────────────
     st.divider()
     st.markdown('<div class="section-header"><span>📑 Extractos del Dashboard Consolidado</span></div>', unsafe_allow_html=True)
     col_pdf_c, col_xls_c = st.columns(2)
@@ -967,7 +936,8 @@ if st.session_state.get("vista_consolidada") and vinculos_aceptados:
             except Exception as e:
                 st.error(f"❌ Error: {e}")
 
-    st.stop()  # No mostrar el dashboard individual si estamos en vista consolidada
+    st.stop()
+
 if os.path.exists(LOGO_APP_H):
     st.image(LOGO_APP_H, use_container_width=True)
 st.markdown(f"## Gestión de {mes_s} {anio_s}")
@@ -993,10 +963,6 @@ if df_mes_g.empty:
                 df_mes_g["Pagado"]     = False
                 df_mes_g["Fecha Pago"] = pd.NaT
                 df_mes_g["Monto"]      = 0.0
-
-                # ── CORRECCIÓN CLAVE ──────────────────────────────────────────
-                # Ítems con Valor Referencia > 0 son proyectados aunque hayan sido
-                # guardados incorrectamente como es_proyectado=false en BD
                 df_mes_g["Es Proyectado"] = df_mes_g.apply(
                     lambda r: True if float(r.get("Valor Referencia", 0) or 0) > 0
                               else bool(r.get("Es Proyectado", False)),
@@ -1032,14 +998,12 @@ descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().t
 
 # ══════════════════════════════════════════════════════════
 # TABLA 1: GASTOS / EGRESOS PROYECTADOS
-# Aquí se planifica: qué se espera gastar este mes
 # ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>📅 Gastos / Egresos Proyectados</span></div>', unsafe_allow_html=True)
 st.caption("Define aquí los gastos que proyectas para el mes. Estos sirven como presupuesto de referencia.")
 
-# Separar filas proyectadas del df_mes_g
 df_proy_rows = df_mes_g[df_mes_g["Es Proyectado"] == True].copy()
-df_proy_rows["📋"] = False  # columna para copiar val.ref → monto al registrar
+df_proy_rows["📋"] = False
 if "Es Referencia" not in df_proy_rows.columns:
     df_proy_rows["Es Referencia"] = False
 
@@ -1049,7 +1013,7 @@ config_proy = {
     "Valor Referencia":      st.column_config.NumberColumn("Valor Proyectado", format="$ %,.0f", width="small",
                                  help="Monto que proyectas gastar en este ítem"),
     "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
-                                 help="Activa para hacer seguimiento de este ítem: aparecerá en Pendientes y en Seguimiento de Proyectados"),
+                                 help="Activa para hacer seguimiento de este ítem"),
     "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
                                  help="Copia automáticamente el valor proyectado como monto al registrar el movimiento"),
     "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
@@ -1069,18 +1033,15 @@ df_ed_proy = st.data_editor(
     on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
 
-# Limpiar columna 📋 (es de uso visual solamente — la lógica se aplica al registrar el movimiento)
 df_ed_proy_clean = df_ed_proy.copy()
 df_ed_proy_clean["📋"] = df_ed_proy_clean.get("📋", False)
 if "Es Referencia" not in df_ed_proy_clean.columns:
     df_ed_proy_clean["Es Referencia"] = False
 df_ed_proy_clean["Es Referencia"] = df_ed_proy_clean["Es Referencia"].fillna(False).astype(bool)
 
-# ── Solo los ítems con 📌 Referencia activo aparecen en el dropdown de movimientos ──
 items_referencia = df_ed_proy_clean[
     df_ed_proy_clean["Es Referencia"] == True
 ]["Descripción"].dropna().tolist()
-# También incluir los ya guardados en BD con referencia activa
 if "Es Referencia" in df_mes_g.columns:
     items_ref_bd = df_mes_g[
         (df_mes_g["Es Proyectado"] == True) & (df_mes_g["Es Referencia"] == True)
@@ -1089,17 +1050,14 @@ if "Es Referencia" in df_mes_g.columns:
 else:
     items_referencia = sorted(set(items_referencia))
 
-# (mantener lista completa para compatibilidad interna)
 items_proyectados = items_referencia
 
 # ══════════════════════════════════════════════════════════
-# TABLA 2: EDITAR / AGREGAR MOVIMIENTOS (registro diario)
-# Aquí se registra lo que realmente se gastó / se pagó
+# TABLA 2: EDITAR / AGREGAR MOVIMIENTOS
 # ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
 st.caption("Registra aquí los gastos del día a día. Asocia cada uno a su ítem proyectado si aplica.")
 
-# Filas NO proyectadas = movimientos reales del día a día
 df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
 
 config_mov = {
@@ -1126,7 +1084,7 @@ df_base_mov = df_mov_rows.reindex(
     columns=_cols_mov
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
-# ── 📋 COPIAR AL REGISTRAR ────────────────────────────────────────────────────
+# ── 📋 COPIAR AL REGISTRAR ────────────────────────────────
 if not df_ed_proy_clean.empty:
     proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True].copy()
     if not proy_con_copia.empty:
@@ -1164,11 +1122,8 @@ df_ed_mov = st.data_editor(
 )
 
 # ══════════════════════════════════════════════════════════
-# RECONSTRUIR df_ed_g unificado para toda la lógica downstream
-# (KPIs, gráficas, presupuesto vs ejecución, guardar)
+# RECONSTRUIR df_ed_g unificado
 # ══════════════════════════════════════════════════════════
-
-# Preparar tabla proyectada con todas las columnas necesarias
 df_proy_final = df_ed_proy_clean.copy()
 df_proy_final["Es Proyectado"]        = True
 df_proy_final["Pagado"]               = False
@@ -1181,26 +1136,21 @@ df_proy_final["Es Referencia"] = df_proy_final["Es Referencia"].fillna(False).as
 if "Movimiento Recurrente" not in df_proy_final.columns:
     df_proy_final["Movimiento Recurrente"] = False
 
-# Preparar tabla de movimientos con todas las columnas necesarias
 df_mov_final = df_ed_mov.copy()
 df_mov_final["Es Proyectado"]         = False
 df_mov_final["Valor Referencia"]      = 0.0
 df_mov_final["Movimiento Recurrente"] = False
 df_mov_final["Es Referencia"]         = False
 
-# Unificar en df_ed_g
 df_ed_g = pd.concat([df_proy_final, df_mov_final], ignore_index=True)
 
-# Asegurar tipos
 df_ed_g["Monto"]             = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
 df_ed_g["Valor Referencia"]  = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
 df_ed_g["Pagado"]            = df_ed_g["Pagado"].fillna(False).astype(bool)
 df_ed_g["Es Proyectado"]     = df_ed_g["Es Proyectado"].fillna(False).astype(bool)
 df_ed_g["Movimiento Recurrente"] = df_ed_g["Movimiento Recurrente"].fillna(False).astype(bool)
 
-# ── ANTI-DUPLICACIÓN EN KPIs ──────────────────────────────────────────────────
-# Ítems proyectados con Referencia activa que ya tienen movimientos asociados pagados
-# se marcan como pagados para que calcular_metricas no los cuente como pendientes dobles.
+# ── ANTI-DUPLICACIÓN EN KPIs ──────────────────────────────
 if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.columns:
     _proy_con_pago_kpi = set(
         df_ed_g[df_ed_g["Pagado"] == True]["Presupuesto Asociado"]
@@ -1212,7 +1162,6 @@ if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.colu
             not bool(_row.get("Pagado", False))):
             _desc     = str(_row.get("Descripción","")).strip().upper()
             _vref     = float(_row.get("Valor Referencia", 0) or 0)
-            # Calcular ejecutado para este ítem
             _movs_k   = df_ed_g[
                 df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == _desc
             ]
@@ -1221,7 +1170,6 @@ if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.colu
             if _pag_comp and _ejecutado >= _vref:
                 df_ed_g.loc[_idx, "Pagado"] = True
 
-# df_base unificado para detección de cambios
 df_base = df_ed_g.copy()
 
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
@@ -1240,18 +1188,15 @@ df_ed_oi = st.data_editor(
     key="oi_ed"
 )
 
-# ── CALCULAR MÉTRICAS (antes de renderizar KPIs) ─────────
+# ── CALCULAR MÉTRICAS ─────────────────────────────────────
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum())
 placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 
-# Métricas base
 it, vp, _vpy_old, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 
-# ── vpy desde calcular_pendientes → mismo número que la tabla visual ──
 _df_pend_kpi = calcular_pendientes(df_ed_g)
 
-# ── CIERRE DE MES: excluir remanentes de proyectados con monto parcial ──
 if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False) and not _df_pend_kpi.empty:
     _df_pend_kpi = _df_pend_kpi[~(
         (_df_pend_kpi["Es Proyectado"].fillna(False).astype(bool)) &
@@ -1268,7 +1213,6 @@ if not _df_pend_kpi.empty:
 else:
     vpy = 0.0
 
-# Recalcular fact y bf con el vpy correcto
 it_total = float(s_in) + float(n_in) + float(otr_v)
 fact     = it_total - vp
 bf       = fact - vpy
@@ -1302,29 +1246,23 @@ for i, (l, v, col) in enumerate(tarj):
 st.divider()
 
 # ══════════════════════════════════════════════════════════
-# 💳 SECCIÓN BILLETERAS — entre KPIs y tablas de movimientos
+# 💳 SECCIÓN BILLETERAS
 # ══════════════════════════════════════════════════════════
 if modulo_billeteras_activo and lista_billeteras:
     st.markdown('<div class="section-header"><span>💳 Estado de Billeteras</span></div>', unsafe_allow_html=True)
 
-    # Calcular saldo real por billetera con los datos del mes en memoria
-    _df_g_mes   = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
-    _df_i_mes   = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-    _df_oi_mes  = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-    # Usar los datos en memoria (editor) si hay cambios sin guardar
+    _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
     _df_g_calc  = df_ed_g.copy()
     _df_g_calc["Periodo"] = mes_s
     _df_g_calc["Año"]     = anio_s
-    _df_i_calc  = _df_i_mes.copy()
     if not _df_i_calc.empty:
-        _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]   = n_in
+        _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
         _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
     else:
         _df_i_calc = pd.DataFrame([{
             "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
             "Billetera": bill_nomina, "SaldoAnterior": s_in
         }])
-    # Otros ingresos en memoria
     _df_oi_calc = df_ed_oi.copy()
     _df_oi_calc["Periodo"] = mes_s
     _df_oi_calc["Año"]     = anio_s
@@ -1336,7 +1274,6 @@ if modulo_billeteras_activo and lista_billeteras:
 
     total_bill = sum(saldos_bill.values())
 
-    # Tarjetas de billeteras
     _ncols = min(len(lista_billeteras), 4)
     _cols_bill = st.columns(_ncols)
     _colores_bill = ["#4361ee","#fca311","#2ecc71","#e74c3c","#9b5de5","#00b4d8"]
@@ -1352,7 +1289,6 @@ if modulo_billeteras_activo and lista_billeteras:
             unsafe_allow_html=True
         )
 
-    # Gráfico de barras horizontales
     if total_bill != 0:
         import plotly.graph_objects as _go
         _fig_bill = _go.Figure()
@@ -1378,7 +1314,6 @@ if modulo_billeteras_activo and lista_billeteras:
         st.plotly_chart(_fig_bill, use_container_width=True)
         st.markdown('</div>', unsafe_allow_html=True)
 
-        # Verificación total
         _diff_bill = fact - total_bill
         if abs(_diff_bill) < 1:
             st.success(f"✅ Total billeteras coincide con Dinero Disponible: **$ {total_bill:,.0f}**")
@@ -1389,8 +1324,6 @@ st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span><
 
 if not df_mes_g.empty:
     df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
-
-
 
 
 def render_resumen_gastos(df):
@@ -1440,9 +1373,8 @@ def render_resumen_gastos(df):
         return html
 
     df_pagados_t = df[df["Pagado"].fillna(False).astype(bool) == True].copy()
-    df_pend_adj  = calcular_pendientes(df)  # ← usa la función unificada
+    df_pend_adj  = calcular_pendientes(df)
 
-    # ── CIERRE DE MES: excluir remanentes proyectados de la tabla visual ──
     if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False) and not df_pend_adj.empty:
         df_pend_adj = df_pend_adj[~(
             (df_pend_adj["Es Proyectado"].fillna(False).astype(bool)) &
@@ -1474,7 +1406,6 @@ df_mes_bd = df_g_full[
     (df_g_full["Año"] == anio_s)
 ].copy()
 
-# Solo ítems proyectados con 📌 Referencia activa
 if "Es Referencia" not in df_mes_bd.columns:
     df_mes_bd["Es Referencia"] = False
 df_proyectados = df_mes_bd[
@@ -1599,7 +1530,6 @@ inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
 with inf1:
     st.markdown('<div class="chart-card"><div class="chart-title">Desglose de Gastos</div>', unsafe_allow_html=True)
-    # Solo movimientos reales ejecutados (excluye proyectados)
     t_df = df_ed_g[df_ed_g["Es Proyectado"].fillna(False).astype(bool) == False].copy()
     t_df['V'] = pd.to_numeric(t_df['Monto'], errors='coerce').fillna(0)
     if not t_df.empty and t_df['V'].sum() > 0:
@@ -1691,14 +1621,13 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════
-# 🤖 ASESOR IA DE FINANZAS PERSONALES (Google Gemini)
+# 🤖 ASESOR IA
 # ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>🤖 Asesor IA de Finanzas</span></div>', unsafe_allow_html=True)
 
 with st.expander("💡 Obtener diagnóstico y recomendaciones personalizadas", expanded=False):
     st.caption("Gemini analiza tus flujos del mes y actúa como tu asesor de finanzas personales.")
 
-    # ── Construir contexto financiero ─────────────────────
     resumen_cats = ""
     if not df_ed_g.empty:
         t_df = df_ed_g.copy()
@@ -1750,7 +1679,6 @@ Genera un diagnóstico con estas secciones (usa emojis):
 
 Sé directo, usa los números reales, habla como asesor financiero de confianza."""
 
-    # ── Botón ─────────────────────────────────────────────
     btn_diagnostico = st.button("🔍 Generar Diagnóstico IA", key="btn_ia", use_container_width=True)
 
     if btn_diagnostico:
@@ -1782,7 +1710,6 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
         except Exception as e_ia:
             st.error(f"❌ Error: {str(e_ia)[:200]}")
 
-    # ── Resultado ─────────────────────────────────────────
     if st.session_state.get("ia_diagnostico"):
         st.markdown("---")
         st.markdown(
@@ -1797,8 +1724,6 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
             st.rerun()
 
 
-
-
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 
@@ -1810,12 +1735,10 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     ].copy()
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción","Monto"], how="all")
 
-    # ── Validación billeteras (solo si módulo activo) ──
     _errores_bill = []
     if modulo_billeteras_activo and lista_billeteras:
         if not bill_nomina:
             _errores_bill.append("❌ El **Ingreso Fijo** no tiene billetera asignada.")
-        # Ingresos adicionales: billetera opcional (permite ajustes de nivelación)
         _mov_pagados_sin_bill = df_g_limpio[
             (df_g_limpio["Pagado"].fillna(False).astype(bool)) &
             (df_g_limpio["Es Proyectado"].fillna(False).astype(bool) == False) &
