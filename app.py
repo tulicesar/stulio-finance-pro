@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email
+from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia
 from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
@@ -405,6 +405,7 @@ supabase.postgrest.auth(token)
 try:
     df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full = cargar_bd(supabase, u_id, token)
     cfg_usuario = cargar_config(supabase, u_id, token)
+    df_transferencias_full = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower():
         st.warning("⚠️ Tu sesión expiró. Por favor inicia sesión nuevamente.")
@@ -1190,6 +1191,61 @@ df_ed_oi = st.data_editor(
     key="oi_ed"
 )
 
+# ══════════════════════════════════════════════════════════
+# 🔄 TRANSFERENCIAS ENTRE BILLETERAS
+# ══════════════════════════════════════════════════════════
+if modulo_billeteras_activo and len(lista_billeteras) >= 2:
+    st.markdown('<div class="section-header"><span>🔄 Transferencias entre Billeteras</span></div>', unsafe_allow_html=True)
+    st.caption("Registra movimientos entre tus propias billeteras. No afectan ingresos ni egresos.")
+
+    with st.container():
+        _col_t1, _col_t2, _col_t3, _col_t4, _col_t5 = st.columns([2, 2, 2, 3, 1.5])
+        with _col_t1:
+            _origen = st.selectbox("Desde", lista_billeteras, key="tr_origen")
+        with _col_t2:
+            _destinos_disponibles = [b for b in lista_billeteras if b != _origen]
+            _destino = st.selectbox("Hacia", _destinos_disponibles, key="tr_destino")
+        with _col_t3:
+            _monto_tr = st.number_input("Monto", min_value=0.0, step=10000.0, format="%.0f", key="tr_monto")
+        with _col_t4:
+            _desc_tr = st.text_input("Descripción (opcional)", placeholder="Ej: Recarga Nequi", key="tr_desc")
+        with _col_t5:
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("➕ Registrar", key="btn_registrar_tr", use_container_width=True):
+                if _monto_tr <= 0:
+                    st.error("❌ El monto debe ser mayor a cero.")
+                elif _origen == _destino:
+                    st.error("❌ Origen y destino deben ser diferentes.")
+                else:
+                    if guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
+                                            _origen, _destino, _monto_tr, _desc_tr):
+                        st.success(f"✅ Transferencia registrada: {_origen} → {_destino} por $ {_monto_tr:,.0f}")
+                        st.rerun()
+
+    # Historial del mes (solo para eliminar si el usuario se equivocó)
+    if not df_transferencias_full.empty:
+        st.markdown("**Transferencias del mes:**")
+        for _, _tr in df_transferencias_full.iterrows():
+            _col_h1, _col_h2 = st.columns([8, 1])
+            with _col_h1:
+                _desc_show = f" — {_tr['descripcion']}" if _tr.get('descripcion') else ""
+                st.markdown(
+                    f'<div style="background:#3a3f44;border-radius:8px;padding:8px 14px;margin-bottom:4px;'
+                    f'font-size:0.85rem;color:#fff">'
+                    f'<span style="color:#4361ee;font-weight:700">{_tr["billetera_origen"]}</span>'
+                    f' → <span style="color:#2ecc71;font-weight:700">{_tr["billetera_destino"]}</span>'
+                    f' &nbsp;|&nbsp; <span style="color:#fca311;font-weight:700">$ {float(_tr["monto"]):,.0f}</span>'
+                    f'{_desc_show}</div>',
+                    unsafe_allow_html=True
+                )
+            with _col_h2:
+                if st.button("🗑", key=f"del_tr_{_tr['id']}", help="Eliminar", use_container_width=True):
+                    eliminar_transferencia(supabase, u_id, token, _tr["id"])
+                    st.rerun()
+
+    # Recargar para el cálculo de saldos
+    df_transferencias_full = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
+
 # ── CALCULAR MÉTRICAS ─────────────────────────────────────
 df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum())
@@ -1271,7 +1327,8 @@ if modulo_billeteras_activo and lista_billeteras:
 
     saldos_bill = calcular_saldo_billeteras(
         _df_g_calc, _df_i_calc, _df_oi_calc,
-        df_sab_input, lista_billeteras, mes_s, anio_s
+        df_sab_input, lista_billeteras, mes_s, anio_s,
+        df_transferencias=df_transferencias_full
     )
 
     total_bill = sum(saldos_bill.values())
