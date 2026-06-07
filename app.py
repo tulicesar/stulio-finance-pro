@@ -405,7 +405,6 @@ supabase.postgrest.auth(token)
 try:
     df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full = cargar_bd(supabase, u_id, token)
     cfg_usuario = cargar_config(supabase, u_id, token)
-    df_transferencias_full = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower():
         st.warning("⚠️ Tu sesión expiró. Por favor inicia sesión nuevamente.")
@@ -434,6 +433,7 @@ with st.sidebar:
     mes_s  = st.selectbox("Mes Actual", meses_lista, index=datetime.now().month - 1)
 
     _periodo_key = f"{mes_s}_{anio_s}"
+    df_transferencias_full = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
 
     i_m_act = df_i_full[(df_i_full["Periodo"] == mes_s) & (df_i_full["Año"] == anio_s)]
 
