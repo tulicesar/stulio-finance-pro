@@ -428,3 +428,60 @@ def eliminar_transferencia(supabase, u_id, token, transfer_id):
         import streamlit as st
         st.error(f"Error al eliminar transferencia: {e}")
         return False
+# ── TRANSFERENCIAS ENTRE BILLETERAS ──────────────────────────────────────────
+def cargar_transferencias(supabase, u_id, token, mes_s, anio_s):
+    """Retorna DataFrame con transferencias del periodo."""
+    try:
+        supabase.postgrest.auth(token)
+        r = (supabase.table("transferencias_billeteras")
+             .select("*")
+             .eq("usuario_id", u_id)
+             .eq("anio", anio_s)
+             .eq("periodo", mes_s)
+             .order("created_at")
+             .execute())
+        if r.data:
+            df = pd.DataFrame(r.data)
+            df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
+            return df
+        return pd.DataFrame(columns=["id","usuario_id","anio","periodo",
+                                     "billetera_origen","billetera_destino",
+                                     "monto","descripcion","created_at"])
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al cargar transferencias: {e}")
+        return pd.DataFrame()
+
+
+def guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
+                          origen, destino, monto, descripcion=""):
+    """Inserta una transferencia entre billeteras."""
+    try:
+        supabase.postgrest.auth(token)
+        supabase.table("transferencias_billeteras").insert({
+            "usuario_id":        str(u_id),
+            "anio":              int(anio_s),
+            "periodo":           str(mes_s),
+            "billetera_origen":  origen,
+            "billetera_destino": destino,
+            "monto":             float(monto),
+            "descripcion":       descripcion or None,
+        }).execute()
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al guardar transferencia: {e}")
+        return False
+
+
+def eliminar_transferencia(supabase, u_id, token, transfer_id):
+    """Elimina una transferencia por ID."""
+    try:
+        supabase.postgrest.auth(token)
+        supabase.table("transferencias_billeteras").delete().eq(
+            "id", transfer_id).eq("usuario_id", str(u_id)).execute()
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al eliminar transferencia: {e}")
+        return False
