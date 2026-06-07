@@ -129,10 +129,10 @@ def cargar_bd_usuario(supabase, u_id, token):
 
 
 # ── CALCULAR SALDO REAL POR BILLETERA ────────────────────────────────────────
-def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s):
+def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s, df_transferencias=None):
     """
     Retorna dict {nombre_billetera: saldo_real} para el periodo dado.
-    Saldo real = saldo_anterior + ingresos_recibidos - gastos_pagados
+    Saldo real = saldo_anterior + ingresos_recibidos - gastos_pagados +/- transferencias
     Solo cuenta movimientos PAGADOS en gastos.
     """
     saldos = {b: 0.0 for b in lista_billeteras}
@@ -181,6 +181,17 @@ def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s
             b = str(row.get("Billetera Pago", "") or "").strip()
             if b in saldos:
                 saldos[b] -= float(row.get("Monto", 0) or 0)
+
+    # 5. Transferencias entre billeteras (neutrales para ingresos/egresos)
+    if df_transferencias is not None and not df_transferencias.empty:
+        for _, row in df_transferencias.iterrows():
+            origen  = str(row.get("billetera_origen",  "")).strip()
+            destino = str(row.get("billetera_destino", "")).strip()
+            monto_t = float(row.get("monto", 0) or 0)
+            if origen in saldos:
+                saldos[origen]  -= monto_t
+            if destino in saldos:
+                saldos[destino] += monto_t
 
     return saldos
 
@@ -357,4 +368,63 @@ def guardar_billeteras(supabase, token, u_id, nombres_lista):
         return True
     except Exception as e:
         st.error(f"Error al guardar billeteras: {e}")
+        return False
+
+
+# ── TRANSFERENCIAS ENTRE BILLETERAS ──────────────────────────────────────────
+def cargar_transferencias(supabase, u_id, token, mes_s, anio_s):
+    """Retorna DataFrame con transferencias del periodo."""
+    try:
+        supabase.postgrest.auth(token)
+        r = (supabase.table("transferencias_billeteras")
+             .select("*")
+             .eq("usuario_id", u_id)
+             .eq("anio", anio_s)
+             .eq("periodo", mes_s)
+             .order("created_at")
+             .execute())
+        if r.data:
+            df = pd.DataFrame(r.data)
+            df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
+            return df
+        return pd.DataFrame(columns=["id","usuario_id","anio","periodo",
+                                     "billetera_origen","billetera_destino",
+                                     "monto","descripcion","created_at"])
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al cargar transferencias: {e}")
+        return pd.DataFrame()
+
+
+def guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
+                          origen, destino, monto, descripcion=""):
+    """Inserta una transferencia entre billeteras."""
+    try:
+        supabase.postgrest.auth(token)
+        supabase.table("transferencias_billeteras").insert({
+            "usuario_id":        str(u_id),
+            "anio":              int(anio_s),
+            "periodo":           str(mes_s),
+            "billetera_origen":  origen,
+            "billetera_destino": destino,
+            "monto":             float(monto),
+            "descripcion":       descripcion or None,
+        }).execute()
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al guardar transferencia: {e}")
+        return False
+
+
+def eliminar_transferencia(supabase, u_id, token, transfer_id):
+    """Elimina una transferencia por ID."""
+    try:
+        supabase.postgrest.auth(token)
+        supabase.table("transferencias_billeteras").delete().eq(
+            "id", transfer_id).eq("usuario_id", str(u_id)).execute()
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al eliminar transferencia: {e}")
         return False
