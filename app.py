@@ -49,8 +49,9 @@ SF_FONT      = "SF Pro Display, -apple-system, BlinkMacSystemFont, sans-serif"
 
 LISTA_CATEGORIAS = [
     "Hogar", "Servicios", "Alimentación", "Transporte", "Gasto Vehiculos",
+    "Gastos Estacionamientos",
     "Obligaciones Financieras", "Salud", "Educación",
-    "Cuidado Personal", "Mascotas", "Viajes y Recreación", "Servicios de Streaming",
+    "Cuidado Personal", "Mascotas", "Viajes y Recreación", "Suscripciones",
     "Seguros", "Ahorro e Inversión", "Impuestos", "Imprevistos", "Otros"
 ]
 
@@ -60,7 +61,8 @@ COLOR_MAP = {
     "Obligaciones Financieras": "#84b6f4", "Salud": "#fdcae1",
     "Educación": "#B39EB5", "Cuidado Personal": "#FFD1DC",
     "Mascotas": "#CFCFCF", "Viajes y Recreación": "#AEC6CF",
-    "Servicios de Streaming": "#cfcfc4",
+    "Suscripciones": "#cfcfc4",
+    "Gastos Estacionamientos": "#8ecae6",
     "Seguros": "#836953", "Ahorro e Inversión": "#d4af37",
     "Impuestos": "#ffda9e", "Imprevistos": "#ff6b6b", "Otros": "#b2e2f2"
 }
