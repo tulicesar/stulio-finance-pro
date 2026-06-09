@@ -954,17 +954,18 @@ st.markdown(f"## Gestión de {mes_s} {anio_s}")
 
 df_mes_g = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
 
-if df_mes_g.empty:
-    meses_map_r  = {m: i for i, m in enumerate(meses_lista)}
-    gastos_hist  = df_g_full.copy()
-    if not gastos_hist.empty:
-        p_actual = (anio_s * 12) + meses_lista.index(mes_s)
-        gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
-        p_anterior  = p_actual - 1
-        foto_anterior = gastos_hist[gastos_hist["lt"] == p_anterior]
-        if not foto_anterior.empty:
-            activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
-            if not activos.empty:
+meses_map_r = {m: i for i, m in enumerate(meses_lista)}
+gastos_hist = df_g_full.copy()
+if not gastos_hist.empty:
+    p_actual = (anio_s * 12) + meses_lista.index(mes_s)
+    gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
+    p_anterior    = p_actual - 1
+    foto_anterior = gastos_hist[gastos_hist["lt"] == p_anterior]
+    if not foto_anterior.empty:
+        activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
+        if not activos.empty:
+            if df_mes_g.empty:
+                # Mes vacío: cargar todos los recurrentes
                 df_mes_g = activos.reindex(columns=[
                     "Categoría","Descripción","Monto","Valor Referencia",
                     "Pagado","Movimiento Recurrente","Es Proyectado",
@@ -986,6 +987,37 @@ if df_mes_g.empty:
                     ["Es Proyectado","Categoría","Descripción"],
                     ascending=[False, True, True]
                 ).reset_index(drop=True)
+            else:
+                # Mes con datos: agregar solo recurrentes que NO existen aún
+                _desc_actuales = set(
+                    df_mes_g["Descripción"].str.strip().str.upper().tolist()
+                )
+                _nuevos = activos[
+                    ~activos["Descripción"].str.strip().str.upper().isin(_desc_actuales)
+                ].copy()
+                if not _nuevos.empty:
+                    _nuevos = _nuevos.reindex(columns=[
+                        "Categoría","Descripción","Monto","Valor Referencia",
+                        "Pagado","Movimiento Recurrente","Es Proyectado",
+                        "Presupuesto Asociado","Es Referencia"
+                    ])
+                    _nuevos["Pagado"]     = False
+                    _nuevos["Fecha Pago"] = pd.NaT
+                    _nuevos["Monto"]      = 0.0
+                    _nuevos["Es Proyectado"] = _nuevos.apply(
+                        lambda r: True if float(r.get("Valor Referencia", 0) or 0) > 0
+                                  else bool(r.get("Es Proyectado", False)),
+                        axis=1
+                    )
+                    _nuevos["Es Referencia"] = _nuevos["Es Referencia"].fillna(False).astype(bool)
+                    _nuevos["Presupuesto Asociado"] = _nuevos["Presupuesto Asociado"].where(
+                        _nuevos["Presupuesto Asociado"].notna(), other=None
+                    )
+                    df_mes_g = pd.concat([df_mes_g, _nuevos], ignore_index=True)
+                    df_mes_g = df_mes_g.sort_values(
+                        ["Es Proyectado","Categoría","Descripción"],
+                        ascending=[False, True, True]
+                    ).reset_index(drop=True)
 
 if "Fecha Pago" not in df_mes_g.columns:
     df_mes_g["Fecha Pago"] = pd.NaT
