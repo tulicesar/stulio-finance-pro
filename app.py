@@ -1237,22 +1237,22 @@ df_ed_ip = st.data_editor(
     on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
 
-# Calcular total proyectado (solo filas SIN destino copia = aún no migradas)
+# Calcular total proyectado — TODAS las filas suman al Saldo a Favor
+# (solo dejan de sumar cuando se copian y desaparecen de la tabla)
 _ip_df_calc = df_ed_ip.copy()
 _ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
-# Las filas sin destino (o destino no asignado aún) suman al Saldo a Favor
-_ip_sin_destino = _ip_df_calc[
-    ~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
-]
-_total_ip = float(_ip_sin_destino["Valor Proyectado"].sum())
+_total_ip = float(_ip_df_calc["Valor Proyectado"].sum())
 _total_ip_con_destino = float(_ip_df_calc[
     _ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
 ]["Valor Proyectado"].sum())
 
-if float(_ip_df_calc["Valor Proyectado"].sum()) > 0:
+# Redefinir _ip_sin_destino solo para referencia visual (no afecta cálculo)
+_ip_sin_destino = _ip_df_calc[~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)]
+
+if _total_ip > 0:
     _msg_ip = f"💡 Suma al Saldo a Favor: **$ {_total_ip:,.0f}**"
     if _total_ip_con_destino > 0:
-        _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Pendiente de copiar: **$ {_total_ip_con_destino:,.0f}**"
+        _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: **$ {_total_ip_con_destino:,.0f}**"
     st.caption(_msg_ip, unsafe_allow_html=True)
 
 # ── BOTÓN COPIAR ──────────────────────────────────────────
