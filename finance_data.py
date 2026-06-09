@@ -14,6 +14,7 @@ def cargar_bd(supabase, u_id, token):
         r_oi  = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
         r_b   = supabase.table("billeteras").select("*").eq("usuario_id", u_id).order("created_at").execute()
         r_sab = supabase.table("saldo_anterior_billetera").select("*").eq("usuario_id", u_id).execute()
+        r_ip  = supabase.table("ingresos_proyectados").select("*").eq("usuario_id", u_id).execute()
 
         df_g = pd.DataFrame(r_g.data) if r_g.data else pd.DataFrame(columns=[
             "anio","periodo","categoria","descripcion","monto","valor_referencia",
@@ -31,6 +32,10 @@ def cargar_bd(supabase, u_id, token):
         ])
         df_sab = pd.DataFrame(r_sab.data) if r_sab.data else pd.DataFrame(columns=[
             "id","usuario_id","periodo","anio","billetera","monto"
+        ])
+        df_ip = pd.DataFrame(r_ip.data) if r_ip.data else pd.DataFrame(columns=[
+            "anio","periodo","descripcion","valor_referencia","destino_copia",
+            "recurrente","usuario_id"
         ])
 
         df_g = df_g.rename(columns={
@@ -54,19 +59,24 @@ def cargar_bd(supabase, u_id, token):
         })
         if "anio" in df_sab.columns:
             df_sab = df_sab.rename(columns={"anio":"Año","periodo":"Periodo"})
+        df_ip = df_ip.rename(columns={
+            "anio":"Año", "periodo":"Periodo", "descripcion":"Descripción",
+            "valor_referencia":"Valor Proyectado", "destino_copia":"Destino Copia",
+            "recurrente":"Movimiento Recurrente", "usuario_id":"Usuario"
+        })
 
-        for df in [df_g, df_i, df_oi, df_sab]:
+        for df in [df_g, df_i, df_oi, df_sab, df_ip]:
             if "Año" in df.columns:
                 df["Año"] = pd.to_numeric(df["Año"], errors="coerce").fillna(0).astype(int)
 
         if "Fecha Pago" in df_g.columns:
             df_g["Fecha Pago"] = pd.to_datetime(df_g["Fecha Pago"], errors="coerce")
 
-        return df_g, df_i, df_oi, df_b, df_sab
+        return df_g, df_i, df_oi, df_b, df_sab, df_ip
 
     except Exception as e:
         st.error(f"Error al cargar datos: {e}")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
 # ── CARGAR / GUARDAR CONFIG DE USUARIO ───────────────────────────────────────
@@ -484,4 +494,32 @@ def eliminar_transferencia(supabase, u_id, token, transfer_id):
     except Exception as e:
         import streamlit as st
         st.error(f"Error al eliminar transferencia: {e}")
+        return False
+
+
+# ── INGRESOS PROYECTADOS ──────────────────────────────────────────────────────
+def guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, df_ip_limpio):
+    """Guarda/actualiza los ingresos proyectados del periodo."""
+    try:
+        supabase.postgrest.auth(token)
+        supabase.table("ingresos_proyectados").delete()\
+            .eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+        if not df_ip_limpio.empty:
+            for _, row in df_ip_limpio.iterrows():
+                desc = str(row.get("Descripción", "")).strip()
+                if not desc:
+                    continue
+                supabase.table("ingresos_proyectados").insert({
+                    "anio":             int(anio_s),
+                    "periodo":          str(mes_s),
+                    "descripcion":      desc,
+                    "valor_referencia": float(row.get("Valor Proyectado", 0) or 0),
+                    "destino_copia":    str(row.get("Destino Copia", "Ingresos Adicionales") or "Ingresos Adicionales"),
+                    "recurrente":       bool(row.get("Movimiento Recurrente", False)),
+                    "usuario_id":       str(u_id),
+                }).execute()
+        return True
+    except Exception as e:
+        import streamlit as st
+        st.error(f"Error al guardar ingresos proyectados: {e}")
         return False
