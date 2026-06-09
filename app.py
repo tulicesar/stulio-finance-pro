@@ -473,10 +473,10 @@ with st.sidebar:
     s_in  = parse_moneda(s_txt)
 
     val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
-    # Aplicar copia desde Ingresos Proyectados (destino: Ingreso Fijo)
-    if st.session_state.get("_ip_copiar_fijo") is not None:
-        val_n_init = float(st.session_state["_ip_copiar_fijo"])
-        st.session_state.pop("_ip_copiar_fijo", None)
+    # Aplicar migración desde Ingresos Proyectados (destino: Ingreso Fijo)
+    if st.session_state.get("_ip_migrar_fijo") is not None:
+        val_n_init = float(st.session_state["_ip_migrar_fijo"])
+        st.session_state.pop("_ip_migrar_fijo", None)
     n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
     n_in  = parse_moneda(n_txt)
 
@@ -1182,11 +1182,13 @@ if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.colu
 df_base = df_ed_g.copy()
 
 # ══════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════
 # 📈 INGRESOS PROYECTADOS
 # ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>📈 Ingresos Proyectados</span></div>', unsafe_allow_html=True)
-st.caption("Define aquí los ingresos que proyectas recibir este mes. Sirven como referencia y pueden copiarse a Ingresos Adicionales o al Ingreso Fijo.")
+st.caption("Define aquí los ingresos que proyectas recibir este mes. Al copiar, la fila migra a su destino y deja de ser proyección.")
 
+# ── Base de datos del periodo ─────────────────────────────
 df_mes_ip = df_ip_full[(df_ip_full["Periodo"]==mes_s) & (df_ip_full["Año"]==anio_s)].copy()
 
 # Propagar recurrentes de mes anterior si el mes actual está vacío
@@ -1201,24 +1203,30 @@ if df_mes_ip.empty:
             _activos_ip = _ip_ant[_ip_ant["Movimiento Recurrente"] == True].copy()
             if not _activos_ip.empty:
                 df_mes_ip = _activos_ip.reindex(columns=["Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"])
+                df_mes_ip["Destino Copia"] = None   # recurrentes sin destino predeterminado
                 df_mes_ip = df_mes_ip.reset_index(drop=True)
 
 _OPCIONES_DESTINO = ["Ingresos Adicionales", "Ingreso Fijo (Sueldo/Nómina)"]
 
-_ip_config = {
-    "Descripción":         st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Proyectado":    st.column_config.NumberColumn("💵 Valor Proyectado", format="$ %,.0f", width="small",
-                               help="Monto que proyectas recibir"),
-    "Destino Copia":       st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
-                               help="Elige a dónde se copia el monto al presionar el botón"),
-    "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
-                               help="Se propaga automáticamente al mes siguiente"),
-}
-
 _ip_cols = ["Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"]
 _ip_base = df_mes_ip.reindex(columns=_ip_cols).reset_index(drop=True)
-if "Destino Copia" not in _ip_base.columns or _ip_base["Destino Copia"].isna().all():
-    _ip_base["Destino Copia"] = "Ingresos Adicionales"
+# Destino Copia vacío por defecto (None), NO se fuerza valor predeterminado
+if "Destino Copia" not in _ip_base.columns:
+    _ip_base["Destino Copia"] = None
+# Normalizar: cualquier valor que no sea de la lista → None
+_ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
+    lambda v: v if v in _OPCIONES_DESTINO else None
+)
+
+_ip_config = {
+    "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
+    "Valor Proyectado":      st.column_config.NumberColumn("💵 Valor Proyectado", format="$ %,.0f", width="small",
+                                 help="Monto que proyectas recibir"),
+    "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
+                                 help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
+    "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
+                                 help="Se propaga automáticamente al mes siguiente"),
+}
 
 df_ed_ip = st.data_editor(
     _ip_base,
@@ -1229,41 +1237,56 @@ df_ed_ip = st.data_editor(
     on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
 
-# Total ingresos proyectados → KPI informativo
-_total_ip = float(pd.to_numeric(df_ed_ip["Valor Proyectado"], errors="coerce").fillna(0).sum())
-if _total_ip > 0:
-    st.caption(f"💡 Total ingresos proyectados del mes: **$ {_total_ip:,.0f}**")
+# Calcular total proyectado (solo filas SIN destino copia = aún no migradas)
+_ip_df_calc = df_ed_ip.copy()
+_ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
+# Las filas sin destino (o destino no asignado aún) suman al Saldo a Favor
+_ip_sin_destino = _ip_df_calc[
+    ~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
+]
+_total_ip = float(_ip_sin_destino["Valor Proyectado"].sum())
+_total_ip_con_destino = float(_ip_df_calc[
+    _ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
+]["Valor Proyectado"].sum())
 
-# ── BOTÓN COPIAR INGRESOS PROYECTADOS ────────────────────
-if st.button("📋 Copiar ingresos proyectados a sus destinos", key="btn_copiar_ip", use_container_width=False):
-    _ip_clean = df_ed_ip.dropna(subset=["Descripción","Valor Proyectado"]).copy()
-    _ip_clean["Valor Proyectado"] = pd.to_numeric(_ip_clean["Valor Proyectado"], errors="coerce").fillna(0)
-    _ip_clean = _ip_clean[_ip_clean["Valor Proyectado"] > 0]
+if float(_ip_df_calc["Valor Proyectado"].sum()) > 0:
+    _msg_ip = f"💡 Suma al Saldo a Favor: **$ {_total_ip:,.0f}**"
+    if _total_ip_con_destino > 0:
+        _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Pendiente de copiar: **$ {_total_ip_con_destino:,.0f}**"
+    st.caption(_msg_ip, unsafe_allow_html=True)
 
-    _a_oi   = _ip_clean[_ip_clean["Destino Copia"] == "Ingresos Adicionales"]
-    _a_fijo = _ip_clean[_ip_clean["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
+# ── BOTÓN COPIAR ──────────────────────────────────────────
+if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
+    _ip_con_destino = _ip_df_calc[
+        (_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)) &
+        (_ip_df_calc["Valor Proyectado"] > 0) &
+        (_ip_df_calc["Descripción"].notna()) &
+        (_ip_df_calc["Descripción"].str.strip() != "")
+    ].copy()
 
-    _msgs = []
-    if not _a_oi.empty:
-        _descripciones_oi = []
-        for _, _r in _a_oi.iterrows():
-            _descripciones_oi.append(_r["Descripción"])
-        st.session_state["_ip_copiar_oi"] = _a_oi[["Descripción","Valor Proyectado"]].copy()
-        _msgs.append(f"✅ {len(_a_oi)} ingreso(s) copiado(s) a **Ingresos Adicionales**")
-    if not _a_fijo.empty:
-        _suma_fijo = float(_a_fijo["Valor Proyectado"].sum())
-        st.session_state["_ip_copiar_fijo"] = _suma_fijo
-        _msgs.append(f"✅ $ {_suma_fijo:,.0f} copiado(s) al **Ingreso Fijo**")
-    if _msgs:
-        for m in _msgs:
-            st.success(m)
-        st.rerun()
+    if _ip_con_destino.empty:
+        st.warning("⚠️ No hay filas con destino seleccionado y valor > 0 para copiar.")
     else:
-        st.warning("No hay filas con valor proyectado > 0 para copiar.")
+        _a_oi   = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingresos Adicionales"]
+        _a_fijo = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
 
-# ── APLICAR COPIAS PENDIENTES ─────────────────────────────
-_ip_copiar_oi_pending   = st.session_state.pop("_ip_copiar_oi",   None)
-_ip_copiar_fijo_pending = st.session_state.pop("_ip_copiar_fijo", None)
+        if not _a_oi.empty:
+            st.session_state["_ip_migrar_oi"] = _a_oi[["Descripción","Valor Proyectado"]].to_dict("records")
+        if not _a_fijo.empty:
+            st.session_state["_ip_migrar_fijo"] = float(_a_fijo["Valor Proyectado"].sum())
+
+        # Eliminar de la tabla proyectada las filas que migraron
+        _descripciones_migradas = set(_ip_con_destino["Descripción"].str.strip().str.upper().tolist())
+        _ip_restantes = _ip_df_calc[
+            ~_ip_df_calc["Descripción"].str.strip().str.upper().isin(_descripciones_migradas)
+        ].copy()
+        # Guardar en BD los proyectados restantes (los migrados desaparecen)
+        guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_restantes)
+        st.rerun()
+
+# ── APLICAR MIGRACIONES PENDIENTES (próximo render) ──────
+_ip_migrar_oi   = st.session_state.pop("_ip_migrar_oi",   None)
+_ip_migrar_fijo = st.session_state.pop("_ip_migrar_fijo", None)
 
 # ══════════════════════════════════════════════════════════
 # 💰 INGRESOS ADICIONALES
@@ -1271,11 +1294,11 @@ _ip_copiar_fijo_pending = st.session_state.pop("_ip_copiar_fijo", None)
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
 
-# Aplicar copia desde Ingresos Proyectados (destino: Ingresos Adicionales)
-if _ip_copiar_oi_pending is not None and not _ip_copiar_oi_pending.empty:
+# Aplicar migración desde Ingresos Proyectados (destino: Ingresos Adicionales)
+if _ip_migrar_oi is not None:
     _oi_existentes = set(df_mes_oi["Descripción"].str.strip().str.upper().tolist()) if not df_mes_oi.empty else set()
     _filas_nuevas_oi = []
-    for _, _r in _ip_copiar_oi_pending.iterrows():
+    for _r in _ip_migrar_oi:
         _desc_r = str(_r["Descripción"]).strip()
         if _desc_r.upper() not in _oi_existentes:
             _filas_nuevas_oi.append({"Descripción": _desc_r, "Monto": float(_r["Valor Proyectado"])})
@@ -1359,6 +1382,7 @@ otr_v = float(df_ed_oi["Monto"].sum())
 placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 
 it, vp, _vpy_old, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
+it = it + float(_total_ip)   # sumar ingresos proyectados aún no migrados
 
 _df_pend_kpi = calcular_pendientes(df_ed_g)
 
@@ -1378,7 +1402,7 @@ if not _df_pend_kpi.empty:
 else:
     vpy = 0.0
 
-it_total = float(s_in) + float(n_in) + float(otr_v)
+it_total = float(s_in) + float(n_in) + float(otr_v) + float(_total_ip)
 fact     = it_total - vp
 bf       = fact - vpy
 ahorro_p = (bf / it_total * 100) if it_total > 0 else 0.0
