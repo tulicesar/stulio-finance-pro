@@ -452,7 +452,12 @@ with st.sidebar:
         _nom_ant = float(i_ant["Nomina"].sum())
         _otr_ant = float(oi_ant["Monto"].sum()) if not oi_ant.empty else 0.0
         _sal_ant = float(i_ant["SaldoAnterior"].iloc[0])
-        _it_ant  = _sal_ant + _nom_ant + _otr_ant
+        # Ingresos proyectados del mes anterior que aún no fueron migrados
+        _ip_ant = df_ip_full[
+            (df_ip_full["Periodo"] == m_ant) & (df_ip_full["Año"] == a_ant)
+        ] if not df_ip_full.empty else pd.DataFrame()
+        _total_ip_ant = float(_ip_ant["Valor Proyectado"].sum()) if not _ip_ant.empty else 0.0
+        _it_ant  = _sal_ant + _nom_ant + _otr_ant + _total_ip_ant
         _vp_ant  = float(g_ant[g_ant["Pagado"].fillna(False).astype(bool)]["Monto"].sum()) if not g_ant.empty else 0.0
         _pend_ant = calcular_pendientes(g_ant)
         if not _pend_ant.empty:
