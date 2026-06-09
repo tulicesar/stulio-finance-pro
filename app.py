@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia
+from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia, guardar_ingresos_proyectados
 from reports import generar_pdf_reporte, generar_excel_reporte
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
@@ -403,7 +403,7 @@ token = st.session_state.token
 
 supabase.postgrest.auth(token)
 try:
-    df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full = cargar_bd(supabase, u_id, token)
+    df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full, df_ip_full = cargar_bd(supabase, u_id, token)
     cfg_usuario = cargar_config(supabase, u_id, token)
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower():
@@ -420,6 +420,8 @@ if "Periodo" not in df_g_full.columns:
     df_g_full = pd.DataFrame(columns=["Periodo","Año","Categoría","Descripción","Monto","Valor Referencia","Pagado","Movimiento Recurrente","Fecha Pago","Es Proyectado","Presupuesto Asociado","Es Referencia"])
 if "Periodo" not in df_oi_full.columns:
     df_oi_full = pd.DataFrame(columns=["Periodo","Año","Descripción","Monto"])
+if "Periodo" not in df_ip_full.columns:
+    df_ip_full = pd.DataFrame(columns=["Periodo","Año","Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"])
 
 meses_lista = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
 
@@ -471,6 +473,10 @@ with st.sidebar:
     s_in  = parse_moneda(s_txt)
 
     val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
+    # Aplicar copia desde Ingresos Proyectados (destino: Ingreso Fijo)
+    if st.session_state.get("_ip_copiar_fijo") is not None:
+        val_n_init = float(st.session_state["_ip_copiar_fijo"])
+        st.session_state.pop("_ip_copiar_fijo", None)
     n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
     n_in  = parse_moneda(n_txt)
 
@@ -1175,8 +1181,109 @@ if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.colu
 
 df_base = df_ed_g.copy()
 
+# ══════════════════════════════════════════════════════════
+# 📈 INGRESOS PROYECTADOS
+# ══════════════════════════════════════════════════════════
+st.markdown('<div class="section-header"><span>📈 Ingresos Proyectados</span></div>', unsafe_allow_html=True)
+st.caption("Define aquí los ingresos que proyectas recibir este mes. Sirven como referencia y pueden copiarse a Ingresos Adicionales o al Ingreso Fijo.")
+
+df_mes_ip = df_ip_full[(df_ip_full["Periodo"]==mes_s) & (df_ip_full["Año"]==anio_s)].copy()
+
+# Propagar recurrentes de mes anterior si el mes actual está vacío
+if df_mes_ip.empty:
+    _p_actual_ip = (anio_s * 12) + meses_lista.index(mes_s)
+    _ip_hist = df_ip_full.copy()
+    if not _ip_hist.empty and "Periodo" in _ip_hist.columns:
+        _meses_map_ip = {m: i for i, m in enumerate(meses_lista)}
+        _ip_hist["_lt"] = (_ip_hist["Año"] * 12) + _ip_hist["Periodo"].map(_meses_map_ip)
+        _ip_ant = _ip_hist[_ip_hist["_lt"] == _p_actual_ip - 1]
+        if not _ip_ant.empty:
+            _activos_ip = _ip_ant[_ip_ant["Movimiento Recurrente"] == True].copy()
+            if not _activos_ip.empty:
+                df_mes_ip = _activos_ip.reindex(columns=["Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"])
+                df_mes_ip = df_mes_ip.reset_index(drop=True)
+
+_OPCIONES_DESTINO = ["Ingresos Adicionales", "Ingreso Fijo (Sueldo/Nómina)"]
+
+_ip_config = {
+    "Descripción":         st.column_config.TextColumn("Descripción", width="large"),
+    "Valor Proyectado":    st.column_config.NumberColumn("💵 Valor Proyectado", format="$ %,.0f", width="small",
+                               help="Monto que proyectas recibir"),
+    "Destino Copia":       st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
+                               help="Elige a dónde se copia el monto al presionar el botón"),
+    "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
+                               help="Se propaga automáticamente al mes siguiente"),
+}
+
+_ip_cols = ["Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"]
+_ip_base = df_mes_ip.reindex(columns=_ip_cols).reset_index(drop=True)
+if "Destino Copia" not in _ip_base.columns or _ip_base["Destino Copia"].isna().all():
+    _ip_base["Destino Copia"] = "Ingresos Adicionales"
+
+df_ed_ip = st.data_editor(
+    _ip_base,
+    use_container_width=True,
+    num_rows="dynamic",
+    column_config=_ip_config,
+    key="ip_ed",
+    on_change=lambda: st.session_state.update({"datos_modificados": True})
+)
+
+# Total ingresos proyectados → KPI informativo
+_total_ip = float(pd.to_numeric(df_ed_ip["Valor Proyectado"], errors="coerce").fillna(0).sum())
+if _total_ip > 0:
+    st.caption(f"💡 Total ingresos proyectados del mes: **$ {_total_ip:,.0f}**")
+
+# ── BOTÓN COPIAR INGRESOS PROYECTADOS ────────────────────
+if st.button("📋 Copiar ingresos proyectados a sus destinos", key="btn_copiar_ip", use_container_width=False):
+    _ip_clean = df_ed_ip.dropna(subset=["Descripción","Valor Proyectado"]).copy()
+    _ip_clean["Valor Proyectado"] = pd.to_numeric(_ip_clean["Valor Proyectado"], errors="coerce").fillna(0)
+    _ip_clean = _ip_clean[_ip_clean["Valor Proyectado"] > 0]
+
+    _a_oi   = _ip_clean[_ip_clean["Destino Copia"] == "Ingresos Adicionales"]
+    _a_fijo = _ip_clean[_ip_clean["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
+
+    _msgs = []
+    if not _a_oi.empty:
+        _descripciones_oi = []
+        for _, _r in _a_oi.iterrows():
+            _descripciones_oi.append(_r["Descripción"])
+        st.session_state["_ip_copiar_oi"] = _a_oi[["Descripción","Valor Proyectado"]].copy()
+        _msgs.append(f"✅ {len(_a_oi)} ingreso(s) copiado(s) a **Ingresos Adicionales**")
+    if not _a_fijo.empty:
+        _suma_fijo = float(_a_fijo["Valor Proyectado"].sum())
+        st.session_state["_ip_copiar_fijo"] = _suma_fijo
+        _msgs.append(f"✅ $ {_suma_fijo:,.0f} copiado(s) al **Ingreso Fijo**")
+    if _msgs:
+        for m in _msgs:
+            st.success(m)
+        st.rerun()
+    else:
+        st.warning("No hay filas con valor proyectado > 0 para copiar.")
+
+# ── APLICAR COPIAS PENDIENTES ─────────────────────────────
+_ip_copiar_oi_pending   = st.session_state.pop("_ip_copiar_oi",   None)
+_ip_copiar_fijo_pending = st.session_state.pop("_ip_copiar_fijo", None)
+
+# ══════════════════════════════════════════════════════════
+# 💰 INGRESOS ADICIONALES
+# ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+
+# Aplicar copia desde Ingresos Proyectados (destino: Ingresos Adicionales)
+if _ip_copiar_oi_pending is not None and not _ip_copiar_oi_pending.empty:
+    _oi_existentes = set(df_mes_oi["Descripción"].str.strip().str.upper().tolist()) if not df_mes_oi.empty else set()
+    _filas_nuevas_oi = []
+    for _, _r in _ip_copiar_oi_pending.iterrows():
+        _desc_r = str(_r["Descripción"]).strip()
+        if _desc_r.upper() not in _oi_existentes:
+            _filas_nuevas_oi.append({"Descripción": _desc_r, "Monto": float(_r["Valor Proyectado"])})
+        else:
+            _mask = df_mes_oi["Descripción"].str.strip().str.upper() == _desc_r.upper()
+            df_mes_oi.loc[_mask & (df_mes_oi["Monto"].fillna(0) == 0), "Monto"] = float(_r["Valor Proyectado"])
+    if _filas_nuevas_oi:
+        df_mes_oi = pd.concat([df_mes_oi, pd.DataFrame(_filas_nuevas_oi)], ignore_index=True)
 _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
 _oi_config = {"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")}
 if modulo_billeteras_activo and lista_billeteras:
@@ -1818,6 +1925,14 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                            df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
                            bill_nomina=bill_nomina,
                            df_sab_nuevo=df_sab_input)
+                # Guardar ingresos proyectados
+                _df_ip_guardar = df_ed_ip.dropna(subset=["Descripción","Valor Proyectado"], how="all").copy()
+                _df_ip_guardar["Valor Proyectado"] = pd.to_numeric(_df_ip_guardar["Valor Proyectado"], errors="coerce").fillna(0)
+                _df_ip_guardar = _df_ip_guardar[
+                    (_df_ip_guardar["Descripción"].notna()) &
+                    (_df_ip_guardar["Descripción"].str.strip() != "")
+                ]
+                guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _df_ip_guardar)
                 st.session_state.datos_modificados = False
                 st.balloons()
                 st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
