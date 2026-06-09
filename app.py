@@ -473,10 +473,6 @@ with st.sidebar:
     s_in  = parse_moneda(s_txt)
 
     val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
-    # Aplicar migración desde Ingresos Proyectados (destino: Ingreso Fijo)
-    if st.session_state.get("_ip_migrar_fijo") is not None:
-        val_n_init = float(st.session_state["_ip_migrar_fijo"])
-        st.session_state.pop("_ip_migrar_fijo", None)
     n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
     n_in  = parse_moneda(n_txt)
 
@@ -1270,43 +1266,72 @@ if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
         _a_oi   = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingresos Adicionales"]
         _a_fijo = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
 
+        # ── Persistir migración a Otros Ingresos en Supabase ──
         if not _a_oi.empty:
-            st.session_state["_ip_migrar_oi"] = _a_oi[["Descripción","Valor Proyectado"]].to_dict("records")
-        if not _a_fijo.empty:
-            st.session_state["_ip_migrar_fijo"] = float(_a_fijo["Valor Proyectado"].sum())
+            _oi_bd = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+            _oi_existentes_bd = set(_oi_bd["Descripción"].str.strip().str.upper().tolist()) if not _oi_bd.empty else set()
+            _filas_oi_nuevas = []
+            for _, _r in _a_oi.iterrows():
+                _d = str(_r["Descripción"]).strip()
+                if _d.upper() not in _oi_existentes_bd:
+                    _filas_oi_nuevas.append({"Descripción": _d, "Monto": float(_r["Valor Proyectado"])})
+                else:
+                    _mask = _oi_bd["Descripción"].str.strip().str.upper() == _d.upper()
+                    _oi_bd.loc[_mask & (_oi_bd["Monto"].fillna(0) == 0), "Monto"] = float(_r["Valor Proyectado"])
+            if _filas_oi_nuevas:
+                _oi_bd = pd.concat([_oi_bd, pd.DataFrame(_filas_oi_nuevas)], ignore_index=True)
+            # Guardar otros_ingresos actualizados en BD
+            try:
+                supabase.postgrest.auth(token)
+                supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                for _, _row_oi in _oi_bd.iterrows():
+                    _desc_oi = str(_row_oi.get("Descripción","")).strip()
+                    _monto_oi = float(_row_oi.get("Monto", 0) or 0)
+                    if _desc_oi:
+                        supabase.table("otros_ingresos").insert({
+                            "anio": int(anio_s), "periodo": str(mes_s),
+                            "descripcion": _desc_oi, "monto": _monto_oi,
+                            "billetera": str(_row_oi.get("Billetera","") or "") or None,
+                            "usuario_id": str(u_id)
+                        }).execute()
+            except Exception as _e:
+                st.error(f"Error al guardar ingresos adicionales: {_e}")
 
-        # Eliminar de la tabla proyectada las filas que migraron
+        # ── Persistir migración a Ingreso Fijo en Supabase ──
+        if not _a_fijo.empty:
+            _suma_fijo_migrada = float(_a_fijo["Valor Proyectado"].sum())
+            try:
+                supabase.postgrest.auth(token)
+                _i_bd = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
+                _n_actual = float(_i_bd["Nomina"].iloc[0]) if not _i_bd.empty else 0.0
+                _s_actual = float(_i_bd["SaldoAnterior"].iloc[0]) if not _i_bd.empty else s_in
+                _o_actual = float(_i_bd["Otros"].iloc[0]) if not _i_bd.empty and "Otros" in _i_bd.columns else 0.0
+                _bill_act = str(_i_bd["Billetera"].iloc[0]) if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
+                _n_nueva  = _n_actual + _suma_fijo_migrada
+                supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                supabase.table("ingresos_base").insert({
+                    "anio": int(anio_s), "periodo": str(mes_s),
+                    "saldo_anterior": _s_actual, "nomina": _n_nueva,
+                    "otros": _o_actual, "billetera": _bill_act or None,
+                    "usuario_id": str(u_id)
+                }).execute()
+            except Exception as _e:
+                st.error(f"Error al guardar ingreso fijo: {_e}")
+
+        # ── Eliminar filas migradas de ingresos_proyectados en BD ──
         _descripciones_migradas = set(_ip_con_destino["Descripción"].str.strip().str.upper().tolist())
         _ip_restantes = _ip_df_calc[
             ~_ip_df_calc["Descripción"].str.strip().str.upper().isin(_descripciones_migradas)
         ].copy()
-        # Guardar en BD los proyectados restantes (los migrados desaparecen)
         guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_restantes)
         st.rerun()
 
-# ── APLICAR MIGRACIONES PENDIENTES (próximo render) ──────
-_ip_migrar_oi   = st.session_state.pop("_ip_migrar_oi",   None)
-_ip_migrar_fijo = st.session_state.pop("_ip_migrar_fijo", None)
 
 # ══════════════════════════════════════════════════════════
 # 💰 INGRESOS ADICIONALES
 # ══════════════════════════════════════════════════════════
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-
-# Aplicar migración desde Ingresos Proyectados (destino: Ingresos Adicionales)
-if _ip_migrar_oi is not None:
-    _oi_existentes = set(df_mes_oi["Descripción"].str.strip().str.upper().tolist()) if not df_mes_oi.empty else set()
-    _filas_nuevas_oi = []
-    for _r in _ip_migrar_oi:
-        _desc_r = str(_r["Descripción"]).strip()
-        if _desc_r.upper() not in _oi_existentes:
-            _filas_nuevas_oi.append({"Descripción": _desc_r, "Monto": float(_r["Valor Proyectado"])})
-        else:
-            _mask = df_mes_oi["Descripción"].str.strip().str.upper() == _desc_r.upper()
-            df_mes_oi.loc[_mask & (df_mes_oi["Monto"].fillna(0) == 0), "Monto"] = float(_r["Valor Proyectado"])
-    if _filas_nuevas_oi:
-        df_mes_oi = pd.concat([df_mes_oi, pd.DataFrame(_filas_nuevas_oi)], ignore_index=True)
 _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
 _oi_config = {"Monto": st.column_config.NumberColumn("Monto", format="$ %,.0f")}
 if modulo_billeteras_activo and lista_billeteras:
