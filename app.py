@@ -570,17 +570,28 @@ with st.sidebar:
 
         if st.button("📧 Enviar extracto por correo (prueba)", key="btn_test_email_extracto"):
             try:
-                import smtplib
+                import smtplib, os as _os
                 from email.mime.multipart import MIMEMultipart
                 from email.mime.text import MIMEText
                 from email.mime.application import MIMEApplication
+                from email.mime.image import MIMEImage
 
-                _pdf_test = generar_pdf_reporte(
+                # Mes actual y mes siguiente
+                _idx_actual = meses_lista.index(mes_s)
+                _mes_sig = meses_lista[_idx_actual + 1] if _idx_actual < 11 else "Enero"
+                _anio_sig = anio_s if _idx_actual < 11 else anio_s + 1
+
+                _pdf_actual = generar_pdf_reporte(
                     df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id
                 )
+                _pdf_proy = generar_pdf_reporte(
+                    df_g_full, df_i_full, df_oi_full, [_mes_sig], f"Proyección {_mes_sig}", _anio_sig, u_id
+                )
+
                 _gmail_user = st.secrets.get("gmail", {}).get("email", "")
                 _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
                 _dest_email = st.session_state.get("u_email", "")
+                _nombre_user = st.session_state.get("u_nombre_completo", "").split(" ")[0] or "amig@"
 
                 if not _gmail_user or not _gmail_pass:
                     st.error("❌ Credenciales de Gmail no configuradas en secrets.")
@@ -588,26 +599,49 @@ with st.sidebar:
                     st.error("❌ No se encontró el email del usuario en la sesión.")
                 else:
                     _msg = MIMEMultipart("mixed")
-                    _msg["Subject"] = f"📄 Extracto de {mes_s} {anio_s} — Stulio Finance Pro"
+                    _msg["Subject"] = f"📄 Tu extracto de {mes_s} {anio_s} ya está listo — My FinanceApp"
                     _msg["From"]    = _gmail_user
                     _msg["To"]      = _dest_email
 
+                    _msg_alt = MIMEMultipart("related")
                     _html = f"""
                     <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-                        <h2 style="color:#fca311">📄 Extracto de {mes_s} {anio_s}</h2>
-                        <p>Hola,</p>
-                        <p>Adjunto encontrarás el extracto financiero de <b>{mes_s} {anio_s}</b> generado por
-                        <b>Stulio Finance Pro</b>.</p>
-                        <p style="color:#adb5bd;font-size:0.8rem">Este es un correo de prueba del nuevo sistema
-                        de envío automático de extractos.</p>
+                        <div style="text-align:center;margin-bottom:20px">
+                            <img src="cid:logo_finance" alt="My FinanceApp" style="max-width:280px;width:100%;height:auto">
+                        </div>
+                        <h2 style="color:#fca311">¡Hola {_nombre_user}! 👋</h2>
+                        <p>Aquí tienes tu resumen financiero del mes 🎉</p>
+                        <p>Te dejamos adjuntos:</p>
+                        <ul>
+                            <li>📄 <b>Extracto de {mes_s} {anio_s}</b> — todo lo que pasó con tus finanzas este mes.</li>
+                            <li>🔮 <b>Proyección de {_mes_sig} {_anio_sig}</b> — para que llegues preparad@ al siguiente mes.</li>
+                        </ul>
+                        <p>Recuerda registrar tus movimientos a tiempo para que tus proyecciones sean cada vez más
+                        precisas. ¡Tú puedes! 💪</p>
+                        <p style="color:#adb5bd;font-size:0.8rem;margin-top:30px">
+                        Este es un correo de prueba del nuevo sistema de envío automático de My FinanceApp.</p>
                     </div>
                     """
-                    _msg.attach(MIMEText(_html, "html"))
+                    _msg_alt.attach(MIMEText(_html, "html"))
 
-                    _pdf_bytes = _pdf_test.getvalue() if hasattr(_pdf_test, "getvalue") else _pdf_test
-                    _adj = MIMEApplication(_pdf_bytes, _subtype="pdf")
-                    _adj.add_header("Content-Disposition", "attachment", filename=f"Extracto_{mes_s}_{anio_s}.pdf")
-                    _msg.attach(_adj)
+                    _logo_path = _os.path.join(_os.path.dirname(__file__), LOGO_APP_H)
+                    if _os.path.exists(_logo_path):
+                        with open(_logo_path, "rb") as _f:
+                            _img = MIMEImage(_f.read())
+                            _img.add_header("Content-ID", "<logo_finance>")
+                            _img.add_header("Content-Disposition", "inline", filename=LOGO_APP_H)
+                            _msg_alt.attach(_img)
+
+                    _msg.attach(_msg_alt)
+
+                    for _pdf_obj, _fname in [
+                        (_pdf_actual, f"Extracto_{mes_s}_{anio_s}.pdf"),
+                        (_pdf_proy,   f"Proyeccion_{_mes_sig}_{_anio_sig}.pdf"),
+                    ]:
+                        _pdf_bytes = _pdf_obj.getvalue() if hasattr(_pdf_obj, "getvalue") else _pdf_obj
+                        _adj = MIMEApplication(_pdf_bytes, _subtype="pdf")
+                        _adj.add_header("Content-Disposition", "attachment", filename=_fname)
+                        _msg.attach(_adj)
 
                     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
                         _smtp.login(_gmail_user, _gmail_pass)
