@@ -457,7 +457,7 @@ with st.sidebar:
             (df_ip_full["Periodo"] == m_ant) & (df_ip_full["Año"] == a_ant)
         ] if not df_ip_full.empty else pd.DataFrame()
         _total_ip_ant = float(_ip_ant["Valor Proyectado"].sum()) if not _ip_ant.empty else 0.0
-        _it_ant  = _sal_ant + _nom_ant + _otr_ant + _total_ip_ant
+        _it_ant  = _sal_ant + _nom_ant + _otr_ant  # Ingresos Proyectados ya NO suman al Saldo a Favor
         _vp_ant  = float(g_ant[g_ant["Pagado"].fillna(False).astype(bool)]["Monto"].sum()) if not g_ant.empty else 0.0
         _pend_ant = calcular_pendientes(g_ant)
         if not _pend_ant.empty:
@@ -1283,7 +1283,7 @@ _total_ip_con_destino = float(_ip_df_calc[
 _ip_sin_destino = _ip_df_calc[~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)]
 
 if _total_ip > 0:
-    _msg_ip = f"💡 Suma al Saldo a Favor: **$ {_total_ip:,.0f}**"
+    _msg_ip = f"📊 Total Ingresos Proyectados: **$ {_total_ip:,.0f}** &nbsp;<span style='color:#888'>(no suma al Saldo a Favor)</span>"
     if _total_ip_con_destino > 0:
         _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: **$ {_total_ip_con_destino:,.0f}**"
     st.caption(_msg_ip, unsafe_allow_html=True)
@@ -1444,7 +1444,7 @@ otr_v = float(df_ed_oi["Monto"].sum())
 placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 
 it, vp, _vpy_old, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
-it = it + float(_total_ip)   # sumar ingresos proyectados aún no migrados
+# Los Ingresos Proyectados ya NO suman al Saldo a Favor (solo se muestran como proyección aparte)
 
 _df_pend_kpi = calcular_pendientes(df_ed_g)
 
@@ -1464,11 +1464,15 @@ if not _df_pend_kpi.empty:
 else:
     vpy = 0.0
 
-it_total = float(s_in) + float(n_in) + float(otr_v) + float(_total_ip)
+it_total = float(s_in) + float(n_in) + float(otr_v)
 fact     = it_total - vp
 bf       = fact - vpy
 ahorro_p = (bf / it_total * 100) if it_total > 0 else 0.0
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
+
+# ── SALDO PROYECTADO (incluye Ingresos Proyectados aún no migrados) ──
+saldo_proyectado = bf + float(_total_ip)
+label_saldo_proy = "SALDO PROYECTADO" if saldo_proyectado >= 0 else "DÉFICIT PROYECTADO"
 
 # ── BANNER DATOS PENDIENTES ──────────────────────────────
 if st.session_state.get("datos_modificados", False):
@@ -1494,6 +1498,15 @@ for i, (l, v, col) in enumerate(tarj):
         f'<div class="card"><div class="card-label">{l}</div><div class="card-value" style="color:{col}">$ {v:,.0f}</div></div>',
         unsafe_allow_html=True
     )
+
+if _total_ip > 0:
+    st.markdown(
+        f'<div class="card" style="border:1px dashed #999; opacity:0.85;">'
+        f'<div class="card-label">{label_saldo_proy} <span style="font-weight:normal;">(si se cumplen los Ingresos Proyectados)</span></div>'
+        f'<div class="card-value" style="color:#9b59b6">$ {saldo_proyectado:,.0f}</div></div>',
+        unsafe_allow_html=True
+    )
+
 st.divider()
 
 # ══════════════════════════════════════════════════════════
