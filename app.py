@@ -13,7 +13,7 @@ from supabase import create_client, Client
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
 from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia, guardar_ingresos_proyectados
-from reportes_v2 import generar_pdf_reporte, generar_excel_reporte
+from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_proyeccion
 
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
@@ -588,8 +588,8 @@ with st.sidebar:
                 _pdf_actual = generar_pdf_reporte(
                     df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id
                 )
-                _pdf_proy = generar_pdf_reporte(
-                    df_g_full, df_i_full, df_oi_full, [_mes_sig], f"Proyección {_mes_sig}", _anio_sig, u_id
+                _pdf_proy = generar_pdf_proyeccion(
+                    df_g_full, df_i_full, df_oi_full, _mes_sig, _anio_sig, u_id
                 )
 
                 _gmail_user = st.secrets.get("gmail", {}).get("email", "")
