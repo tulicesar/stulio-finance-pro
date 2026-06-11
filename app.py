@@ -567,6 +567,55 @@ with st.sidebar:
         if st.button("📄 PDF"):
             pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
             st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
+
+        if st.button("📧 Enviar extracto por correo (prueba)", key="btn_test_email_extracto"):
+            try:
+                import smtplib
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                from email.mime.application import MIMEApplication
+
+                _pdf_test = generar_pdf_reporte(
+                    df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id
+                )
+                _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+                _dest_email = st.session_state.get("u_email", "")
+
+                if not _gmail_user or not _gmail_pass:
+                    st.error("❌ Credenciales de Gmail no configuradas en secrets.")
+                elif not _dest_email:
+                    st.error("❌ No se encontró el email del usuario en la sesión.")
+                else:
+                    _msg = MIMEMultipart("mixed")
+                    _msg["Subject"] = f"📄 Extracto de {mes_s} {anio_s} — Stulio Finance Pro"
+                    _msg["From"]    = _gmail_user
+                    _msg["To"]      = _dest_email
+
+                    _html = f"""
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+                        <h2 style="color:#fca311">📄 Extracto de {mes_s} {anio_s}</h2>
+                        <p>Hola,</p>
+                        <p>Adjunto encontrarás el extracto financiero de <b>{mes_s} {anio_s}</b> generado por
+                        <b>Stulio Finance Pro</b>.</p>
+                        <p style="color:#adb5bd;font-size:0.8rem">Este es un correo de prueba del nuevo sistema
+                        de envío automático de extractos.</p>
+                    </div>
+                    """
+                    _msg.attach(MIMEText(_html, "html"))
+
+                    _adj = MIMEApplication(_pdf_test, _subtype="pdf")
+                    _adj.add_header("Content-Disposition", "attachment", filename=f"Extracto_{mes_s}_{anio_s}.pdf")
+                    _msg.attach(_adj)
+
+                    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
+                        _smtp.login(_gmail_user, _gmail_pass)
+                        _smtp.sendmail(_gmail_user, _dest_email, _msg.as_string())
+
+                    st.success(f"✅ Correo de prueba enviado a {_dest_email}")
+            except Exception as e:
+                st.error(f"❌ Error al enviar el correo: {e}")
+
     with c_xls:
         if st.button("📊 Excel"):
             i_m_xls  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
