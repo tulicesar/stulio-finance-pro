@@ -429,6 +429,93 @@ _hoy = datetime.now()
 _mes_real  = meses_lista[_hoy.month - 1]
 _anio_real = _hoy.year
 
+# ── FUNCIÓN REUTILIZABLE: enviar extracto + proyección por correo ──
+def enviar_correo_extracto_proyeccion(dest_email, nombre_user, mes_s, anio_s,
+                                       df_g_full, df_i_full, df_oi_full, u_id):
+    """Envía al correo del usuario el extracto del mes (mes_s/anio_s) y la
+    proyección simple del mes siguiente. Devuelve (ok: bool, mensaje: str)."""
+    try:
+        import smtplib, os as _os
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+        from email.mime.application import MIMEApplication
+        from email.mime.image import MIMEImage
+
+        _idx_actual = meses_lista.index(mes_s)
+        _mes_sig  = meses_lista[_idx_actual + 1] if _idx_actual < 11 else "Enero"
+        _anio_sig = anio_s if _idx_actual < 11 else anio_s + 1
+
+        _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+        _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+        if not _gmail_user or not _gmail_pass:
+            return False, "Credenciales de Gmail no configuradas en secrets."
+        if not dest_email:
+            return False, "El usuario no tiene email registrado."
+
+        _pdf_actual = generar_pdf_reporte(
+            df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id
+        )
+        _pdf_proy = generar_pdf_proyeccion(
+            df_g_full, df_i_full, df_oi_full, _mes_sig, _anio_sig, u_id
+        )
+
+        _nombre_user = (nombre_user or "").split(" ")[0] or "amig@"
+
+        _msg = MIMEMultipart("mixed")
+        _msg["Subject"] = f"📄 Tu extracto de {mes_s} {anio_s} ya está listo — My FinanceApp"
+        _msg["From"]    = _gmail_user
+        _msg["To"]      = dest_email
+
+        _msg_alt = MIMEMultipart("related")
+        _html = f"""
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+            <div style="text-align:center;margin-bottom:20px">
+                <img src="cid:logo_finance" alt="My FinanceApp" style="max-width:280px;width:100%;height:auto">
+            </div>
+            <h2 style="color:#fca311">¡Hola {_nombre_user}! 👋</h2>
+            <p>Aquí tienes tu resumen financiero del mes 🎉</p>
+            <p>Te dejamos adjuntos:</p>
+            <ul>
+                <li>📄 <b>Extracto de {mes_s} {anio_s}</b> — todo lo que pasó con tus finanzas este mes.</li>
+                <li>🔮 <b>Proyección de {_mes_sig} {_anio_sig}</b> — para que llegues preparad@ al siguiente mes.</li>
+            </ul>
+            <p>Recuerda registrar tus movimientos a tiempo para que tus proyecciones sean cada vez más
+            precisas. ¡Tú puedes! 💪</p>
+            <p style="color:#adb5bd;font-size:0.8rem;margin-top:30px">
+            Recibes este correo porque activaste el envío automático mensual en
+            "Configuración de cuenta" de My FinanceApp. Puedes desactivarlo cuando quieras.</p>
+        </div>
+        """
+        _msg_alt.attach(MIMEText(_html, "html"))
+
+        _logo_path = _os.path.join(_os.path.dirname(__file__), LOGO_APP_H)
+        if _os.path.exists(_logo_path):
+            with open(_logo_path, "rb") as _f:
+                _img = MIMEImage(_f.read())
+                _img.add_header("Content-ID", "<logo_finance>")
+                _img.add_header("Content-Disposition", "inline", filename=LOGO_APP_H)
+                _msg_alt.attach(_img)
+
+        _msg.attach(_msg_alt)
+
+        for _pdf_obj, _fname in [
+            (_pdf_actual, f"Extracto_{mes_s}_{anio_s}.pdf"),
+            (_pdf_proy,   f"Proyeccion_{_mes_sig}_{_anio_sig}.pdf"),
+        ]:
+            _pdf_bytes = _pdf_obj.getvalue() if hasattr(_pdf_obj, "getvalue") else _pdf_obj
+            _adj = MIMEApplication(_pdf_bytes, _subtype="pdf")
+            _adj.add_header("Content-Disposition", "attachment", filename=_fname)
+            _msg.attach(_adj)
+
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
+            _smtp.login(_gmail_user, _gmail_pass)
+            _smtp.sendmail(_gmail_user, dest_email, _msg.as_string())
+
+        return True, f"Correo enviado a {dest_email}"
+    except Exception as e:
+        return False, str(e)
+
+
 # --- SIDEBAR ---
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR):
@@ -573,87 +660,17 @@ with st.sidebar:
             st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
 
         if st.button("📧 Enviar extracto por correo (prueba)", key="btn_test_email_extracto"):
-            try:
-                import smtplib, os as _os
-                from email.mime.multipart import MIMEMultipart
-                from email.mime.text import MIMEText
-                from email.mime.application import MIMEApplication
-                from email.mime.image import MIMEImage
-
-                # Mes actual y mes siguiente
-                _idx_actual = meses_lista.index(mes_s)
-                _mes_sig = meses_lista[_idx_actual + 1] if _idx_actual < 11 else "Enero"
-                _anio_sig = anio_s if _idx_actual < 11 else anio_s + 1
-
-                _pdf_actual = generar_pdf_reporte(
-                    df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id
-                )
-                _pdf_proy = generar_pdf_proyeccion(
-                    df_g_full, df_i_full, df_oi_full, _mes_sig, _anio_sig, u_id
-                )
-
-                _gmail_user = st.secrets.get("gmail", {}).get("email", "")
-                _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
-                _dest_email = st.session_state.get("u_email", "")
-                _nombre_user = st.session_state.get("u_nombre_completo", "").split(" ")[0] or "amig@"
-
-                if not _gmail_user or not _gmail_pass:
-                    st.error("❌ Credenciales de Gmail no configuradas en secrets.")
-                elif not _dest_email:
-                    st.error("❌ No se encontró el email del usuario en la sesión.")
-                else:
-                    _msg = MIMEMultipart("mixed")
-                    _msg["Subject"] = f"📄 Tu extracto de {mes_s} {anio_s} ya está listo — My FinanceApp"
-                    _msg["From"]    = _gmail_user
-                    _msg["To"]      = _dest_email
-
-                    _msg_alt = MIMEMultipart("related")
-                    _html = f"""
-                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
-                        <div style="text-align:center;margin-bottom:20px">
-                            <img src="cid:logo_finance" alt="My FinanceApp" style="max-width:280px;width:100%;height:auto">
-                        </div>
-                        <h2 style="color:#fca311">¡Hola {_nombre_user}! 👋</h2>
-                        <p>Aquí tienes tu resumen financiero del mes 🎉</p>
-                        <p>Te dejamos adjuntos:</p>
-                        <ul>
-                            <li>📄 <b>Extracto de {mes_s} {anio_s}</b> — todo lo que pasó con tus finanzas este mes.</li>
-                            <li>🔮 <b>Proyección de {_mes_sig} {_anio_sig}</b> — para que llegues preparad@ al siguiente mes.</li>
-                        </ul>
-                        <p>Recuerda registrar tus movimientos a tiempo para que tus proyecciones sean cada vez más
-                        precisas. ¡Tú puedes! 💪</p>
-                        <p style="color:#adb5bd;font-size:0.8rem;margin-top:30px">
-                        Este es un correo de prueba del nuevo sistema de envío automático de My FinanceApp.</p>
-                    </div>
-                    """
-                    _msg_alt.attach(MIMEText(_html, "html"))
-
-                    _logo_path = _os.path.join(_os.path.dirname(__file__), LOGO_APP_H)
-                    if _os.path.exists(_logo_path):
-                        with open(_logo_path, "rb") as _f:
-                            _img = MIMEImage(_f.read())
-                            _img.add_header("Content-ID", "<logo_finance>")
-                            _img.add_header("Content-Disposition", "inline", filename=LOGO_APP_H)
-                            _msg_alt.attach(_img)
-
-                    _msg.attach(_msg_alt)
-
-                    for _pdf_obj, _fname in [
-                        (_pdf_actual, f"Extracto_{mes_s}_{anio_s}.pdf"),
-                        (_pdf_proy,   f"Proyeccion_{_mes_sig}_{_anio_sig}.pdf"),
-                    ]:
-                        _pdf_bytes = _pdf_obj.getvalue() if hasattr(_pdf_obj, "getvalue") else _pdf_obj
-                        _adj = MIMEApplication(_pdf_bytes, _subtype="pdf")
-                        _adj.add_header("Content-Disposition", "attachment", filename=_fname)
-                        _msg.attach(_adj)
-
-                    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
-                        _smtp.login(_gmail_user, _gmail_pass)
-                        _smtp.sendmail(_gmail_user, _dest_email, _msg.as_string())
-
-                    st.success(f"✅ Correo de prueba enviado a {_dest_email}")
-            except Exception as e:
-                st.error(f"❌ Error al enviar el correo: {e}")
+            _ok, _msg_res = enviar_correo_extracto_proyeccion(
+                dest_email=st.session_state.get("u_email", ""),
+                nombre_user=st.session_state.get("u_nombre_completo", ""),
+                mes_s=mes_s, anio_s=anio_s,
+                df_g_full=df_g_full, df_i_full=df_i_full, df_oi_full=df_oi_full,
+                u_id=u_id
+            )
+            if _ok:
+                st.success(f"✅ {_msg_res}")
+            else:
+                st.error(f"❌ Error al enviar el correo: {_msg_res}")
 
     with c_xls:
         if st.button("📊 Excel"):
@@ -681,6 +698,17 @@ with st.sidebar:
 
     # ── ⚙️ CONFIGURACIÓN ──────────────────────────────────
     with st.expander("Configuración de cuenta"):
+        st.markdown('<p style="color:#adb5bd;font-size:0.78rem;margin-bottom:6px">Notificaciones</p>', unsafe_allow_html=True)
+        _notif_actual = bool(cfg_usuario.get("notif_email_mensual", False))
+        _notif_nuevo = st.checkbox(
+            "📧 Enviarme mi extracto y proyección por correo cada fin de mes",
+            value=_notif_actual, key="chk_notif_mensual"
+        )
+        if _notif_nuevo != _notif_actual:
+            if guardar_config(supabase, u_id, token, notif_email_mensual=_notif_nuevo):
+                st.success("✅ Preferencia actualizada.")
+                st.rerun()
+
         mostrar_eliminar_cuenta(
             supabase, token, u_id,
             st.session_state.get("u_email", "")
@@ -2192,3 +2220,151 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                 st.rerun()
         except Exception as e:
             st.error(f"❌ Error al guardar: {e}")
+
+# ══════════════════════════════════════════════════════════════
+# 📧 CENTRO DE NOTIFICACIONES (solo admin)
+# ══════════════════════════════════════════════════════════════
+ADMIN_EMAIL = "arqtulicesar@gmail.com"
+APP_URL = "https://stulio-finance-pro.streamlit.app"
+
+if st.session_state.get("u_email", "").lower() == ADMIN_EMAIL:
+    st.divider()
+    st.markdown('<div class="section-header"><span>📧 Centro de Notificaciones (Admin)</span></div>', unsafe_allow_html=True)
+
+    try:
+        _sb_admin_key = st.secrets["supabase"]["service_role_key"]
+        _sb_admin = create_client(st.secrets["supabase"]["url"], _sb_admin_key)
+    except Exception as _e:
+        _sb_admin = None
+        st.error(f"No se pudo crear cliente admin: {_e}")
+
+    with st.expander("📤 Extractos automáticos de fin de mes"):
+        st.caption(
+            f"Envía el extracto de **{_mes_real} {_anio_real}** y la proyección del "
+            f"siguiente mes a todos los usuarios que activaron la opción "
+            f"'Enviarme mi extracto y proyección por correo' en su Configuración de cuenta."
+        )
+        if _sb_admin and st.button("📤 Enviar extractos a usuarios suscritos", key="btn_envio_masivo_extractos"):
+            try:
+                _r_cfg = _sb_admin.table("config_usuario").select("usuario_id").eq("notif_email_mensual", True).execute()
+                _ids_suscritos = [r["usuario_id"] for r in (_r_cfg.data or [])]
+            except Exception as _e:
+                _ids_suscritos = []
+                st.error(f"Error consultando suscriptores: {_e}")
+
+            if not _ids_suscritos:
+                st.info("Ningún usuario tiene activada esta opción todavía.")
+            else:
+                _enviados, _fallidos = 0, []
+                with st.spinner(f"Enviando a {len(_ids_suscritos)} usuario(s)..."):
+                    for _uid_s in _ids_suscritos:
+                        try:
+                            _r_u = _sb_admin.table("usuarios").select("email,nombre_completo").eq("usuario_id", _uid_s).execute()
+                            if not _r_u.data:
+                                continue
+                            _email_u  = _r_u.data[0].get("email", "")
+                            _nombre_u = _r_u.data[0].get("nombre_completo", "")
+
+                            _g, _i, _oi, _, _, _ = cargar_bd(_sb_admin, _uid_s, _sb_admin_key)
+
+                            _ok, _msgr = enviar_correo_extracto_proyeccion(
+                                dest_email=_email_u, nombre_user=_nombre_u,
+                                mes_s=_mes_real, anio_s=_anio_real,
+                                df_g_full=_g, df_i_full=_i, df_oi_full=_oi,
+                                u_id=_uid_s
+                            )
+                            if _ok: _enviados += 1
+                            else: _fallidos.append(f"{_email_u}: {_msgr}")
+                        except Exception as _e:
+                            _fallidos.append(f"{_uid_s}: {_e}")
+
+                st.success(f"✅ Enviados: {_enviados} de {len(_ids_suscritos)}")
+                for _f in _fallidos:
+                    st.warning(f"⚠️ {_f}")
+
+    with st.expander("📰 Newsletter de actualizaciones"):
+        st.caption("Envía un correo a TODOS los usuarios registrados anunciando novedades y/o el nuevo link de acceso.")
+        _nl_asunto = st.text_input(
+            "Asunto", value="🚀 ¡My FinanceApp tiene novedades!", key="nl_asunto"
+        )
+        _nl_titulo = st.text_input(
+            "Título principal", value="¡Hola de nuevo! 👋", key="nl_titulo"
+        )
+        _nl_cuerpo = st.text_area(
+            "Mensaje (puedes usar HTML simple)",
+            value=(
+                f"Tenemos novedades en <b>My FinanceApp</b>:<br><br>"
+                f"✅ Nuevo cálculo de <b>Saldo Proyectado</b> separado del Saldo a Favor<br>"
+                f"✅ <b>Estado de Billeteras</b> siempre sincronizado con el día de hoy<br>"
+                f"✅ Nueva sección de <b>Tendencia de Ahorro</b> en tu dashboard<br>"
+                f"✅ Reportes mejorados (PDF / Excel)<br><br>"
+                f"📌 <b>Importante:</b> nuestro link de acceso cambió. A partir de ahora "
+                f"entra siempre desde:<br>"
+                f"<a href='{APP_URL}' style='color:#fca311'>{APP_URL}</a>"
+            ),
+            height=200, key="nl_cuerpo"
+        )
+        _nl_test_first = st.checkbox("Enviarme primero solo a mí como prueba", value=True, key="nl_test_first")
+
+        if _sb_admin and st.button("📨 Enviar Newsletter", key="btn_enviar_newsletter"):
+            try:
+                import smtplib
+                from email.mime.multipart import MIMEMultipart
+                from email.mime.text import MIMEText
+                from email.mime.image import MIMEImage
+
+                _gmail_user = st.secrets.get("gmail", {}).get("email", "")
+                _gmail_pass = st.secrets.get("gmail", {}).get("app_password", "")
+
+                if _nl_test_first:
+                    _r_dest = [{"email": st.session_state.get("u_email",""), "nombre_completo": st.session_state.get("u_nombre_completo","")}]
+                else:
+                    _r_all = _sb_admin.table("usuarios").select("email,nombre_completo").execute()
+                    _r_dest = _r_all.data or []
+
+                _enviados_nl, _fallidos_nl = 0, []
+                for _u in _r_dest:
+                    _email_u = _u.get("email","")
+                    if not _email_u:
+                        continue
+                    _nombre_u = (_u.get("nombre_completo") or "").split(" ")[0] or "amig@"
+                    try:
+                        _msg = MIMEMultipart("related")
+                        _msg["Subject"] = _nl_asunto
+                        _msg["From"]    = _gmail_user
+                        _msg["To"]      = _email_u
+                        _html = f"""
+                        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px">
+                            <div style="text-align:center;margin-bottom:20px">
+                                <img src="cid:logo_finance" alt="My FinanceApp" style="max-width:280px;width:100%;height:auto">
+                            </div>
+                            <h2 style="color:#fca311">{_nl_titulo}</h2>
+                            <p>Hola {_nombre_u},</p>
+                            <p>{_nl_cuerpo}</p>
+                            <p style="margin-top:25px;text-align:center">
+                                <a href="{APP_URL}" style="background:#fca311;color:#14213d;padding:12px 24px;
+                                border-radius:8px;text-decoration:none;font-weight:bold">Ir a My FinanceApp</a>
+                            </p>
+                        </div>
+                        """
+                        _msg.attach(MIMEText(_html, "html"))
+                        _logo_path = os.path.join(os.path.dirname(__file__), LOGO_APP_H)
+                        if os.path.exists(_logo_path):
+                            with open(_logo_path, "rb") as _f:
+                                _img = MIMEImage(_f.read())
+                                _img.add_header("Content-ID", "<logo_finance>")
+                                _img.add_header("Content-Disposition", "inline", filename=LOGO_APP_H)
+                                _msg.attach(_img)
+
+                        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as _smtp:
+                            _smtp.login(_gmail_user, _gmail_pass)
+                            _smtp.sendmail(_gmail_user, _email_u, _msg.as_string())
+                        _enviados_nl += 1
+                    except Exception as _e:
+                        _fallidos_nl.append(f"{_email_u}: {_e}")
+
+                st.success(f"✅ Newsletter enviado a {_enviados_nl} destinatario(s).")
+                for _f in _fallidos_nl:
+                    st.warning(f"⚠️ {_f}")
+            except Exception as _e:
+                st.error(f"❌ Error: {_e}")
