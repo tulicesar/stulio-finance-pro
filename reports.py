@@ -115,7 +115,7 @@ def _gastos(c,y,gm,t,a,u):
     c.setStrokeColor(C["gr"]); c.setLineWidth(0.5); c.line(60,y+8,545,y+8)
     c.setFont(_f("regular"),8); c.setFillColor(C["ne"]); total=0
     for _,row in gmf.iterrows():
-        if y<80: c.showPage(); y=_head(c,t,a,u); c.setFont(_f("regular"),8)
+        if y<80: c.showPage(); y=_head(c,t,a,u); c.setFont(_f("regular"),8); c.setFillColor(C["ne"])
         m=float(row['Monto'])
         if bool(row.get("Pagado",False)): total+=m
         _fp = row.get("Fecha Pago", None)
