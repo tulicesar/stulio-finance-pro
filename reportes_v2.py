@@ -252,7 +252,95 @@ def generar_pdf_reporte(df_g_full,df_i_full,df_oi_full,meses,titulo,anio,u_id):
     c.save(); buf.seek(0)
     return buf
 
-# ── HELPERS EXCEL ─────────────────────────────────────────────
+# ── FUNCIÓN PDF: PROYECCIÓN SIMPLE DEL MES SIGUIENTE ──────────
+def generar_pdf_proyeccion(df_g_full, df_i_full, df_oi_full, mes, anio, u_id):
+    """
+    Reporte simplificado para un mes futuro (proyección):
+    - KPIs (sin Obligaciones Pagadas, ya que aún no se ha pagado nada)
+    - Tabla de Gastos/Egresos Proyectados (Categoría, Descripción, Valor Proyectado)
+    """
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.colors import HexColor
+    C = _C()
+    u = st.session_state.get("u_nombre_completo", u_id)
+    buf = BytesIO(); c = canvas.Canvas(buf, pagesize=(612, 792))
+    titulo = f"Proyección {mes}"
+    y = _head(c, titulo, anio, u)
+
+    im = df_i_full[(df_i_full["Periodo"]==mes) & (df_i_full["Año"]==anio) & (df_i_full["Usuario"]==u_id)]
+    gm = df_g_full[(df_g_full["Periodo"]==mes) & (df_g_full["Año"]==anio) & (df_g_full["Usuario"]==u_id)]
+    om = df_oi_full[(df_oi_full["Periodo"]==mes) & (df_oi_full["Año"]==anio) & (df_oi_full["Usuario"]==u_id)]
+    s   = float(im["SaldoAnterior"].iloc[0]) if not im.empty else 0.0
+    n   = float(im["Nomina"].iloc[0]) if not im.empty else 0.0
+    os_ = float(om["Monto"].sum()) if not om.empty else 0.0
+    it, vp, vpy, fact, bf, _ = calcular_metricas(gm, n, os_, s)
+
+    # ── Título de sección ──
+    c.setFillColor(C["az"]); c.setFont(_f("bold"), 13)
+    c.drawString(50, y, f"PROYECCIÓN PARA {mes.upper()} {anio}")
+    y -= 8
+    c.setStrokeColor(C["na"]); c.setLineWidth(2); c.line(50, y, 560, y)
+    y -= 25
+
+    # ── KPIs (4 tarjetas, sin Obligaciones Pagadas) ──
+    kpis = [
+        ("INGRESOS PROYECTADOS", it,  C["az"]),
+        ("OBLIG. PENDIENTES",    vpy, C["ro"]),
+        ("DINERO DISPONIBLE",    fact, C["az"]),
+        ("SALDO A FAVOR" if bf >= 0 else "DÉFICIT", bf, C["na"]),
+    ]
+    bw = 122; bh = 55; bx = 50
+    for lbl, val, col in kpis:
+        c.setFillColor(HexColor("#f2f2f2")); c.roundRect(bx, y-bh, bw, bh, 4, fill=1, stroke=0)
+        c.setFillColor(C["az"]); c.setFont(_f("regular"), 6)
+        c.drawCentredString(bx+bw/2, y-15, lbl)
+        c.setFillColor(col); c.setFont(_f("bold"), 11)
+        c.drawCentredString(bx+bw/2, y-38, f"$ {val:,.0f}")
+        bx += bw + 8
+    y -= (bh + 25)
+
+    c.setFillColor(C["ne"]); c.setFont(_f("regular"), 7)
+    c.drawString(50, y, "* Como este es un mes futuro, no se han registrado pagos todavía. "
+                        "\"Obligaciones Pagadas\" no aplica y se omite del resumen.")
+    y -= 25
+
+    # ── Tabla: Gastos / Egresos Proyectados ──
+    c.setFillColor(C["az"]); c.setFont(_f("bold"), 9)
+    c.drawString(50, y, "GASTOS / EGRESOS PROYECTADOS"); y -= 15
+    c.setFont(_f("bold"), 8)
+    c.drawString(50, y, "CATEGORÍA"); c.drawString(180, y, "DESCRIPCIÓN")
+    c.drawRightString(545, y, "VALOR PROYECTADO"); y -= 12
+    c.setStrokeColor(C["gr"]); c.setLineWidth(0.5); c.line(50, y+8, 545, y+8)
+    c.setFont(_f("regular"), 8); c.setFillColor(C["ne"])
+
+    gmf = gm.copy()
+    if not gmf.empty:
+        gmf["Valor Referencia"] = pd.to_numeric(gmf["Valor Referencia"], errors="coerce").fillna(0)
+        gmf = gmf[gmf["Valor Referencia"] > 0]
+        gmf = gmf.sort_values("Categoría")
+
+    total_proy = 0.0
+    for _, row in gmf.iterrows():
+        if y < 80:
+            c.showPage(); y = _head(c, titulo, anio, u)
+            c.setFont(_f("regular"), 8); c.setFillColor(C["ne"])
+        vref = float(row["Valor Referencia"])
+        total_proy += vref
+        c.drawString(50, y, str(row["Categoría"])[:20])
+        c.drawString(180, y, str(row["Descripción"])[:45])
+        c.drawRightString(545, y, f"$ {vref:,.0f}")
+        y -= 12
+
+    c.setStrokeColor(C["az"]); c.setLineWidth(1); c.line(50, y+8, 545, y+8)
+    c.setFillColor(C["az"]); c.setFont(_f("bold"), 9)
+    c.drawString(50, y-2, "TOTAL GASTOS PROYECTADOS:")
+    c.drawRightString(545, y-2, f"$ {total_proy:,.0f}")
+
+    c.save(); buf.seek(0)
+    return buf
+
+
+
 def _xfmt(wb,bg,fc="#000000",bold=False,nf=None,brd=False,al="left"):
     d={"bg_color":bg,"font_color":fc,"bold":bold,"valign":"vcenter","align":al,
        "font_name":"SF Pro Display"}
