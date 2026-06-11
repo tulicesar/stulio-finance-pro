@@ -9,7 +9,7 @@ import streamlit as st
 from io import BytesIO
 from datetime import datetime
 import pytz
-from data import calcular_metricas
+from finance_data import calcular_metricas
 
 LOGO_APP_H = "LOGOapp horizontal.png"
 COLOR_MAP = {
@@ -155,8 +155,10 @@ def _pagina_visual(c,t,a,u,ugm,uap,uvp,uvpy,ubf,dg,di,doi,meses,uid):
     c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawString(BX,TOP,"DESGLOSE POR CATEGORÍA")
     yc=TOP-16
     if ugm is not None and not ugm.empty:
-        tp=ugm.copy()
-        tp['V']=tp.apply(lambda r:r['Monto'] if r['Pagado'] else r['Valor Referencia'],axis=1)
+        # Igual que el dashboard: solo gastos REALES (no proyectados),
+        # usando el campo "Monto" ejecutado.
+        tp = ugm[ugm["Es Proyectado"].fillna(False).astype(bool) == False].copy()
+        tp['V'] = pd.to_numeric(tp['Monto'], errors="coerce").fillna(0)
         tv=tp['V'].sum()
         if tv>0:
             rc=tp.groupby("Categoría")['V'].sum().reset_index()
