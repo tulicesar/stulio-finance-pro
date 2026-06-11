@@ -604,7 +604,8 @@ with st.sidebar:
                     """
                     _msg.attach(MIMEText(_html, "html"))
 
-                    _adj = MIMEApplication(_pdf_test, _subtype="pdf")
+                    _pdf_bytes = _pdf_test.getvalue() if hasattr(_pdf_test, "getvalue") else _pdf_test
+                    _adj = MIMEApplication(_pdf_bytes, _subtype="pdf")
                     _adj.add_header("Content-Disposition", "attachment", filename=f"Extracto_{mes_s}_{anio_s}.pdf")
                     _msg.attach(_adj)
 
