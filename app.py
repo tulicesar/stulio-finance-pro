@@ -1991,6 +1991,52 @@ with inf3:
     st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
     st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
 
+# ── TENDENCIA DE AHORRO (Últimos 6 meses) ─────────────────
+st.markdown('<div class="chart-card"><div class="chart-title">Tendencia de Ahorro (Últimos 6 meses)</div>', unsafe_allow_html=True)
+_ref_idx = meses_lista.index(mes_s)
+_hist_meses, _hist_vals = [], []
+for _i in range(5, -1, -1):
+    _idx = _ref_idx - _i
+    _ah  = anio_s
+    if _idx < 0:
+        _idx += 12
+        _ah -= 1
+    _mn = meses_lista[_idx]
+    _ih = df_i_full[(df_i_full["Periodo"]==_mn) & (df_i_full["Año"]==_ah)]
+    if not _ih.empty:
+        _gh = df_g_full[(df_g_full["Periodo"]==_mn) & (df_g_full["Año"]==_ah)]
+        _oh = df_oi_full[(df_oi_full["Periodo"]==_mn) & (df_oi_full["Año"]==_ah)]
+        _, _, _, _, _bfh, _ = calcular_metricas(
+            _gh, _ih["Nomina"].iloc[0],
+            _oh["Monto"].sum() if not _oh.empty else 0,
+            _ih["SaldoAnterior"].iloc[0]
+        )
+        _hist_meses.append(_mn[:3])
+        _hist_vals.append(_bfh)
+
+if _hist_vals:
+    fig_tend = go.Figure(go.Bar(
+        x=_hist_meses,
+        y=_hist_vals,
+        marker_color=["#fca311" if v >= 0 else "#e74c3c" for v in _hist_vals],
+        text=[f"$ {v:,.0f}" for v in _hist_vals],
+        textposition="outside",
+        textfont=dict(color="#ffffff", size=11),
+    ))
+    fig_tend.update_layout(
+        **PLOTLY_LAYOUT,
+        height=240,
+        margin=dict(t=30,b=10,l=10,r=10),
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False, showticklabels=False),
+        showlegend=False,
+    )
+    st.plotly_chart(fig_tend, use_container_width=True)
+else:
+    st.caption("No hay suficientes datos históricos para mostrar la tendencia.")
+st.markdown('</div>', unsafe_allow_html=True)
+
+
 # ══════════════════════════════════════════════════════════
 # 🤖 ASESOR IA
 # ══════════════════════════════════════════════════════════
