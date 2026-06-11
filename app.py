@@ -659,19 +659,6 @@ with st.sidebar:
             pdf = generar_pdf_reporte(df_g_full, df_i_full, df_oi_full, [mes_s], f"Extracto {mes_s}", anio_s, u_id)
             st.download_button("Descargar PDF", pdf, f"Extracto_{mes_s}.pdf")
 
-        if st.button("📧 Enviar extracto por correo (prueba)", key="btn_test_email_extracto"):
-            _ok, _msg_res = enviar_correo_extracto_proyeccion(
-                dest_email=st.session_state.get("u_email", ""),
-                nombre_user=st.session_state.get("u_nombre_completo", ""),
-                mes_s=mes_s, anio_s=anio_s,
-                df_g_full=df_g_full, df_i_full=df_i_full, df_oi_full=df_oi_full,
-                u_id=u_id
-            )
-            if _ok:
-                st.success(f"✅ {_msg_res}")
-            else:
-                st.error(f"❌ Error al enviar el correo: {_msg_res}")
-
     with c_xls:
         if st.button("📊 Excel"):
             i_m_xls  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
