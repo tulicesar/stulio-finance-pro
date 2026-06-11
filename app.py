@@ -1367,10 +1367,13 @@ _total_ip_con_destino = float(_ip_df_calc[
 _ip_sin_destino = _ip_df_calc[~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)]
 
 if _total_ip > 0:
-    _msg_ip = f"📊 Total Ingresos Proyectados: **$ {_total_ip:,.0f}** &nbsp;<span style='color:#888'>(no suma al Saldo a Favor)</span>"
+    _msg_ip = f"📊 Total Ingresos Proyectados: $ {_total_ip:,.0f}"
     if _total_ip_con_destino > 0:
-        _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: **$ {_total_ip_con_destino:,.0f}**"
-    st.caption(_msg_ip, unsafe_allow_html=True)
+        _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: $ {_total_ip_con_destino:,.0f}"
+    st.markdown(
+        f'<p style="color:#ffffff; font-size:0.85rem; margin-top:-8px;">{_msg_ip}</p>',
+        unsafe_allow_html=True
+    )
 
 # ── BOTÓN COPIAR ──────────────────────────────────────────
 if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
@@ -1597,28 +1600,47 @@ st.divider()
 # 💳 SECCIÓN BILLETERAS
 # ══════════════════════════════════════════════════════════
 if modulo_billeteras_activo and lista_billeteras:
-    st.markdown('<div class="section-header"><span>💳 Estado de Billeteras</span></div>', unsafe_allow_html=True)
+    _hoy = datetime.now()
+    _mes_real  = meses_lista[_hoy.month - 1]
+    _anio_real = _hoy.year
+    _fecha_hoy_str = _hoy.strftime("%d/%m/%Y")
 
-    _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-    _df_g_calc  = df_ed_g.copy()
-    _df_g_calc["Periodo"] = mes_s
-    _df_g_calc["Año"]     = anio_s
-    if not _df_i_calc.empty:
-        _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
-        _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
+    st.markdown(
+        f'<div class="section-header"><span>💳 Estado de Billeteras — {_fecha_hoy_str}</span></div>',
+        unsafe_allow_html=True
+    )
+
+    if _mes_real == mes_s and _anio_real == anio_s:
+        # Estamos viendo el mes real → usar los datos en edición (incluye cambios sin guardar)
+        _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
+        _df_g_calc  = df_ed_g.copy()
+        _df_g_calc["Periodo"] = mes_s
+        _df_g_calc["Año"]     = anio_s
+        if not _df_i_calc.empty:
+            _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
+            _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
+        else:
+            _df_i_calc = pd.DataFrame([{
+                "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
+                "Billetera": bill_nomina, "SaldoAnterior": s_in
+            }])
+        _df_oi_calc = df_ed_oi.copy()
+        _df_oi_calc["Periodo"] = mes_s
+        _df_oi_calc["Año"]     = anio_s
+        _df_sab_real = df_sab_input
+        _df_transf_real = df_transferencias_full
     else:
-        _df_i_calc = pd.DataFrame([{
-            "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
-            "Billetera": bill_nomina, "SaldoAnterior": s_in
-        }])
-    _df_oi_calc = df_ed_oi.copy()
-    _df_oi_calc["Periodo"] = mes_s
-    _df_oi_calc["Año"]     = anio_s
+        # Estamos proyectando otro mes → el estado de billeteras siempre refleja el mes real (hoy)
+        _df_i_calc  = df_i_full[(df_i_full["Periodo"]==_mes_real) & (df_i_full["Año"]==_anio_real)].copy()
+        _df_g_calc  = df_g_full[(df_g_full["Periodo"]==_mes_real) & (df_g_full["Año"]==_anio_real)].copy()
+        _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==_mes_real) & (df_oi_full["Año"]==_anio_real)].copy()
+        _df_sab_real = df_sab_full
+        _df_transf_real = cargar_transferencias(supabase, u_id, token, _mes_real, _anio_real)
 
     saldos_bill = calcular_saldo_billeteras(
         _df_g_calc, _df_i_calc, _df_oi_calc,
-        df_sab_input, lista_billeteras, mes_s, anio_s,
-        df_transferencias=df_transferencias_full
+        _df_sab_real, lista_billeteras, _mes_real, _anio_real,
+        df_transferencias=_df_transf_real
     )
 
     total_bill = sum(saldos_bill.values())
