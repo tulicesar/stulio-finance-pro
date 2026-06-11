@@ -102,20 +102,30 @@ def _ingresos(c,y,s,n,oi,os_,t,a,u):
 
 def _gastos(c,y,gm,t,a,u):
     C=_C()
-    c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawString(60,y,"RELACIÓN DE GASTOS"); y-=15
+    # Excluir gastos proyectados (presupuesto sin ejecutar): el extracto
+    # solo refleja movimientos reales, igual que el dashboard.
+    gmf = gm[gm["Es Proyectado"].fillna(False).astype(bool) == False].copy()
+    if "Fecha Pago" in gmf.columns:
+        gmf = gmf.sort_values("Fecha Pago", na_position="last")
+
+    c.setFillColor(C["az"]); c.setFont(_f("bold"),9); c.drawString(60,y,"MOVIMIENTO DE GASTOS"); y-=15
     c.setFont(_f("bold"),8)
-    c.drawString(60,y,"CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(490,y,"MONTO"); c.drawRightString(545,y,"PAGADO"); y-=12
+    c.drawString(60,y,"CATEGORÍA - DESCRIPCIÓN"); c.drawRightString(440,y,"FECHA")
+    c.drawRightString(495,y,"MONTO"); c.drawRightString(545,y,"PAGADO"); y-=12
     c.setStrokeColor(C["gr"]); c.setLineWidth(0.5); c.line(60,y+8,545,y+8)
     c.setFont(_f("regular"),8); c.setFillColor(C["ne"]); total=0
-    for _,row in gm.iterrows():
+    for _,row in gmf.iterrows():
         if y<80: c.showPage(); y=_head(c,t,a,u); c.setFont(_f("regular"),8)
         m=float(row['Monto'])
         if bool(row.get("Pagado",False)): total+=m
-        c.drawString(60,y,f"{row['Categoría']} - {row['Descripción']}"[:65])
-        c.drawRightString(490,y,f"$ {m:,.0f}"); c.drawRightString(545,y,"SI" if row["Pagado"] else "NO"); y-=12
+        _fp = row.get("Fecha Pago", None)
+        _fp_str = _fp.strftime("%d/%m/%Y") if pd.notna(_fp) else "—"
+        c.drawString(60,y,f"{row['Categoría']} - {row['Descripción']}"[:60])
+        c.drawRightString(440,y,_fp_str)
+        c.drawRightString(495,y,f"$ {m:,.0f}"); c.drawRightString(545,y,"SI" if row["Pagado"] else "NO"); y-=12
     c.setStrokeColor(C["az"]); c.setLineWidth(1); c.line(60,y+8,545,y+8)
     c.setFillColor(C["az"]); c.setFont(_f("bold"),9)
-    c.drawString(60,y-2,"TOTAL GASTOS PAGADOS:"); c.drawRightString(490,y-2,f"$ {total:,.0f}")
+    c.drawString(60,y-2,"TOTAL GASTOS PAGADOS:"); c.drawRightString(495,y-2,f"$ {total:,.0f}")
     return y-25, total
 
 def _resumen_periodo(c,y,titulo,nom,otr,gas):
