@@ -1767,354 +1767,354 @@ if modulo_billeteras_activo and lista_billeteras:
         else:
             st.warning(f"⚠️ Total billeteras **$ {total_bill:,.0f}** vs Dinero Disponible **$ {fact:,.0f}** — diferencia: **$ {_diff_bill:,.0f}**")
 
-st.markdown('<div class="section-header"><span>📝 Movimiento de Gastos</span></div>', unsafe_allow_html=True)
+with st.expander("📝 Movimiento de Gastos", expanded=True):
 
-if not df_mes_g.empty:
-    df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
-
-
-def render_resumen_gastos(df):
-    if df.empty:
-        st.info("No hay gastos registrados para este mes.")
-        return
-
-    def make_tabla(df_sub, titulo, color_header, col_extra_label, es_pagado):
-        if df_sub.empty:
-            return ""
-        filas = ""
-        total = 0
-        for i, (_, row) in enumerate(df_sub.iterrows()):
-            bg    = "#2d3238" if i % 2 == 0 else "#3a3f44"
-            cat   = str(row.get("Categoría",""))
-            col   = COLOR_MAP.get(cat, "#aaaaaa")
-            badge = f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:{col}22;color:{col}">{cat}</span>'
-            desc  = str(row.get("Descripción",""))
-            monto = float(row.get("Monto",0) or 0)
-            vref  = float(row.get("Valor Referencia",0) or 0)
-            val   = monto if monto > 0 else vref
-            total += val
-            recur = row.get("Movimiento Recurrente", False)
-            recur_str = ' <span style="color:#2ecc71">🔁</span>' if recur else ""
-            if es_pagado:
-                fp = row.get("Fecha Pago", None)
-                if fp is not None and str(fp) not in ["NaT","None",""]:
-                    try: extra = pd.to_datetime(fp).strftime("%d/%m/%Y")
-                    except: extra = "—"
-                else: extra = "—"
-            else:
-                extra = f"$ {vref:,.0f}" if vref > 0 else "—"
-            filas += f'<tr style="background:{bg}">'
-            filas += f'<td style="padding:6px 10px">{badge}</td>'
-            filas += f'<td style="padding:6px 10px;color:#fff;font-size:12px">{desc}{recur_str}</td>'
-            filas += f'<td style="padding:6px 10px;color:#fff;font-size:12px;text-align:right">$ {val:,.0f}</td>'
-            filas += f'<td style="padding:6px 10px;color:#adb5bd;font-size:11px;text-align:right">{extra}</td>'
-            filas += '</tr>'
-        filas += f'<tr style="background:{color_header}"><td colspan="2" style="padding:8px 10px;font-weight:800;font-size:12px;color:#14213d;text-transform:uppercase">TOTAL {titulo}</td><td style="padding:8px 10px;font-weight:800;font-size:13px;color:#14213d;text-align:right">$ {total:,.0f}</td><td></td></tr>'
-        th = f'<th style="padding:9px 10px;color:{color_header};font-size:11px;text-transform:uppercase;font-weight:700'
-        html  = '<div style="border-radius:10px;overflow:hidden;margin-bottom:12px"><table style="width:100%;border-collapse:collapse;font-family:\'SF Pro Display\',-apple-system,sans-serif"><thead><tr style="background:#14213d">'
-        html += th + ';text-align:left">Categoría</th>'
-        html += th + ';text-align:left">Descripción</th>'
-        html += th + ';text-align:right">Monto</th>'
-        html += th + f';text-align:right">{col_extra_label}</th>'
-        html += f'</tr></thead><tbody>{filas}</tbody></table></div>'
-        return html
-
-    df_pagados_t = df[df["Pagado"].fillna(False).astype(bool) == True].copy()
-    df_pend_adj  = calcular_pendientes(df)
-
-    if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False) and not df_pend_adj.empty:
-        df_pend_adj = df_pend_adj[~(
-            (df_pend_adj["Es Proyectado"].fillna(False).astype(bool)) &
-            (pd.to_numeric(df_pend_adj["Monto"], errors="coerce").fillna(0) == 0)
-        )].copy()
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown('<div style="color:#2ecc71;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">✅ Obligaciones Pagadas</div>', unsafe_allow_html=True)
-        html_p = make_tabla(df_pagados_t, "PAGADO", "#2ecc71", "Fecha Pago", True)
-        if html_p: st.markdown(html_p, unsafe_allow_html=True)
-        else: st.info("Sin pagos registrados.")
-    with col2:
-        st.markdown('<div style="color:#e74c3c;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⏳ Obligaciones Pendientes</div>', unsafe_allow_html=True)
-        html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Disponible", False)
-        if html_n: st.markdown(html_n, unsafe_allow_html=True)
-        else: st.success("¡Sin obligaciones pendientes!")
+    if not df_mes_g.empty:
+        df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
 
 
-render_resumen_gastos(df_ed_g)
+    def render_resumen_gastos(df):
+        if df.empty:
+            st.info("No hay gastos registrados para este mes.")
+            return
+
+        def make_tabla(df_sub, titulo, color_header, col_extra_label, es_pagado):
+            if df_sub.empty:
+                return ""
+            filas = ""
+            total = 0
+            for i, (_, row) in enumerate(df_sub.iterrows()):
+                bg    = "#2d3238" if i % 2 == 0 else "#3a3f44"
+                cat   = str(row.get("Categoría",""))
+                col   = COLOR_MAP.get(cat, "#aaaaaa")
+                badge = f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:{col}22;color:{col}">{cat}</span>'
+                desc  = str(row.get("Descripción",""))
+                monto = float(row.get("Monto",0) or 0)
+                vref  = float(row.get("Valor Referencia",0) or 0)
+                val   = monto if monto > 0 else vref
+                total += val
+                recur = row.get("Movimiento Recurrente", False)
+                recur_str = ' <span style="color:#2ecc71">🔁</span>' if recur else ""
+                if es_pagado:
+                    fp = row.get("Fecha Pago", None)
+                    if fp is not None and str(fp) not in ["NaT","None",""]:
+                        try: extra = pd.to_datetime(fp).strftime("%d/%m/%Y")
+                        except: extra = "—"
+                    else: extra = "—"
+                else:
+                    extra = f"$ {vref:,.0f}" if vref > 0 else "—"
+                filas += f'<tr style="background:{bg}">'
+                filas += f'<td style="padding:6px 10px">{badge}</td>'
+                filas += f'<td style="padding:6px 10px;color:#fff;font-size:12px">{desc}{recur_str}</td>'
+                filas += f'<td style="padding:6px 10px;color:#fff;font-size:12px;text-align:right">$ {val:,.0f}</td>'
+                filas += f'<td style="padding:6px 10px;color:#adb5bd;font-size:11px;text-align:right">{extra}</td>'
+                filas += '</tr>'
+            filas += f'<tr style="background:{color_header}"><td colspan="2" style="padding:8px 10px;font-weight:800;font-size:12px;color:#14213d;text-transform:uppercase">TOTAL {titulo}</td><td style="padding:8px 10px;font-weight:800;font-size:13px;color:#14213d;text-align:right">$ {total:,.0f}</td><td></td></tr>'
+            th = f'<th style="padding:9px 10px;color:{color_header};font-size:11px;text-transform:uppercase;font-weight:700'
+            html  = '<div style="border-radius:10px;overflow:hidden;margin-bottom:12px"><table style="width:100%;border-collapse:collapse;font-family:\'SF Pro Display\',-apple-system,sans-serif"><thead><tr style="background:#14213d">'
+            html += th + ';text-align:left">Categoría</th>'
+            html += th + ';text-align:left">Descripción</th>'
+            html += th + ';text-align:right">Monto</th>'
+            html += th + f';text-align:right">{col_extra_label}</th>'
+            html += f'</tr></thead><tbody>{filas}</tbody></table></div>'
+            return html
+
+        df_pagados_t = df[df["Pagado"].fillna(False).astype(bool) == True].copy()
+        df_pend_adj  = calcular_pendientes(df)
+
+        if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False) and not df_pend_adj.empty:
+            df_pend_adj = df_pend_adj[~(
+                (df_pend_adj["Es Proyectado"].fillna(False).astype(bool)) &
+                (pd.to_numeric(df_pend_adj["Monto"], errors="coerce").fillna(0) == 0)
+            )].copy()
+
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown('<div style="color:#2ecc71;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">✅ Obligaciones Pagadas</div>', unsafe_allow_html=True)
+            html_p = make_tabla(df_pagados_t, "PAGADO", "#2ecc71", "Fecha Pago", True)
+            if html_p: st.markdown(html_p, unsafe_allow_html=True)
+            else: st.info("Sin pagos registrados.")
+        with col2:
+            st.markdown('<div style="color:#e74c3c;font-weight:800;font-size:0.9rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px">⏳ Obligaciones Pendientes</div>', unsafe_allow_html=True)
+            html_n = make_tabla(df_pend_adj, "PENDIENTE", "#fca311", "Disponible", False)
+            if html_n: st.markdown(html_n, unsafe_allow_html=True)
+            else: st.success("¡Sin obligaciones pendientes!")
+
+
+    render_resumen_gastos(df_ed_g)
 
 # ══════════════════════════════════════════════
 # PRESUPUESTO VS EJECUCIÓN POR CATEGORÍA
 # ══════════════════════════════════════════════
-st.markdown('<div class="section-header"><span>📊 Presupuesto vs Ejecución por Categoría</span></div>', unsafe_allow_html=True)
+with st.expander("📊 Presupuesto vs Ejecución por Categoría", expanded=True):
 
-df_mes_bd = df_g_full[
-    (df_g_full["Periodo"] == mes_s) &
-    (df_g_full["Año"] == anio_s)
-].copy()
-
-if "Es Referencia" not in df_mes_bd.columns:
-    df_mes_bd["Es Referencia"] = False
-df_proyectados = df_mes_bd[
-    (df_mes_bd.get("Es Proyectado", pd.Series(False, index=df_mes_bd.index)).fillna(False).astype(bool)) &
-    (df_mes_bd.get("Es Referencia", pd.Series(False, index=df_mes_bd.index)).fillna(False).astype(bool))
-].copy() if not df_mes_bd.empty else pd.DataFrame()
-
-if "Presupuesto Asociado" in df_mes_bd.columns:
-    _pa = df_mes_bd["Presupuesto Asociado"].astype(str).str.strip()
-    df_asociados = df_mes_bd[
-        _pa.notna() & (_pa != "") & (_pa != "None") & (_pa != "nan") & (_pa != "NaN")
+    df_mes_bd = df_g_full[
+        (df_g_full["Periodo"] == mes_s) &
+        (df_g_full["Año"] == anio_s)
     ].copy()
-else:
-    df_asociados = pd.DataFrame()
 
-cats_con_ref   = df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
-df_pagados     = df_ed_g[df_ed_g["Pagado"] == True] if "Pagado" in df_ed_g.columns else pd.DataFrame()
-cats_ejecutado = df_pagados.groupby("Categoría")["Monto"].sum() if not df_pagados.empty else pd.Series(dtype=float)
-todas_cats     = sorted(cats_con_ref.index.tolist())
+    if "Es Referencia" not in df_mes_bd.columns:
+        df_mes_bd["Es Referencia"] = False
+    df_proyectados = df_mes_bd[
+        (df_mes_bd.get("Es Proyectado", pd.Series(False, index=df_mes_bd.index)).fillna(False).astype(bool)) &
+        (df_mes_bd.get("Es Referencia", pd.Series(False, index=df_mes_bd.index)).fillna(False).astype(bool))
+    ].copy() if not df_mes_bd.empty else pd.DataFrame()
 
-if todas_cats:
-    tarjetas_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">'
-    for cat in todas_cats:
-        presup    = float(cats_con_ref.get(cat, 0))
-        ejecutado = float(cats_ejecutado.get(cat, 0))
-        color     = COLOR_MAP.get(cat, "#aaaaaa")
-        if presup > 0:
-            disponible = presup - ejecutado
-            pct        = min((ejecutado / presup * 100), 100) if presup > 0 else 0
-            excedido   = ejecutado > presup
+    if "Presupuesto Asociado" in df_mes_bd.columns:
+        _pa = df_mes_bd["Presupuesto Asociado"].astype(str).str.strip()
+        df_asociados = df_mes_bd[
+            _pa.notna() & (_pa != "") & (_pa != "None") & (_pa != "nan") & (_pa != "NaN")
+        ].copy()
+    else:
+        df_asociados = pd.DataFrame()
+
+    cats_con_ref   = df_ed_g[df_ed_g["Valor Referencia"] > 0].groupby("Categoría")["Valor Referencia"].sum()
+    df_pagados     = df_ed_g[df_ed_g["Pagado"] == True] if "Pagado" in df_ed_g.columns else pd.DataFrame()
+    cats_ejecutado = df_pagados.groupby("Categoría")["Monto"].sum() if not df_pagados.empty else pd.Series(dtype=float)
+    todas_cats     = sorted(cats_con_ref.index.tolist())
+
+    if todas_cats:
+        tarjetas_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">'
+        for cat in todas_cats:
+            presup    = float(cats_con_ref.get(cat, 0))
+            ejecutado = float(cats_ejecutado.get(cat, 0))
+            color     = COLOR_MAP.get(cat, "#aaaaaa")
+            if presup > 0:
+                disponible = presup - ejecutado
+                pct        = min((ejecutado / presup * 100), 100) if presup > 0 else 0
+                excedido   = ejecutado > presup
+                bar_color  = "#e74c3c" if excedido else color
+                disp_color = "#e74c3c" if excedido else "#2ecc71"
+                disp_label = "Excedido" if excedido else "Disponible"
+                disp_val   = abs(disponible)
+                pct_txt    = f"⚠️ {ejecutado/presup*100:.0f}% — Excedido" if excedido else f"{pct:.0f}% usado"
+                pct_color  = "#e74c3c" if excedido else color
+                tarjetas_html += f"""
+                <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:8px">{cat}</div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                    <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ {presup:,.0f}</div></div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#ffffff">$ {ejecutado:,.0f}</div></div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">{disp_label}</div><div style="font-size:13px;font-weight:700;color:{disp_color}">$ {disp_val:,.0f}</div></div>
+                  </div>
+                  <div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden;margin-top:4px">
+                    <div style="width:{pct:.0f}%;height:8px;border-radius:20px;background:{bar_color}"></div>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;margin-top:4px">
+                    <span style="font-size:10px;color:#adb5bd">0%</span>
+                    <span style="font-size:10px;font-weight:700;color:{pct_color}">{pct_txt}</span>
+                    <span style="font-size:10px;color:#adb5bd">100%</span>
+                  </div>
+                </div>"""
+            else:
+                tarjetas_html += f"""
+                <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
+                  <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:8px">{cat}</div>
+                  <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+                    <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:12px;font-weight:700;color:#6c757d">Sin definir</div></div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#ffffff">$ {ejecutado:,.0f}</div></div>
+                    <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Disponible</div><div style="font-size:12px;font-weight:700;color:#6c757d">—</div></div>
+                  </div>
+                  <div style="background:#2d3238;border-radius:20px;height:8px;margin-top:4px"></div>
+                  <div style="text-align:center;margin-top:4px"><span style="font-size:10px;color:#6c757d">Sin presupuesto asignado</span></div>
+                </div>"""
+        tarjetas_html += '</div>'
+        st.markdown(tarjetas_html, unsafe_allow_html=True)
+    else:
+        st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
+
+    # ── SEGUIMIENTO POR ÍTEM PROYECTADO ──────────────────────
+    if not df_proyectados.empty:
+        st.markdown('<div class="section-header"><span>🎯 Seguimiento de Ítems Proyectados</span></div>', unsafe_allow_html=True)
+        items_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px;">'
+        for _, proy in df_proyectados.iterrows():
+            nombre_proy = str(proy["Descripción"])
+            presup_item = float(proy.get("Valor Referencia", 0) or 0)
+            cat         = str(proy.get("Categoría",""))
+            color       = COLOR_MAP.get(cat, "#aaaaaa")
+            if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
+                match = df_asociados[df_asociados["Presupuesto Asociado"].astype(str).str.strip() == nombre_proy.strip()]
+                gastos_item = float(pd.to_numeric(match["Monto"], errors="coerce").fillna(0).sum())
+            else:
+                gastos_item = 0.0
+            disponible = presup_item - gastos_item
+            excedido   = gastos_item > presup_item
+            pct        = min((gastos_item / presup_item * 100), 100) if presup_item > 0 else 0
             bar_color  = "#e74c3c" if excedido else color
             disp_color = "#e74c3c" if excedido else "#2ecc71"
             disp_label = "Excedido" if excedido else "Disponible"
-            disp_val   = abs(disponible)
-            pct_txt    = f"⚠️ {ejecutado/presup*100:.0f}% — Excedido" if excedido else f"{pct:.0f}% usado"
-            pct_color  = "#e74c3c" if excedido else color
-            tarjetas_html += f"""
-            <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
-              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:8px">{cat}</div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ {presup:,.0f}</div></div>
-                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#ffffff">$ {ejecutado:,.0f}</div></div>
-                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">{disp_label}</div><div style="font-size:13px;font-weight:700;color:{disp_color}">$ {disp_val:,.0f}</div></div>
-              </div>
-              <div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden;margin-top:4px">
-                <div style="width:{pct:.0f}%;height:8px;border-radius:20px;background:{bar_color}"></div>
-              </div>
-              <div style="display:flex;justify-content:space-between;margin-top:4px">
-                <span style="font-size:10px;color:#adb5bd">0%</span>
-                <span style="font-size:10px;font-weight:700;color:{pct_color}">{pct_txt}</span>
-                <span style="font-size:10px;color:#adb5bd">100%</span>
-              </div>
-            </div>"""
-        else:
-            tarjetas_html += f"""
-            <div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid {color}">
-              <div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:{color};margin-bottom:8px">{cat}</div>
-              <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:12px;font-weight:700;color:#6c757d">Sin definir</div></div>
-                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#ffffff">$ {ejecutado:,.0f}</div></div>
-                <div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Disponible</div><div style="font-size:12px;font-weight:700;color:#6c757d">—</div></div>
-              </div>
-              <div style="background:#2d3238;border-radius:20px;height:8px;margin-top:4px"></div>
-              <div style="text-align:center;margin-top:4px"><span style="font-size:10px;color:#6c757d">Sin presupuesto asignado</span></div>
-            </div>"""
-    tarjetas_html += '</div>'
-    st.markdown(tarjetas_html, unsafe_allow_html=True)
-else:
-    st.info("Agrega movimientos con Valor de Referencia para ver el presupuesto vs ejecución.")
-
-# ── SEGUIMIENTO POR ÍTEM PROYECTADO ──────────────────────
-if not df_proyectados.empty:
-    st.markdown('<div class="section-header"><span>🎯 Seguimiento de Ítems Proyectados</span></div>', unsafe_allow_html=True)
-    items_html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px;">'
-    for _, proy in df_proyectados.iterrows():
-        nombre_proy = str(proy["Descripción"])
-        presup_item = float(proy.get("Valor Referencia", 0) or 0)
-        cat         = str(proy.get("Categoría",""))
-        color       = COLOR_MAP.get(cat, "#aaaaaa")
-        if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
-            match = df_asociados[df_asociados["Presupuesto Asociado"].astype(str).str.strip() == nombre_proy.strip()]
-            gastos_item = float(pd.to_numeric(match["Monto"], errors="coerce").fillna(0).sum())
-        else:
-            gastos_item = 0.0
-        disponible = presup_item - gastos_item
-        excedido   = gastos_item > presup_item
-        pct        = min((gastos_item / presup_item * 100), 100) if presup_item > 0 else 0
-        bar_color  = "#e74c3c" if excedido else color
-        disp_color = "#e74c3c" if excedido else "#2ecc71"
-        disp_label = "Excedido" if excedido else "Disponible"
-        pct_txt    = f"⚠️ {gastos_item/presup_item*100:.0f}% — Excedido" if excedido else f"{pct:.0f}% ejecutado"
-        gastos_lista = ""
-        if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
-            assoc = df_asociados[df_asociados["Presupuesto Asociado"] == nombre_proy]
-            for _, ag in assoc.iterrows():
-                gastos_lista += f'<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #495057"><span style="font-size:10px;color:#adb5bd">{ag["Descripción"]}</span><span style="font-size:10px;color:#fff">$ {float(ag["Monto"]):,.0f}</span></div>'
-        bloque_gastos = ""
-        if gastos_lista:
-            bloque_gastos = '<div style="border-top:1px solid #495057;padding-top:6px">' + gastos_lista + '</div>'
-        card  = '<div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid ' + color + '">'
-        card += '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:' + color + ';margin-bottom:6px">💰 ' + nombre_proy + '</div>'
-        card += '<div style="font-size:9px;color:#adb5bd;margin-bottom:8px">' + cat + '</div>'
-        card += '<div style="display:flex;justify-content:space-between;margin-bottom:8px">'
-        card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ ' + f"{presup_item:,.0f}" + '</div></div>'
-        card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#fff">$ ' + f"{gastos_item:,.0f}" + '</div></div>'
-        card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">' + disp_label + '</div><div style="font-size:13px;font-weight:700;color:' + disp_color + '">$ ' + f"{abs(disponible):,.0f}" + '</div></div>'
-        card += '</div>'
-        card += '<div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden">'
-        card += '<div style="width:' + f"{pct:.0f}" + '%;height:8px;border-radius:20px;background:' + bar_color + '"></div></div>'
-        card += '<div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:8px">'
-        card += '<span style="font-size:10px;color:#adb5bd">0%</span>'
-        card += '<span style="font-size:10px;font-weight:700;color:' + bar_color + '">' + pct_txt + '</span>'
-        card += '<span style="font-size:10px;color:#adb5bd">100%</span></div>'
-        card += bloque_gastos + '</div>'
-        items_html += card
-    items_html += '</div>'
-    st.markdown(items_html, unsafe_allow_html=True)
+            pct_txt    = f"⚠️ {gastos_item/presup_item*100:.0f}% — Excedido" if excedido else f"{pct:.0f}% ejecutado"
+            gastos_lista = ""
+            if not df_asociados.empty and "Presupuesto Asociado" in df_asociados.columns:
+                assoc = df_asociados[df_asociados["Presupuesto Asociado"] == nombre_proy]
+                for _, ag in assoc.iterrows():
+                    gastos_lista += f'<div style="display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid #495057"><span style="font-size:10px;color:#adb5bd">{ag["Descripción"]}</span><span style="font-size:10px;color:#fff">$ {float(ag["Monto"]):,.0f}</span></div>'
+            bloque_gastos = ""
+            if gastos_lista:
+                bloque_gastos = '<div style="border-top:1px solid #495057;padding-top:6px">' + gastos_lista + '</div>'
+            card  = '<div style="background:#3a3f44;border-radius:10px;padding:12px 14px;border-left:4px solid ' + color + '">'
+            card += '<div style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;color:' + color + ';margin-bottom:6px">💰 ' + nombre_proy + '</div>'
+            card += '<div style="font-size:9px;color:#adb5bd;margin-bottom:8px">' + cat + '</div>'
+            card += '<div style="display:flex;justify-content:space-between;margin-bottom:8px">'
+            card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Presupuesto</div><div style="font-size:13px;font-weight:700;color:#fca311">$ ' + f"{presup_item:,.0f}" + '</div></div>'
+            card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">Ejecutado</div><div style="font-size:13px;font-weight:700;color:#fff">$ ' + f"{gastos_item:,.0f}" + '</div></div>'
+            card += '<div style="text-align:center"><div style="font-size:9px;color:#adb5bd;text-transform:uppercase">' + disp_label + '</div><div style="font-size:13px;font-weight:700;color:' + disp_color + '">$ ' + f"{abs(disponible):,.0f}" + '</div></div>'
+            card += '</div>'
+            card += '<div style="background:#2d3238;border-radius:20px;height:8px;overflow:hidden">'
+            card += '<div style="width:' + f"{pct:.0f}" + '%;height:8px;border-radius:20px;background:' + bar_color + '"></div></div>'
+            card += '<div style="display:flex;justify-content:space-between;margin-top:4px;margin-bottom:8px">'
+            card += '<span style="font-size:10px;color:#adb5bd">0%</span>'
+            card += '<span style="font-size:10px;font-weight:700;color:' + bar_color + '">' + pct_txt + '</span>'
+            card += '<span style="font-size:10px;color:#adb5bd">100%</span></div>'
+            card += bloque_gastos + '</div>'
+            items_html += card
+        items_html += '</div>'
+        st.markdown(items_html, unsafe_allow_html=True)
 
 # ── GRÁFICAS ─────────────────────────────────────────────
-st.markdown('<div class="section-header"><span>📊 Análisis de Distribución</span></div>', unsafe_allow_html=True)
-inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
+with st.expander("📊 Análisis de Distribución", expanded=True):
+    inf1, inf2, inf3 = st.columns([1.2, 1, 1.2])
 
-with inf1:
-    st.markdown('<div class="chart-card"><div class="chart-title">Desglose de Gastos</div>', unsafe_allow_html=True)
-    t_df = df_ed_g[df_ed_g["Es Proyectado"].fillna(False).astype(bool) == False].copy()
-    t_df['V'] = pd.to_numeric(t_df['Monto'], errors='coerce').fillna(0)
-    if not t_df.empty and t_df['V'].sum() > 0:
-        total_v = t_df['V'].sum()
-        res = t_df.groupby("Categoría")['V'].sum().reset_index()
-        res['pct'] = res['V'] / total_v * 100
-        res = res.sort_values('V', ascending=False)
-        barras_html = ""
-        for _, r in res.iterrows():
-            c_cat = COLOR_MAP.get(r['Categoría'], "#6c757d")
-            pct   = r['pct']
-            monto = r['V']
-            barras_html += f"""
-            <div style="margin-bottom:6px;">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
-                <span style="font-size:0.78rem; font-weight:700; color:#ffffff;">{r['Categoría']}</span>
-                <span style="font-size:0.78rem; color:#ffffff;">$ {monto:,.0f} &nbsp;<b style="color:{c_cat};">{pct:.1f}%</b></span>
-              </div>
-              <div style="background:#2d3238; border-radius:6px; height:10px; width:100%;">
-                <div style="background:{c_cat}; width:{pct:.1f}%; height:10px; border-radius:6px;"></div>
-              </div>
-            </div>
-            """
-        st.markdown(barras_html, unsafe_allow_html=True)
+    with inf1:
+        st.markdown('<div class="chart-card"><div class="chart-title">Desglose de Gastos</div>', unsafe_allow_html=True)
+        t_df = df_ed_g[df_ed_g["Es Proyectado"].fillna(False).astype(bool) == False].copy()
+        t_df['V'] = pd.to_numeric(t_df['Monto'], errors='coerce').fillna(0)
+        if not t_df.empty and t_df['V'].sum() > 0:
+            total_v = t_df['V'].sum()
+            res = t_df.groupby("Categoría")['V'].sum().reset_index()
+            res['pct'] = res['V'] / total_v * 100
+            res = res.sort_values('V', ascending=False)
+            barras_html = ""
+            for _, r in res.iterrows():
+                c_cat = COLOR_MAP.get(r['Categoría'], "#6c757d")
+                pct   = r['pct']
+                monto = r['V']
+                barras_html += f"""
+                <div style="margin-bottom:6px;">
+                  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2px;">
+                    <span style="font-size:0.78rem; font-weight:700; color:#ffffff;">{r['Categoría']}</span>
+                    <span style="font-size:0.78rem; color:#ffffff;">$ {monto:,.0f} &nbsp;<b style="color:{c_cat};">{pct:.1f}%</b></span>
+                  </div>
+                  <div style="background:#2d3238; border-radius:6px; height:10px; width:100%;">
+                    <div style="background:{c_cat}; width:{pct:.1f}%; height:10px; border-radius:6px;"></div>
+                  </div>
+                </div>
+                """
+            st.markdown(barras_html, unsafe_allow_html=True)
 
-with inf2:
-    st.markdown('<div class="chart-card"><div class="chart-title">Eficiencia de Ahorro</div>', unsafe_allow_html=True)
-    v_cl = max(0, min(ahorro_p, 100))
-    META = 20
-    fig2 = go.Figure(go.Indicator(
-        mode="gauge+number",
-        value=v_cl,
-        number={
-            'suffix': "%",
-            'font': {'color': '#fca311', 'size': 50, 'family': SF_FONT},
-            'valueformat': '.0f'
-        },
-        gauge={
-            'axis': {'range': [0, 100], 'tickfont': {'family': SF_FONT, 'color': '#ffffff'}},
-            'bar': {'color': "#fca311"},
-            'bgcolor': "white",
-            'steps': [
-                {'range': [0, META],  'color': '#f8d7da'},
-                {'range': [META, 100],'color': '#d4edda'},
-            ],
-            'threshold': {
-                'line': {'color': "#2ecc71", 'width': 3},
-                'thickness': 0.85,
-                'value': META
+    with inf2:
+        st.markdown('<div class="chart-card"><div class="chart-title">Eficiencia de Ahorro</div>', unsafe_allow_html=True)
+        v_cl = max(0, min(ahorro_p, 100))
+        META = 20
+        fig2 = go.Figure(go.Indicator(
+            mode="gauge+number",
+            value=v_cl,
+            number={
+                'suffix': "%",
+                'font': {'color': '#fca311', 'size': 50, 'family': SF_FONT},
+                'valueformat': '.0f'
+            },
+            gauge={
+                'axis': {'range': [0, 100], 'tickfont': {'family': SF_FONT, 'color': '#ffffff'}},
+                'bar': {'color': "#fca311"},
+                'bgcolor': "white",
+                'steps': [
+                    {'range': [0, META],  'color': '#f8d7da'},
+                    {'range': [META, 100],'color': '#d4edda'},
+                ],
+                'threshold': {
+                    'line': {'color': "#2ecc71", 'width': 3},
+                    'thickness': 0.85,
+                    'value': META
+                }
             }
-        }
-    ))
-    fig2.update_layout(**PLOTLY_LAYOUT, height=280, margin=dict(t=50,b=0,l=25,r=25))
-    st.plotly_chart(fig2, use_container_width=True)
-    if v_cl >= META:
-        st.markdown(f'<div style="text-align:center;color:#2ecc71;font-weight:bold;font-size:0.85rem">✅ ¡Meta alcanzada! Ahorraste {v_cl:.0f}% (Meta: {META}%)</div>', unsafe_allow_html=True)
-    else:
-        falta = META - v_cl
-        st.markdown(f'<div style="text-align:center;color:#e74c3c;font-weight:bold;font-size:0.85rem">⚠️ Te falta {falta:.0f}% para la meta recomendada del {META}%</div>', unsafe_allow_html=True)
-
-with inf3:
-    st.markdown('<div class="chart-card"><div class="chart-title">Estado Real del Dinero</div>', unsafe_allow_html=True)
-    centro_valor = format_moneda(bf)
-    centro_label = "FAVOR" if bf >= 0 else "DÉFICIT"
-    centro_color = "#fca311" if bf >= 0 else "#e74c3c"
-    fig3 = go.Figure(data=[go.Pie(
-        labels=['Pagado','Pendiente','Ahorro'],
-        values=[vp, vpy, bf if bf > 0 else 0],
-        hole=.7,
-        marker_colors=['#2ecc71','#e74c3c','#fca311'],
-        textinfo='none',
-        hovertemplate='<b>%{label}</b><br>$ %{value:,.0f}<br>%{percent}<extra></extra>'
-    )])
-    fig3.update_layout(
-        **PLOTLY_LAYOUT,
-        showlegend=False,
-        height=250,
-        margin=dict(t=0,b=0,l=0,r=0),
-        annotations=[
-            dict(text=centro_label, x=0.5, y=0.58, font_size=13, showarrow=False,
-                 font_color="#495057", font=dict(family=SF_FONT)),
-            dict(text=centro_valor, x=0.5, y=0.42, font_size=15, showarrow=False,
-                 font_color=centro_color, font=dict(family=SF_FONT)),
-        ]
-    )
-    st.plotly_chart(fig3, use_container_width=True)
-    st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>',    unsafe_allow_html=True)
-    st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
-
-# ── TENDENCIA DE AHORRO (Últimos 6 meses) ─────────────────
-if mes_s == _mes_real and anio_s == _anio_real:
-    st.markdown('<div class="chart-card"><div class="chart-title">Tendencia de Ahorro (Últimos 6 meses)</div>', unsafe_allow_html=True)
-    _ref_idx = meses_lista.index(mes_s)
-    _hist_meses, _hist_vals, _hist_pcts = [], [], []
-    for _i in range(5, -1, -1):
-        _idx = _ref_idx - _i
-        _ah  = anio_s
-        if _idx < 0:
-            _idx += 12
-            _ah -= 1
-        _mn = meses_lista[_idx]
-        _ih = df_i_full[(df_i_full["Periodo"]==_mn) & (df_i_full["Año"]==_ah)]
-        if not _ih.empty:
-            _gh = df_g_full[(df_g_full["Periodo"]==_mn) & (df_g_full["Año"]==_ah)]
-            _oh = df_oi_full[(df_oi_full["Periodo"]==_mn) & (df_oi_full["Año"]==_ah)]
-            _, _, _, _, _bfh, _ahorro_h = calcular_metricas(
-                _gh, _ih["Nomina"].iloc[0],
-                _oh["Monto"].sum() if not _oh.empty else 0,
-                _ih["SaldoAnterior"].iloc[0]
-            )
-            _hist_meses.append(_mn[:3])
-            _hist_vals.append(_bfh)
-            _hist_pcts.append(_ahorro_h)
-
-    if _hist_vals:
-        _max_abs_hist = max(abs(v) for v in _hist_vals) if _hist_vals else 1
-        fig_tend = go.Figure(go.Bar(
-            x=_hist_meses,
-            y=_hist_vals,
-            marker_color=["#fca311" if v >= 0 else "#e74c3c" for v in _hist_vals],
-            text=[f"$ {v:,.0f}<br>{p:.1f}%" for v, p in zip(_hist_vals, _hist_pcts)],
-            textposition="outside",
-            textfont=dict(color="#ffffff", size=11),
         ))
-        fig_tend.update_layout(
+        fig2.update_layout(**PLOTLY_LAYOUT, height=280, margin=dict(t=50,b=0,l=25,r=25))
+        st.plotly_chart(fig2, use_container_width=True)
+        if v_cl >= META:
+            st.markdown(f'<div style="text-align:center;color:#2ecc71;font-weight:bold;font-size:0.85rem">✅ ¡Meta alcanzada! Ahorraste {v_cl:.0f}% (Meta: {META}%)</div>', unsafe_allow_html=True)
+        else:
+            falta = META - v_cl
+            st.markdown(f'<div style="text-align:center;color:#e74c3c;font-weight:bold;font-size:0.85rem">⚠️ Te falta {falta:.0f}% para la meta recomendada del {META}%</div>', unsafe_allow_html=True)
+
+    with inf3:
+        st.markdown('<div class="chart-card"><div class="chart-title">Estado Real del Dinero</div>', unsafe_allow_html=True)
+        centro_valor = format_moneda(bf)
+        centro_label = "FAVOR" if bf >= 0 else "DÉFICIT"
+        centro_color = "#fca311" if bf >= 0 else "#e74c3c"
+        fig3 = go.Figure(data=[go.Pie(
+            labels=['Pagado','Pendiente','Ahorro'],
+            values=[vp, vpy, bf if bf > 0 else 0],
+            hole=.7,
+            marker_colors=['#2ecc71','#e74c3c','#fca311'],
+            textinfo='none',
+            hovertemplate='<b>%{label}</b><br>$ %{value:,.0f}<br>%{percent}<extra></extra>'
+        )])
+        fig3.update_layout(
             **PLOTLY_LAYOUT,
-            height=270,
-            margin=dict(t=50,b=10,l=10,r=10),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=False, showticklabels=False,
-                       range=[min(0, min(_hist_vals) * 1.35), max(_hist_vals + [0]) * 1.35 if max(_hist_vals + [0]) > 0 else _max_abs_hist * 0.5]),
             showlegend=False,
+            height=250,
+            margin=dict(t=0,b=0,l=0,r=0),
+            annotations=[
+                dict(text=centro_label, x=0.5, y=0.58, font_size=13, showarrow=False,
+                     font_color="#495057", font=dict(family=SF_FONT)),
+                dict(text=centro_valor, x=0.5, y=0.42, font_size=15, showarrow=False,
+                     font_color=centro_color, font=dict(family=SF_FONT)),
+            ]
         )
-        st.plotly_chart(fig_tend, use_container_width=True)
-    else:
-        st.caption("No hay suficientes datos históricos para mostrar la tendencia.")
-    st.markdown('</div>', unsafe_allow_html=True)
+        st.plotly_chart(fig3, use_container_width=True)
+        st.markdown(f'<div class="legend-bar" style="background:#2ecc71">Obligaciones Pagadas <span>$ {vp:,.0f}</span></div>',    unsafe_allow_html=True)
+        st.markdown(f'<div class="legend-bar" style="background:#e74c3c">Obligaciones Pendientes <span>$ {vpy:,.0f}</span></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="legend-bar" style="background:#fca311">{label_ahorro} <span>$ {bf:,.0f}</span></div>',          unsafe_allow_html=True)
+
+    # ── TENDENCIA DE AHORRO (Últimos 6 meses) ─────────────────
+    if mes_s == _mes_real and anio_s == _anio_real:
+        st.markdown('<div class="chart-card"><div class="chart-title">Tendencia de Ahorro (Últimos 6 meses)</div>', unsafe_allow_html=True)
+        _ref_idx = meses_lista.index(mes_s)
+        _hist_meses, _hist_vals, _hist_pcts = [], [], []
+        for _i in range(5, -1, -1):
+            _idx = _ref_idx - _i
+            _ah  = anio_s
+            if _idx < 0:
+                _idx += 12
+                _ah -= 1
+            _mn = meses_lista[_idx]
+            _ih = df_i_full[(df_i_full["Periodo"]==_mn) & (df_i_full["Año"]==_ah)]
+            if not _ih.empty:
+                _gh = df_g_full[(df_g_full["Periodo"]==_mn) & (df_g_full["Año"]==_ah)]
+                _oh = df_oi_full[(df_oi_full["Periodo"]==_mn) & (df_oi_full["Año"]==_ah)]
+                _, _, _, _, _bfh, _ahorro_h = calcular_metricas(
+                    _gh, _ih["Nomina"].iloc[0],
+                    _oh["Monto"].sum() if not _oh.empty else 0,
+                    _ih["SaldoAnterior"].iloc[0]
+                )
+                _hist_meses.append(_mn[:3])
+                _hist_vals.append(_bfh)
+                _hist_pcts.append(_ahorro_h)
+
+        if _hist_vals:
+            _max_abs_hist = max(abs(v) for v in _hist_vals) if _hist_vals else 1
+            fig_tend = go.Figure(go.Bar(
+                x=_hist_meses,
+                y=_hist_vals,
+                marker_color=["#fca311" if v >= 0 else "#e74c3c" for v in _hist_vals],
+                text=[f"$ {v:,.0f}<br>{p:.1f}%" for v, p in zip(_hist_vals, _hist_pcts)],
+                textposition="outside",
+                textfont=dict(color="#ffffff", size=11),
+            ))
+            fig_tend.update_layout(
+                **PLOTLY_LAYOUT,
+                height=270,
+                margin=dict(t=50,b=10,l=10,r=10),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False, showticklabels=False,
+                           range=[min(0, min(_hist_vals) * 1.35), max(_hist_vals + [0]) * 1.35 if max(_hist_vals + [0]) > 0 else _max_abs_hist * 0.5]),
+                showlegend=False,
+            )
+            st.plotly_chart(fig_tend, use_container_width=True)
+        else:
+            st.caption("No hay suficientes datos históricos para mostrar la tendencia.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
 
 # ══════════════════════════════════════════════════════════
