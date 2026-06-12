@@ -193,6 +193,32 @@ st.markdown(f"""
     .section-header span {{ font-size: 1.05rem; font-weight: 800;
         color: #ffffff; text-transform: uppercase; letter-spacing: 0.04em; }}
 
+    /* ── EXPANDERS CON ESTILO DE SECTION-HEADER ── */
+    [data-testid="stExpander"] {{
+        border: none !important;
+        background: transparent !important;
+        margin: 18px 0 10px 0;
+    }}
+    [data-testid="stExpander"] summary {{
+        display: flex; align-items: center; gap: 10px;
+        background: linear-gradient(90deg, #212529 0%, rgba(33,37,41,0) 100%) !important;
+        border-left: 4px solid #fca311 !important;
+        border-radius: 4px !important;
+        padding: 8px 14px !important;
+        min-height: unset !important;
+    }}
+    [data-testid="stExpander"] summary:hover {{
+        background: linear-gradient(90deg, #2a2f34 0%, rgba(42,47,52,0) 100%) !important;
+    }}
+    [data-testid="stExpander"] summary p {{
+        font-size: 1.05rem !important; font-weight: 800 !important;
+        color: #ffffff !important; text-transform: uppercase !important;
+        letter-spacing: 0.04em !important;
+    }}
+    [data-testid="stExpander"] [data-testid="stExpanderDetails"] {{
+        padding-top: 10px !important;
+    }}
+
     /* ── SIDEBAR ── */
     section[data-testid="stSidebar"] {{ background-color: #212529 !important; border-right: 1px solid #495057; }}
 
