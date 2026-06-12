@@ -441,9 +441,10 @@ try:
     df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full, df_ip_full = cargar_bd(supabase, u_id, token)
     cfg_usuario = cargar_config(supabase, u_id, token)
 except Exception as e:
-    if "JWT" in str(e) or "expired" in str(e).lower():
-        st.warning("⚠️ Tu sesión expiró. Por favor inicia sesión nuevamente.")
-        cerrar_sesion()
+    if "JWT" in str(e) or "expired" in str(e).lower() or "token" in str(e).lower():
+        st.warning("⏰ Tu sesión expiró por inactividad. Por favor recarga la página e inicia sesión nuevamente.")
+        if st.button("🔄 Recargar e iniciar sesión"):
+            cerrar_sesion()
         st.stop()
     else:
         st.error(f"Error al cargar datos: {e}")
@@ -1394,6 +1395,9 @@ if "Destino Copia" not in _ip_base.columns:
 _ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
     lambda v: v if v in _OPCIONES_DESTINO else None
 )
+# Asegurar tipo bool en Movimiento Recurrente (evita StreamlitAPIException
+# cuando df_mes_ip está vacío y la columna queda como NaN/float64)
+_ip_base["Movimiento Recurrente"] = _ip_base["Movimiento Recurrente"].fillna(False).astype(bool)
 
 _ip_config = {
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
