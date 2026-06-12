@@ -17,16 +17,20 @@ from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_
 
 # --- HELPERS DE FORMATO DE MONTOS (separador de miles estilo CO) ---
 def _fmt_miles(x):
-    """Convierte un número a texto con separador de miles '.' (ej: 400000 -> '400.000')."""
+    """Convierte un número a texto '$ 400.000' con separador de miles '.'."""
     try:
         if x is None or (isinstance(x, float) and pd.isna(x)):
             return ""
         v = float(x)
     except (TypeError, ValueError):
         return ""
-    if v == 0:
-        return "0"
-    return f"{v:,.0f}".replace(",", ".")
+    return f"$ {v:,.0f}".replace(",", ".")
+
+def _money_column(label, help=None, width=None):
+    """Crea una TextColumn alineada a la derecha para mostrar montos formateados."""
+    cfg = st.column_config.TextColumn(label, help=help, width=width)
+    cfg["alignment"] = "right"
+    return cfg
 
 def _parse_miles(x):
     """Convierte texto con separador de miles '.' de vuelta a número (ej: '400.000' -> 400000.0)."""
@@ -1186,7 +1190,7 @@ if "Es Referencia" not in df_proy_rows.columns:
 config_proy = {
     "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Referencia":      st.column_config.TextColumn("Valor Proyectado", width="small",
+    "Valor Referencia":      _money_column("Valor Proyectado", width="small",
                                  help="Monto que proyectas gastar en este ítem (ej: 400.000)"),
     "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
                                  help="Activa para hacer seguimiento de este ítem"),
@@ -1241,7 +1245,7 @@ df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
 config_mov = {
     "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":          st.column_config.TextColumn("Descripción", width="large"),
-    "Monto":                st.column_config.TextColumn("Monto", width="small",
+    "Monto":                _money_column("Monto", width="small",
                                 help="Valor del gasto (ej: 50.000)"),
     "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
                                 help="Ítem proyectado al que pertenece este gasto"),
@@ -1393,7 +1397,7 @@ _ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
 
 _ip_config = {
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Proyectado":      st.column_config.TextColumn("💵 Valor Proyectado", width="small",
+    "Valor Proyectado":      _money_column("💵 Valor Proyectado", width="small",
                                  help="Monto que proyectas recibir (ej: 400.000)"),
     "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
                                  help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
@@ -1516,7 +1520,7 @@ if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
 _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
-_oi_config = {"Monto": st.column_config.TextColumn("Monto", help="Valor del ingreso (ej: 400.000)")}
+_oi_config = {"Monto": _money_column("Monto", help="Valor del ingreso (ej: 400.000)")}
 if modulo_billeteras_activo and lista_billeteras:
     _oi_config["Billetera"] = st.column_config.SelectboxColumn(
         "💳 Billetera", options=opciones_bill, width="medium",
