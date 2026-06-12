@@ -1155,7 +1155,7 @@ if "Es Referencia" not in df_proy_rows.columns:
 config_proy = {
     "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Referencia":      st.column_config.NumberColumn("Valor Proyectado", format="$ %.0f", width="small",
+    "Valor Referencia":      st.column_config.NumberColumn("Valor Proyectado", format="$,.0f", width="small",
                                  help="Monto que proyectas gastar en este ítem"),
     "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
                                  help="Activa para hacer seguimiento de este ítem"),
@@ -1208,7 +1208,7 @@ df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
 config_mov = {
     "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":          st.column_config.TextColumn("Descripción", width="large"),
-    "Monto":                st.column_config.NumberColumn("Monto", format="$ %.0f", width="small"),
+    "Monto":                st.column_config.NumberColumn("Monto", format="$,.0f", width="small"),
     "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
                                 help="Ítem proyectado al que pertenece este gasto"),
     "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
@@ -1356,7 +1356,7 @@ _ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
 
 _ip_config = {
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Proyectado":      st.column_config.NumberColumn("💵 Valor Proyectado", format="$ %.0f", width="small",
+    "Valor Proyectado":      st.column_config.NumberColumn("💵 Valor Proyectado", format="$,.0f", width="small",
                                  help="Monto que proyectas recibir"),
     "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
                                  help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
@@ -1476,7 +1476,7 @@ if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
 _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
-_oi_config = {"Monto": st.column_config.NumberColumn("Monto", format="$ %.0f")}
+_oi_config = {"Monto": st.column_config.NumberColumn("Monto", format="$,.0f")}
 if modulo_billeteras_activo and lista_billeteras:
     _oi_config["Billetera"] = st.column_config.SelectboxColumn(
         "💳 Billetera", options=opciones_bill, width="medium",
