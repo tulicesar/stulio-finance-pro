@@ -380,6 +380,49 @@ def calcular_pendientes(df):
 
     return pd.DataFrame(filas_pendientes).reset_index(drop=True) if filas_pendientes else pd.DataFrame(columns=df.columns)
 
+
+def calcular_bf_real(df_g, n_in, otr_v, s_in, periodo_key, cierre_dict=None):
+    """
+    Calcula Saldo a Favor (bf) de forma consistente para:
+      - El KPI principal del dashboard
+      - El "Saldo Anterior" sugerido al cambiar de mes
+      - El gráfico "Tendencia de Ahorro"
+    Aplica el mismo filtro de Cierre de Mes que el KPI principal.
+    """
+    if df_g.empty:
+        vp = 0.0
+    else:
+        _df = df_g.copy()
+        _df["Monto"]  = pd.to_numeric(_df["Monto"], errors="coerce").fillna(0)
+        _df["Pagado"] = _df["Pagado"].fillna(False).astype(bool)
+        vp = float(_df.loc[_df["Pagado"], "Monto"].sum())
+
+    _df_pend = calcular_pendientes(df_g)
+
+    cierre_dict = cierre_dict or {}
+    if cierre_dict.get(periodo_key, False) and not _df_pend.empty:
+        _df_pend = _df_pend[~(
+            (_df_pend["Es Proyectado"].fillna(False).astype(bool)) &
+            (pd.to_numeric(_df_pend["Monto"], errors="coerce").fillna(0) == 0)
+        )].copy()
+
+    if not _df_pend.empty:
+        _df_pend["_val"] = _df_pend.apply(
+            lambda r: float(r.get("Monto", 0) or 0) if float(r.get("Monto", 0) or 0) > 0
+                      else float(r.get("Valor Referencia", 0) or 0),
+            axis=1
+        )
+        vpy = float(_df_pend["_val"].sum())
+    else:
+        vpy = 0.0
+
+    it_total = float(s_in) + float(n_in) + float(otr_v)
+    fact     = it_total - vp
+    bf       = fact - vpy
+    ahorro_p = (bf / it_total * 100) if it_total > 0 else 0.0
+    return it_total, vp, vpy, fact, bf, ahorro_p
+
+
 # --- 7. LAYOUT BASE PLOTLY ---
 PLOTLY_LAYOUT = dict(
     paper_bgcolor='rgba(0,0,0,0)',
@@ -614,17 +657,11 @@ with st.sidebar:
         ] if not df_ip_full.empty else pd.DataFrame()
         _total_ip_ant = float(_ip_ant["Valor Proyectado"].sum()) if not _ip_ant.empty else 0.0
         _it_ant  = _sal_ant + _nom_ant + _otr_ant  # Ingresos Proyectados ya NO suman al Saldo a Favor
-        _vp_ant  = float(g_ant[g_ant["Pagado"].fillna(False).astype(bool)]["Monto"].sum()) if not g_ant.empty else 0.0
-        _pend_ant = calcular_pendientes(g_ant)
-        if not _pend_ant.empty:
-            _pend_ant["_v"] = _pend_ant.apply(
-                lambda r: float(r.get("Monto",0) or 0) if float(r.get("Monto",0) or 0) > 0
-                          else float(r.get("Valor Referencia",0) or 0), axis=1
-            )
-            _vpy_ant = float(_pend_ant["_v"].sum())
-        else:
-            _vpy_ant = 0.0
-        s_sug = _it_ant - _vp_ant - _vpy_ant
+        _periodo_key_ant = f"{m_ant}_{a_ant}"
+        _, _, _vpy_ant, _, s_sug, _ = calcular_bf_real(
+            g_ant, _nom_ant, _otr_ant, _sal_ant,
+            _periodo_key_ant, st.session_state["cierre_mes_por_periodo"]
+        )
 
     st.divider()
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
@@ -1634,31 +1671,11 @@ df_ed_oi["Monto"] = pd.to_numeric(df_ed_oi["Monto"], errors="coerce").fillna(0)
 otr_v = float(df_ed_oi["Monto"].sum())
 placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", disabled=True)
 
-it, vp, _vpy_old, fact, bf, ahorro_p = calcular_metricas(df_ed_g, n_in, otr_v, s_in)
 # Los Ingresos Proyectados ya NO suman al Saldo a Favor (solo se muestran como proyección aparte)
 
-_df_pend_kpi = calcular_pendientes(df_ed_g)
-
-if st.session_state["cierre_mes_por_periodo"].get(_periodo_key, False) and not _df_pend_kpi.empty:
-    _df_pend_kpi = _df_pend_kpi[~(
-        (_df_pend_kpi["Es Proyectado"].fillna(False).astype(bool)) &
-        (pd.to_numeric(_df_pend_kpi["Monto"], errors="coerce").fillna(0) == 0)
-    )].copy()
-
-if not _df_pend_kpi.empty:
-    _df_pend_kpi["_val"] = _df_pend_kpi.apply(
-        lambda r: float(r.get("Monto", 0) or 0) if float(r.get("Monto", 0) or 0) > 0
-                  else float(r.get("Valor Referencia", 0) or 0),
-        axis=1
-    )
-    vpy = float(_df_pend_kpi["_val"].sum())
-else:
-    vpy = 0.0
-
-it_total = float(s_in) + float(n_in) + float(otr_v)
-fact     = it_total - vp
-bf       = fact - vpy
-ahorro_p = (bf / it_total * 100) if it_total > 0 else 0.0
+it_total, vp, vpy, fact, bf, ahorro_p = calcular_bf_real(
+    df_ed_g, n_in, otr_v, s_in, _periodo_key, st.session_state["cierre_mes_por_periodo"]
+)
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
 # ── SALDO PROYECTADO (incluye Ingresos Proyectados aún no migrados) ──
@@ -1678,7 +1695,7 @@ if st.session_state.get("datos_modificados", False):
 st.divider()
 c_kpi = st.columns(5)
 tarj = [
-    ("INGRESOS",           it,   "black"),
+    ("INGRESOS",           it_total, "black"),
     ("OBLIG. PAGADAS",     vp,   "green"),
     ("OBLIG. PENDIENTES",  vpy,  "red"),
     ("DINERO DISPONIBLE",  fact, "blue"),
@@ -2106,10 +2123,11 @@ with st.expander("📊 Análisis de Distribución", expanded=True):
             if not _ih.empty:
                 _gh = df_g_full[(df_g_full["Periodo"]==_mn) & (df_g_full["Año"]==_ah)]
                 _oh = df_oi_full[(df_oi_full["Periodo"]==_mn) & (df_oi_full["Año"]==_ah)]
-                _, _, _, _, _bfh, _ahorro_h = calcular_metricas(
+                _, _, _, _, _bfh, _ahorro_h = calcular_bf_real(
                     _gh, _ih["Nomina"].iloc[0],
                     _oh["Monto"].sum() if not _oh.empty else 0,
-                    _ih["SaldoAnterior"].iloc[0]
+                    _ih["SaldoAnterior"].iloc[0],
+                    f"{_mn}_{_ah}", st.session_state["cierre_mes_por_periodo"]
                 )
                 _hist_meses.append(_mn[:3])
                 _hist_vals.append(_bfh)
