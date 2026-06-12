@@ -440,6 +440,9 @@ supabase.postgrest.auth(token)
 try:
     df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full, df_ip_full = cargar_bd(supabase, u_id, token)
     cfg_usuario = cargar_config(supabase, u_id, token)
+
+    # ── Sincronizar estado de Cierre de Mes desde Supabase (persistente) ──
+    st.session_state["cierre_mes_por_periodo"] = cfg_usuario.get("cierres_mes") or {}
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower() or "token" in str(e).lower():
         st.warning("⏰ Tu sesión expiró por inactividad. Por favor recarga la página e inicia sesión nuevamente.")
@@ -935,6 +938,7 @@ with st.sidebar:
 
     def _on_cierre_change():
         st.session_state["cierre_mes_por_periodo"][_periodo_key] = st.session_state["toggle_cierre_mes"]
+        guardar_config(supabase, u_id, token, cierres_mes=st.session_state["cierre_mes_por_periodo"])
 
     st.toggle(
         "Activar cierre de mes",
