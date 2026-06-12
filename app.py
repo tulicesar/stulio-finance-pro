@@ -15,6 +15,37 @@ from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
 from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia, guardar_ingresos_proyectados
 from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_proyeccion
 
+# --- HELPERS DE FORMATO DE MONTOS (separador de miles estilo CO) ---
+def _fmt_miles(x):
+    """Convierte un número a texto con separador de miles '.' (ej: 400000 -> '400.000')."""
+    try:
+        if x is None or (isinstance(x, float) and pd.isna(x)):
+            return ""
+        v = float(x)
+    except (TypeError, ValueError):
+        return ""
+    if v == 0:
+        return "0"
+    return f"{v:,.0f}".replace(",", ".")
+
+def _parse_miles(x):
+    """Convierte texto con separador de miles '.' de vuelta a número (ej: '400.000' -> 400000.0)."""
+    if x is None:
+        return 0.0
+    if isinstance(x, (int, float)):
+        try:
+            return float(x)
+        except (TypeError, ValueError):
+            return 0.0
+    s = str(x).strip()
+    if s == "" or s.lower() in ("none", "nan"):
+        return 0.0
+    s = s.replace("$", "").replace(" ", "").replace(".", "").replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
 # --- 1. CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(page_title="My FinanceApp by Stulio Designs", layout="wide", page_icon="💰")
 
@@ -1155,8 +1186,8 @@ if "Es Referencia" not in df_proy_rows.columns:
 config_proy = {
     "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Referencia":      st.column_config.NumberColumn("Valor Proyectado", format="$ %d", width="small",
-                                 help="Monto que proyectas gastar en este ítem"),
+    "Valor Referencia":      st.column_config.TextColumn("Valor Proyectado", width="small",
+                                 help="Monto que proyectas gastar en este ítem (ej: 400.000)"),
     "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
                                  help="Activa para hacer seguimiento de este ítem"),
     "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
@@ -1168,6 +1199,7 @@ config_proy = {
 df_base_proy = df_proy_rows.reindex(
     columns=["Categoría", "Descripción", "Valor Referencia", "Es Referencia", "📋", "Movimiento Recurrente"]
 ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
+df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles)
 
 df_ed_proy = st.data_editor(
     df_base_proy,
@@ -1179,6 +1211,7 @@ df_ed_proy = st.data_editor(
 )
 
 df_ed_proy_clean = df_ed_proy.copy()
+df_ed_proy_clean["Valor Referencia"] = df_ed_proy_clean["Valor Referencia"].apply(_parse_miles)
 df_ed_proy_clean["📋"] = df_ed_proy_clean.get("📋", False)
 if "Es Referencia" not in df_ed_proy_clean.columns:
     df_ed_proy_clean["Es Referencia"] = False
@@ -1208,7 +1241,8 @@ df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
 config_mov = {
     "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
     "Descripción":          st.column_config.TextColumn("Descripción", width="large"),
-    "Monto":                st.column_config.NumberColumn("Monto", format="$ %d", width="small"),
+    "Monto":                st.column_config.TextColumn("Monto", width="small",
+                                help="Valor del gasto (ej: 50.000)"),
     "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
                                 help="Ítem proyectado al que pertenece este gasto"),
     "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
@@ -1257,6 +1291,8 @@ if not df_ed_proy_clean.empty:
                 ["Categoría", "Descripción"], ascending=[True, True]
             ).reset_index(drop=True)
 
+df_base_mov["Monto"] = df_base_mov["Monto"].apply(_fmt_miles)
+
 df_ed_mov = st.data_editor(
     df_base_mov,
     use_container_width=True,
@@ -1265,6 +1301,7 @@ df_ed_mov = st.data_editor(
     key="mov_ed",
     on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
+df_ed_mov["Monto"] = df_ed_mov["Monto"].apply(_parse_miles)
 
 # ══════════════════════════════════════════════════════════
 # RECONSTRUIR df_ed_g unificado
@@ -1356,13 +1393,15 @@ _ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
 
 _ip_config = {
     "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Proyectado":      st.column_config.NumberColumn("💵 Valor Proyectado", format="$ %d", width="small",
-                                 help="Monto que proyectas recibir"),
+    "Valor Proyectado":      st.column_config.TextColumn("💵 Valor Proyectado", width="small",
+                                 help="Monto que proyectas recibir (ej: 400.000)"),
     "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
                                  help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
     "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
                                  help="Se propaga automáticamente al mes siguiente"),
 }
+
+_ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles)
 
 df_ed_ip = st.data_editor(
     _ip_base,
@@ -1372,6 +1411,7 @@ df_ed_ip = st.data_editor(
     key="ip_ed",
     on_change=lambda: st.session_state.update({"datos_modificados": True})
 )
+df_ed_ip["Valor Proyectado"] = df_ed_ip["Valor Proyectado"].apply(_parse_miles)
 
 # Calcular total proyectado — TODAS las filas suman al Saldo a Favor
 # (solo dejan de sumar cuando se copian y desaparecen de la tabla)
@@ -1476,18 +1516,21 @@ if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
 st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
 df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
 _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
-_oi_config = {"Monto": st.column_config.NumberColumn("Monto", format="$ %d")}
+_oi_config = {"Monto": st.column_config.TextColumn("Monto", help="Valor del ingreso (ej: 400.000)")}
 if modulo_billeteras_activo and lista_billeteras:
     _oi_config["Billetera"] = st.column_config.SelectboxColumn(
         "💳 Billetera", options=opciones_bill, width="medium",
         help="Cuenta donde recibes este ingreso"
     )
+_oi_base = df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True)
+_oi_base["Monto"] = _oi_base["Monto"].apply(_fmt_miles)
 df_ed_oi = st.data_editor(
-    df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True),
+    _oi_base,
     use_container_width=True, num_rows="dynamic",
     column_config=_oi_config,
     key="oi_ed"
 )
+df_ed_oi["Monto"] = df_ed_oi["Monto"].apply(_parse_miles)
 
 # ══════════════════════════════════════════════════════════
 # 🔄 TRANSFERENCIAS ENTRE BILLETERAS
