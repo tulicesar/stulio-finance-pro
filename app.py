@@ -2192,7 +2192,7 @@ with st.expander("💡 Obtener diagnóstico y recomendaciones personalizadas", e
     prompt_contexto = f"""Eres un asesor experto en finanzas personales. Analiza los datos financieros del mes de {mes_s} {anio_s} y genera un diagnóstico claro, directo y útil en español. Sé específico con los números.
 
 DATOS DEL MES:
-- Ingresos totales: ${it:,.0f}
+- Ingresos totales: ${it_total:,.0f}
 - Saldo anterior: ${s_in:,.0f}
 - Nómina: ${n_in:,.0f}
 - Otros ingresos: ${otr_v:,.0f}
