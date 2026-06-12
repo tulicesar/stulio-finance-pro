@@ -1740,20 +1740,21 @@ if modulo_billeteras_activo and lista_billeteras:
         _fig_bill = _go.Figure()
         _colores_usados = [_colores_bill[i % len(_colores_bill)] for i in range(len(lista_billeteras))]
         _saldos_vals = [saldos_bill.get(b, 0) for b in lista_billeteras]
+        _total_bill_chart = sum(_saldos_vals) if sum(_saldos_vals) != 0 else 1
         _fig_bill.add_trace(_go.Bar(
             x=lista_billeteras,
             y=_saldos_vals,
             marker_color=_colores_usados,
-            text=[f"$ {v:,.0f}" for v in _saldos_vals],
+            text=[f"$ {v:,.0f}<br>{(v/_total_bill_chart*100):.1f}%" for v in _saldos_vals],
             textposition="outside",
             textfont=dict(color="#ffffff", size=12),
         ))
         _fig_bill.update_layout(
             **PLOTLY_LAYOUT,
-            height=220,
-            margin=dict(t=10, b=10, l=10, r=10),
+            height=260,
+            margin=dict(t=50, b=10, l=10, r=10),
             xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=False, showticklabels=False),
+            yaxis=dict(showgrid=False, showticklabels=False, range=[0, max(_saldos_vals) * 1.35 if max(_saldos_vals) > 0 else 1]),
             showlegend=False,
         )
         st.markdown('<div class="chart-card"><div class="chart-title">Distribución de fondos por billetera</div>', unsafe_allow_html=True)
@@ -2070,7 +2071,7 @@ with inf3:
 if mes_s == _mes_real and anio_s == _anio_real:
     st.markdown('<div class="chart-card"><div class="chart-title">Tendencia de Ahorro (Últimos 6 meses)</div>', unsafe_allow_html=True)
     _ref_idx = meses_lista.index(mes_s)
-    _hist_meses, _hist_vals = [], []
+    _hist_meses, _hist_vals, _hist_pcts = [], [], []
     for _i in range(5, -1, -1):
         _idx = _ref_idx - _i
         _ah  = anio_s
@@ -2082,29 +2083,32 @@ if mes_s == _mes_real and anio_s == _anio_real:
         if not _ih.empty:
             _gh = df_g_full[(df_g_full["Periodo"]==_mn) & (df_g_full["Año"]==_ah)]
             _oh = df_oi_full[(df_oi_full["Periodo"]==_mn) & (df_oi_full["Año"]==_ah)]
-            _, _, _, _, _bfh, _ = calcular_metricas(
+            _, _, _, _, _bfh, _ahorro_h = calcular_metricas(
                 _gh, _ih["Nomina"].iloc[0],
                 _oh["Monto"].sum() if not _oh.empty else 0,
                 _ih["SaldoAnterior"].iloc[0]
             )
             _hist_meses.append(_mn[:3])
             _hist_vals.append(_bfh)
+            _hist_pcts.append(_ahorro_h)
 
     if _hist_vals:
+        _max_abs_hist = max(abs(v) for v in _hist_vals) if _hist_vals else 1
         fig_tend = go.Figure(go.Bar(
             x=_hist_meses,
             y=_hist_vals,
             marker_color=["#fca311" if v >= 0 else "#e74c3c" for v in _hist_vals],
-            text=[f"$ {v:,.0f}" for v in _hist_vals],
+            text=[f"$ {v:,.0f}<br>{p:.1f}%" for v, p in zip(_hist_vals, _hist_pcts)],
             textposition="outside",
             textfont=dict(color="#ffffff", size=11),
         ))
         fig_tend.update_layout(
             **PLOTLY_LAYOUT,
-            height=240,
-            margin=dict(t=30,b=10,l=10,r=10),
+            height=270,
+            margin=dict(t=50,b=10,l=10,r=10),
             xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=False, showticklabels=False),
+            yaxis=dict(showgrid=False, showticklabels=False,
+                       range=[min(0, min(_hist_vals) * 1.35), max(_hist_vals + [0]) * 1.35 if max(_hist_vals + [0]) > 0 else _max_abs_hist * 0.5]),
             showlegend=False,
         )
         st.plotly_chart(fig_tend, use_container_width=True)
