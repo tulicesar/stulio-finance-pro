@@ -1210,423 +1210,423 @@ descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().t
 # ══════════════════════════════════════════════════════════
 # TABLA 1: GASTOS / EGRESOS PROYECTADOS
 # ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-header"><span>📅 Gastos / Egresos Proyectados</span></div>', unsafe_allow_html=True)
-st.caption("Define aquí los gastos que proyectas para el mes. Estos sirven como presupuesto de referencia.")
+with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
+    st.caption("Define aquí los gastos que proyectas para el mes. Estos sirven como presupuesto de referencia.")
 
-df_proy_rows = df_mes_g[df_mes_g["Es Proyectado"] == True].copy()
-df_proy_rows["📋"] = False
-if "Es Referencia" not in df_proy_rows.columns:
-    df_proy_rows["Es Referencia"] = False
+    df_proy_rows = df_mes_g[df_mes_g["Es Proyectado"] == True].copy()
+    df_proy_rows["📋"] = False
+    if "Es Referencia" not in df_proy_rows.columns:
+        df_proy_rows["Es Referencia"] = False
 
-config_proy = {
-    "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-    "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Referencia":      _money_column("Valor Proyectado", width="small",
-                                 help="Monto que proyectas gastar en este ítem (ej: 400.000)"),
-    "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
-                                 help="Activa para hacer seguimiento de este ítem"),
-    "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
-                                 help="Copia automáticamente el valor proyectado como monto al registrar el movimiento"),
-    "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
-                                 help="Se repite todos los meses automáticamente"),
-}
+    config_proy = {
+        "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+        "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
+        "Valor Referencia":      _money_column("Valor Proyectado", width="small",
+                                     help="Monto que proyectas gastar en este ítem (ej: 400.000)"),
+        "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
+                                     help="Activa para hacer seguimiento de este ítem"),
+        "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
+                                     help="Copia automáticamente el valor proyectado como monto al registrar el movimiento"),
+        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
+                                     help="Se repite todos los meses automáticamente"),
+    }
 
-df_base_proy = df_proy_rows.reindex(
-    columns=["Categoría", "Descripción", "Valor Referencia", "Es Referencia", "📋", "Movimiento Recurrente"]
-).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
-df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles)
+    df_base_proy = df_proy_rows.reindex(
+        columns=["Categoría", "Descripción", "Valor Referencia", "Es Referencia", "📋", "Movimiento Recurrente"]
+    ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
+    df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles)
 
-df_ed_proy = st.data_editor(
-    df_base_proy,
-    use_container_width=True,
-    num_rows="dynamic",
-    column_config=config_proy,
-    key="proy_ed",
-    on_change=lambda: st.session_state.update({"datos_modificados": True})
-)
+    df_ed_proy = st.data_editor(
+        df_base_proy,
+        use_container_width=True,
+        num_rows="dynamic",
+        column_config=config_proy,
+        key="proy_ed",
+        on_change=lambda: st.session_state.update({"datos_modificados": True})
+    )
 
-df_ed_proy_clean = df_ed_proy.copy()
-df_ed_proy_clean["Valor Referencia"] = df_ed_proy_clean["Valor Referencia"].apply(_parse_miles)
-df_ed_proy_clean["📋"] = df_ed_proy_clean.get("📋", False)
-if "Es Referencia" not in df_ed_proy_clean.columns:
-    df_ed_proy_clean["Es Referencia"] = False
-df_ed_proy_clean["Es Referencia"] = df_ed_proy_clean["Es Referencia"].fillna(False).astype(bool)
+    df_ed_proy_clean = df_ed_proy.copy()
+    df_ed_proy_clean["Valor Referencia"] = df_ed_proy_clean["Valor Referencia"].apply(_parse_miles)
+    df_ed_proy_clean["📋"] = df_ed_proy_clean.get("📋", False)
+    if "Es Referencia" not in df_ed_proy_clean.columns:
+        df_ed_proy_clean["Es Referencia"] = False
+    df_ed_proy_clean["Es Referencia"] = df_ed_proy_clean["Es Referencia"].fillna(False).astype(bool)
 
-items_referencia = df_ed_proy_clean[
-    df_ed_proy_clean["Es Referencia"] == True
-]["Descripción"].dropna().tolist()
-if "Es Referencia" in df_mes_g.columns:
-    items_ref_bd = df_mes_g[
-        (df_mes_g["Es Proyectado"] == True) & (df_mes_g["Es Referencia"] == True)
+    items_referencia = df_ed_proy_clean[
+        df_ed_proy_clean["Es Referencia"] == True
     ]["Descripción"].dropna().tolist()
-    items_referencia = sorted(set(items_referencia + items_ref_bd))
-else:
-    items_referencia = sorted(set(items_referencia))
-
-items_proyectados = items_referencia
-
-# ══════════════════════════════════════════════════════════
-# TABLA 2: EDITAR / AGREGAR MOVIMIENTOS
-# ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-header"><span>✏️ Editar / Agregar Movimientos</span></div>', unsafe_allow_html=True)
-st.caption("Registra aquí los gastos del día a día. Asocia cada uno a su ítem proyectado si aplica.")
-
-df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
-
-config_mov = {
-    "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
-    "Descripción":          st.column_config.TextColumn("Descripción", width="large"),
-    "Monto":                _money_column("Monto", width="small",
-                                help="Valor del gasto (ej: 50.000)"),
-    "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
-                                help="Ítem proyectado al que pertenece este gasto"),
-    "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
-    "Fecha Pago":           st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
-}
-if modulo_billeteras_activo and lista_billeteras:
-    config_mov["Billetera Pago"] = st.column_config.SelectboxColumn(
-        "💳 Billetera", options=opciones_bill, width="medium",
-        help="Billetera con la que pagas este gasto"
-    )
-
-_cols_mov = ["Categoría", "Descripción", "Monto", "Presupuesto Asociado"]
-if modulo_billeteras_activo and lista_billeteras:
-    _cols_mov.append("Billetera Pago")
-_cols_mov += ["Pagado", "Fecha Pago"]
-
-df_base_mov = df_mov_rows.reindex(
-    columns=_cols_mov
-).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
-
-# ── 📋 COPIAR AL REGISTRAR ────────────────────────────────
-if not df_ed_proy_clean.empty:
-    proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True].copy()
-    if not proy_con_copia.empty:
-        filas_nuevas = []
-        descripciones_existentes = df_base_mov["Descripción"].str.strip().str.upper().tolist()
-        for _, proy_row in proy_con_copia.iterrows():
-            desc_proy  = str(proy_row.get("Descripción", "")).strip()
-            cat_proy   = str(proy_row.get("Categoría", ""))
-            val_proy   = float(proy_row.get("Valor Referencia", 0) or 0)
-            if desc_proy.upper() not in descripciones_existentes:
-                filas_nuevas.append({
-                    "Categoría":            cat_proy,
-                    "Descripción":          desc_proy,
-                    "Monto":                val_proy,
-                    "Presupuesto Asociado": desc_proy,
-                    "Pagado":               False,
-                    "Fecha Pago":           pd.NaT,
-                })
-            else:
-                mask = df_base_mov["Descripción"].str.strip().str.upper() == desc_proy.upper()
-                df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = val_proy
-        if filas_nuevas:
-            df_nuevas = pd.DataFrame(filas_nuevas)
-            df_base_mov = pd.concat([df_base_mov, df_nuevas], ignore_index=True).sort_values(
-                ["Categoría", "Descripción"], ascending=[True, True]
-            ).reset_index(drop=True)
-
-df_base_mov["Monto"] = df_base_mov["Monto"].apply(_fmt_miles)
-
-df_ed_mov = st.data_editor(
-    df_base_mov,
-    use_container_width=True,
-    num_rows="dynamic",
-    column_config=config_mov,
-    key="mov_ed",
-    on_change=lambda: st.session_state.update({"datos_modificados": True})
-)
-df_ed_mov["Monto"] = df_ed_mov["Monto"].apply(_parse_miles)
-
-# ══════════════════════════════════════════════════════════
-# RECONSTRUIR df_ed_g unificado
-# ══════════════════════════════════════════════════════════
-df_proy_final = df_ed_proy_clean.copy()
-df_proy_final["Es Proyectado"]        = True
-df_proy_final["Pagado"]               = False
-df_proy_final["Monto"]                = 0.0
-df_proy_final["Presupuesto Asociado"] = None
-df_proy_final["Fecha Pago"]           = pd.NaT
-if "Es Referencia" not in df_proy_final.columns:
-    df_proy_final["Es Referencia"] = False
-df_proy_final["Es Referencia"] = df_proy_final["Es Referencia"].fillna(False).astype(bool)
-if "Movimiento Recurrente" not in df_proy_final.columns:
-    df_proy_final["Movimiento Recurrente"] = False
-
-df_mov_final = df_ed_mov.copy()
-df_mov_final["Es Proyectado"]         = False
-df_mov_final["Valor Referencia"]      = 0.0
-df_mov_final["Movimiento Recurrente"] = False
-df_mov_final["Es Referencia"]         = False
-
-df_ed_g = pd.concat([df_proy_final, df_mov_final], ignore_index=True)
-
-df_ed_g["Monto"]             = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
-df_ed_g["Valor Referencia"]  = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
-df_ed_g["Pagado"]            = df_ed_g["Pagado"].fillna(False).astype(bool)
-df_ed_g["Es Proyectado"]     = df_ed_g["Es Proyectado"].fillna(False).astype(bool)
-df_ed_g["Movimiento Recurrente"] = df_ed_g["Movimiento Recurrente"].fillna(False).astype(bool)
-
-# ── ANTI-DUPLICACIÓN EN KPIs ──────────────────────────────
-if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.columns:
-    _proy_con_pago_kpi = set(
-        df_ed_g[df_ed_g["Pagado"] == True]["Presupuesto Asociado"]
-        .dropna().astype(str).str.strip().str.upper().tolist()
-    )
-    for _idx, _row in df_ed_g.iterrows():
-        if (bool(_row.get("Es Proyectado", False)) and
-            bool(_row.get("Es Referencia", False)) and
-            not bool(_row.get("Pagado", False))):
-            _desc     = str(_row.get("Descripción","")).strip().upper()
-            _vref     = float(_row.get("Valor Referencia", 0) or 0)
-            _movs_k   = df_ed_g[
-                df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == _desc
-            ]
-            _ejecutado = float(pd.to_numeric(_movs_k["Monto"], errors="coerce").fillna(0).sum())
-            _pag_comp  = bool(_movs_k["Pagado"].fillna(False).all()) if not _movs_k.empty else False
-            if _pag_comp and _ejecutado >= _vref:
-                df_ed_g.loc[_idx, "Pagado"] = True
-
-df_base = df_ed_g.copy()
-
-# ══════════════════════════════════════════════════════════
-# ══════════════════════════════════════════════════════════
-# 📈 INGRESOS PROYECTADOS
-# ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-header"><span>📈 Ingresos Proyectados</span></div>', unsafe_allow_html=True)
-st.caption("Define aquí los ingresos que proyectas recibir este mes. Al copiar, la fila migra a su destino y deja de ser proyección.")
-
-# ── Base de datos del periodo ─────────────────────────────
-df_mes_ip = df_ip_full[(df_ip_full["Periodo"]==mes_s) & (df_ip_full["Año"]==anio_s)].copy()
-
-# Propagar recurrentes de mes anterior si el mes actual está vacío
-if df_mes_ip.empty:
-    _p_actual_ip = (anio_s * 12) + meses_lista.index(mes_s)
-    _ip_hist = df_ip_full.copy()
-    if not _ip_hist.empty and "Periodo" in _ip_hist.columns:
-        _meses_map_ip = {m: i for i, m in enumerate(meses_lista)}
-        _ip_hist["_lt"] = (_ip_hist["Año"] * 12) + _ip_hist["Periodo"].map(_meses_map_ip)
-        _ip_ant = _ip_hist[_ip_hist["_lt"] == _p_actual_ip - 1]
-        if not _ip_ant.empty:
-            _activos_ip = _ip_ant[_ip_ant["Movimiento Recurrente"] == True].copy()
-            if not _activos_ip.empty:
-                df_mes_ip = _activos_ip.reindex(columns=["Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"])
-                df_mes_ip["Destino Copia"] = None   # recurrentes sin destino predeterminado
-                df_mes_ip = df_mes_ip.reset_index(drop=True)
-
-_OPCIONES_DESTINO = ["Ingresos Adicionales", "Ingreso Fijo (Sueldo/Nómina)"]
-
-_ip_cols = ["Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"]
-_ip_base = df_mes_ip.reindex(columns=_ip_cols).reset_index(drop=True)
-# Destino Copia vacío por defecto (None), NO se fuerza valor predeterminado
-if "Destino Copia" not in _ip_base.columns:
-    _ip_base["Destino Copia"] = None
-# Normalizar: cualquier valor que no sea de la lista → None
-_ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
-    lambda v: v if v in _OPCIONES_DESTINO else None
-)
-# Asegurar tipo bool en Movimiento Recurrente (evita StreamlitAPIException
-# cuando df_mes_ip está vacío y la columna queda como NaN/float64)
-_ip_base["Movimiento Recurrente"] = _ip_base["Movimiento Recurrente"].fillna(False).astype(bool)
-
-_ip_config = {
-    "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
-    "Valor Proyectado":      _money_column("💵 Valor Proyectado", width="small",
-                                 help="Monto que proyectas recibir (ej: 400.000)"),
-    "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
-                                 help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
-    "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
-                                 help="Se propaga automáticamente al mes siguiente"),
-}
-
-# Forzar dtype object en columnas de texto/selección (evita StreamlitAPIException
-# cuando _ip_base tiene 0 filas y reindex deja dtype float64 por defecto)
-_ip_base["Descripción"]    = _ip_base["Descripción"].astype(object)
-_ip_base["Destino Copia"]  = _ip_base["Destino Copia"].astype(object)
-_ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles).astype(object)
-
-df_ed_ip = st.data_editor(
-    _ip_base,
-    use_container_width=True,
-    num_rows="dynamic",
-    column_config=_ip_config,
-    key="ip_ed",
-    on_change=lambda: st.session_state.update({"datos_modificados": True})
-)
-df_ed_ip["Valor Proyectado"] = df_ed_ip["Valor Proyectado"].apply(_parse_miles)
-
-# Calcular total proyectado — TODAS las filas suman al Saldo a Favor
-# (solo dejan de sumar cuando se copian y desaparecen de la tabla)
-_ip_df_calc = df_ed_ip.copy()
-_ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
-_total_ip = float(_ip_df_calc["Valor Proyectado"].sum())
-_total_ip_con_destino = float(_ip_df_calc[
-    _ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
-]["Valor Proyectado"].sum())
-
-# Redefinir _ip_sin_destino solo para referencia visual (no afecta cálculo)
-_ip_sin_destino = _ip_df_calc[~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)]
-
-if _total_ip > 0:
-    _msg_ip = f"📊 Total Ingresos Proyectados: $ {_total_ip:,.0f}"
-    if _total_ip_con_destino > 0:
-        _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: $ {_total_ip_con_destino:,.0f}"
-    st.markdown(
-        f'<p style="color:#ffffff; font-size:0.85rem; margin-top:-8px;">{_msg_ip}</p>',
-        unsafe_allow_html=True
-    )
-
-# ── BOTÓN COPIAR ──────────────────────────────────────────
-if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
-    _ip_con_destino = _ip_df_calc[
-        (_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)) &
-        (_ip_df_calc["Valor Proyectado"] > 0) &
-        (_ip_df_calc["Descripción"].notna()) &
-        (_ip_df_calc["Descripción"].str.strip() != "")
-    ].copy()
-
-    if _ip_con_destino.empty:
-        st.warning("⚠️ No hay filas con destino seleccionado y valor > 0 para copiar.")
+    if "Es Referencia" in df_mes_g.columns:
+        items_ref_bd = df_mes_g[
+            (df_mes_g["Es Proyectado"] == True) & (df_mes_g["Es Referencia"] == True)
+        ]["Descripción"].dropna().tolist()
+        items_referencia = sorted(set(items_referencia + items_ref_bd))
     else:
-        _a_oi   = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingresos Adicionales"]
-        _a_fijo = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
+        items_referencia = sorted(set(items_referencia))
 
-        # ── Persistir migración a Otros Ingresos en Supabase ──
-        if not _a_oi.empty:
-            _oi_bd = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-            _oi_existentes_bd = set(_oi_bd["Descripción"].str.strip().str.upper().tolist()) if not _oi_bd.empty else set()
-            _filas_oi_nuevas = []
-            for _, _r in _a_oi.iterrows():
-                _d = str(_r["Descripción"]).strip()
-                if _d.upper() not in _oi_existentes_bd:
-                    _filas_oi_nuevas.append({"Descripción": _d, "Monto": float(_r["Valor Proyectado"])})
+    items_proyectados = items_referencia
+
+    # ══════════════════════════════════════════════════════════
+    # TABLA 2: EDITAR / AGREGAR MOVIMIENTOS
+    # ══════════════════════════════════════════════════════════
+with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
+    st.caption("Registra aquí los gastos del día a día. Asocia cada uno a su ítem proyectado si aplica.")
+
+    df_mov_rows = df_mes_g[df_mes_g["Es Proyectado"] == False].copy()
+
+    config_mov = {
+        "Categoría":            st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
+        "Descripción":          st.column_config.TextColumn("Descripción", width="large"),
+        "Monto":                _money_column("Monto", width="small",
+                                    help="Valor del gasto (ej: 50.000)"),
+        "Presupuesto Asociado": st.column_config.SelectboxColumn("Ítem Proyectado", options=items_proyectados, width="medium",
+                                    help="Ítem proyectado al que pertenece este gasto"),
+        "Pagado":               st.column_config.CheckboxColumn("✅ Pagado", default=False, width="small"),
+        "Fecha Pago":           st.column_config.DateColumn("Fecha", format="DD/MM/YY", width="small"),
+    }
+    if modulo_billeteras_activo and lista_billeteras:
+        config_mov["Billetera Pago"] = st.column_config.SelectboxColumn(
+            "💳 Billetera", options=opciones_bill, width="medium",
+            help="Billetera con la que pagas este gasto"
+        )
+
+    _cols_mov = ["Categoría", "Descripción", "Monto", "Presupuesto Asociado"]
+    if modulo_billeteras_activo and lista_billeteras:
+        _cols_mov.append("Billetera Pago")
+    _cols_mov += ["Pagado", "Fecha Pago"]
+
+    df_base_mov = df_mov_rows.reindex(
+        columns=_cols_mov
+    ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
+
+    # ── 📋 COPIAR AL REGISTRAR ────────────────────────────────
+    if not df_ed_proy_clean.empty:
+        proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True].copy()
+        if not proy_con_copia.empty:
+            filas_nuevas = []
+            descripciones_existentes = df_base_mov["Descripción"].str.strip().str.upper().tolist()
+            for _, proy_row in proy_con_copia.iterrows():
+                desc_proy  = str(proy_row.get("Descripción", "")).strip()
+                cat_proy   = str(proy_row.get("Categoría", ""))
+                val_proy   = float(proy_row.get("Valor Referencia", 0) or 0)
+                if desc_proy.upper() not in descripciones_existentes:
+                    filas_nuevas.append({
+                        "Categoría":            cat_proy,
+                        "Descripción":          desc_proy,
+                        "Monto":                val_proy,
+                        "Presupuesto Asociado": desc_proy,
+                        "Pagado":               False,
+                        "Fecha Pago":           pd.NaT,
+                    })
                 else:
-                    _mask = _oi_bd["Descripción"].str.strip().str.upper() == _d.upper()
-                    _oi_bd.loc[_mask & (_oi_bd["Monto"].fillna(0) == 0), "Monto"] = float(_r["Valor Proyectado"])
-            if _filas_oi_nuevas:
-                _oi_bd = pd.concat([_oi_bd, pd.DataFrame(_filas_oi_nuevas)], ignore_index=True)
-            # Guardar otros_ingresos actualizados en BD
-            try:
-                supabase.postgrest.auth(token)
-                supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                for _, _row_oi in _oi_bd.iterrows():
-                    _desc_oi = str(_row_oi.get("Descripción","")).strip()
-                    _monto_oi = float(_row_oi.get("Monto", 0) or 0)
-                    if _desc_oi:
-                        supabase.table("otros_ingresos").insert({
-                            "anio": int(anio_s), "periodo": str(mes_s),
-                            "descripcion": _desc_oi, "monto": _monto_oi,
-                            "billetera": str(_row_oi.get("Billetera","") or "") or None,
-                            "usuario_id": str(u_id)
-                        }).execute()
-            except Exception as _e:
-                st.error(f"Error al guardar ingresos adicionales: {_e}")
+                    mask = df_base_mov["Descripción"].str.strip().str.upper() == desc_proy.upper()
+                    df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = val_proy
+            if filas_nuevas:
+                df_nuevas = pd.DataFrame(filas_nuevas)
+                df_base_mov = pd.concat([df_base_mov, df_nuevas], ignore_index=True).sort_values(
+                    ["Categoría", "Descripción"], ascending=[True, True]
+                ).reset_index(drop=True)
 
-        # ── Persistir migración a Ingreso Fijo en Supabase ──
-        if not _a_fijo.empty:
-            _suma_fijo_migrada = float(_a_fijo["Valor Proyectado"].sum())
-            try:
-                supabase.postgrest.auth(token)
-                _i_bd = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
-                _n_actual = float(_i_bd["Nomina"].iloc[0]) if not _i_bd.empty else 0.0
-                _s_actual = float(_i_bd["SaldoAnterior"].iloc[0]) if not _i_bd.empty else s_in
-                _o_actual = float(_i_bd["Otros"].iloc[0]) if not _i_bd.empty and "Otros" in _i_bd.columns else 0.0
-                _bill_act = str(_i_bd["Billetera"].iloc[0]) if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
-                _n_nueva  = _n_actual + _suma_fijo_migrada
-                supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                supabase.table("ingresos_base").insert({
-                    "anio": int(anio_s), "periodo": str(mes_s),
-                    "saldo_anterior": _s_actual, "nomina": _n_nueva,
-                    "otros": _o_actual, "billetera": _bill_act or None,
-                    "usuario_id": str(u_id)
-                }).execute()
-            except Exception as _e:
-                st.error(f"Error al guardar ingreso fijo: {_e}")
+    df_base_mov["Monto"] = df_base_mov["Monto"].apply(_fmt_miles)
 
-        # ── Eliminar filas migradas de ingresos_proyectados en BD ──
-        _descripciones_migradas = set(_ip_con_destino["Descripción"].str.strip().str.upper().tolist())
-        _ip_restantes = _ip_df_calc[
-            ~_ip_df_calc["Descripción"].str.strip().str.upper().isin(_descripciones_migradas)
-        ].copy()
-        guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_restantes)
-        st.rerun()
-
-
-# ══════════════════════════════════════════════════════════
-# 💰 INGRESOS ADICIONALES
-# ══════════════════════════════════════════════════════════
-st.markdown('<div class="section-header"><span>💰 Ingresos Adicionales</span></div>', unsafe_allow_html=True)
-df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-_oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
-_oi_config = {"Monto": _money_column("Monto", help="Valor del ingreso (ej: 400.000)")}
-if modulo_billeteras_activo and lista_billeteras:
-    _oi_config["Billetera"] = st.column_config.SelectboxColumn(
-        "💳 Billetera", options=opciones_bill, width="medium",
-        help="Cuenta donde recibes este ingreso"
+    df_ed_mov = st.data_editor(
+        df_base_mov,
+        use_container_width=True,
+        num_rows="dynamic",
+        column_config=config_mov,
+        key="mov_ed",
+        on_change=lambda: st.session_state.update({"datos_modificados": True})
     )
-_oi_base = df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True)
-_oi_base["Monto"] = _oi_base["Monto"].apply(_fmt_miles)
-df_ed_oi = st.data_editor(
-    _oi_base,
-    use_container_width=True, num_rows="dynamic",
-    column_config=_oi_config,
-    key="oi_ed"
-)
-df_ed_oi["Monto"] = df_ed_oi["Monto"].apply(_parse_miles)
+    df_ed_mov["Monto"] = df_ed_mov["Monto"].apply(_parse_miles)
 
-# ══════════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════
+    # RECONSTRUIR df_ed_g unificado
+    # ══════════════════════════════════════════════════════════
+    df_proy_final = df_ed_proy_clean.copy()
+    df_proy_final["Es Proyectado"]        = True
+    df_proy_final["Pagado"]               = False
+    df_proy_final["Monto"]                = 0.0
+    df_proy_final["Presupuesto Asociado"] = None
+    df_proy_final["Fecha Pago"]           = pd.NaT
+    if "Es Referencia" not in df_proy_final.columns:
+        df_proy_final["Es Referencia"] = False
+    df_proy_final["Es Referencia"] = df_proy_final["Es Referencia"].fillna(False).astype(bool)
+    if "Movimiento Recurrente" not in df_proy_final.columns:
+        df_proy_final["Movimiento Recurrente"] = False
+
+    df_mov_final = df_ed_mov.copy()
+    df_mov_final["Es Proyectado"]         = False
+    df_mov_final["Valor Referencia"]      = 0.0
+    df_mov_final["Movimiento Recurrente"] = False
+    df_mov_final["Es Referencia"]         = False
+
+    df_ed_g = pd.concat([df_proy_final, df_mov_final], ignore_index=True)
+
+    df_ed_g["Monto"]             = pd.to_numeric(df_ed_g["Monto"],           errors="coerce").fillna(0)
+    df_ed_g["Valor Referencia"]  = pd.to_numeric(df_ed_g["Valor Referencia"],errors="coerce").fillna(0)
+    df_ed_g["Pagado"]            = df_ed_g["Pagado"].fillna(False).astype(bool)
+    df_ed_g["Es Proyectado"]     = df_ed_g["Es Proyectado"].fillna(False).astype(bool)
+    df_ed_g["Movimiento Recurrente"] = df_ed_g["Movimiento Recurrente"].fillna(False).astype(bool)
+
+    # ── ANTI-DUPLICACIÓN EN KPIs ──────────────────────────────
+    if "Es Referencia" in df_ed_g.columns and "Presupuesto Asociado" in df_ed_g.columns:
+        _proy_con_pago_kpi = set(
+            df_ed_g[df_ed_g["Pagado"] == True]["Presupuesto Asociado"]
+            .dropna().astype(str).str.strip().str.upper().tolist()
+        )
+        for _idx, _row in df_ed_g.iterrows():
+            if (bool(_row.get("Es Proyectado", False)) and
+                bool(_row.get("Es Referencia", False)) and
+                not bool(_row.get("Pagado", False))):
+                _desc     = str(_row.get("Descripción","")).strip().upper()
+                _vref     = float(_row.get("Valor Referencia", 0) or 0)
+                _movs_k   = df_ed_g[
+                    df_ed_g["Presupuesto Asociado"].astype(str).str.strip().str.upper() == _desc
+                ]
+                _ejecutado = float(pd.to_numeric(_movs_k["Monto"], errors="coerce").fillna(0).sum())
+                _pag_comp  = bool(_movs_k["Pagado"].fillna(False).all()) if not _movs_k.empty else False
+                if _pag_comp and _ejecutado >= _vref:
+                    df_ed_g.loc[_idx, "Pagado"] = True
+
+    df_base = df_ed_g.copy()
+
+    # ══════════════════════════════════════════════════════════
+    # ══════════════════════════════════════════════════════════
+    # 📈 INGRESOS PROYECTADOS
+    # ══════════════════════════════════════════════════════════
+with st.expander("📈 Ingresos Proyectados", expanded=True):
+    st.caption("Define aquí los ingresos que proyectas recibir este mes. Al copiar, la fila migra a su destino y deja de ser proyección.")
+
+    # ── Base de datos del periodo ─────────────────────────────
+    df_mes_ip = df_ip_full[(df_ip_full["Periodo"]==mes_s) & (df_ip_full["Año"]==anio_s)].copy()
+
+    # Propagar recurrentes de mes anterior si el mes actual está vacío
+    if df_mes_ip.empty:
+        _p_actual_ip = (anio_s * 12) + meses_lista.index(mes_s)
+        _ip_hist = df_ip_full.copy()
+        if not _ip_hist.empty and "Periodo" in _ip_hist.columns:
+            _meses_map_ip = {m: i for i, m in enumerate(meses_lista)}
+            _ip_hist["_lt"] = (_ip_hist["Año"] * 12) + _ip_hist["Periodo"].map(_meses_map_ip)
+            _ip_ant = _ip_hist[_ip_hist["_lt"] == _p_actual_ip - 1]
+            if not _ip_ant.empty:
+                _activos_ip = _ip_ant[_ip_ant["Movimiento Recurrente"] == True].copy()
+                if not _activos_ip.empty:
+                    df_mes_ip = _activos_ip.reindex(columns=["Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"])
+                    df_mes_ip["Destino Copia"] = None   # recurrentes sin destino predeterminado
+                    df_mes_ip = df_mes_ip.reset_index(drop=True)
+
+    _OPCIONES_DESTINO = ["Ingresos Adicionales", "Ingreso Fijo (Sueldo/Nómina)"]
+
+    _ip_cols = ["Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"]
+    _ip_base = df_mes_ip.reindex(columns=_ip_cols).reset_index(drop=True)
+    # Destino Copia vacío por defecto (None), NO se fuerza valor predeterminado
+    if "Destino Copia" not in _ip_base.columns:
+        _ip_base["Destino Copia"] = None
+    # Normalizar: cualquier valor que no sea de la lista → None
+    _ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(
+        lambda v: v if v in _OPCIONES_DESTINO else None
+    )
+    # Asegurar tipo bool en Movimiento Recurrente (evita StreamlitAPIException
+    # cuando df_mes_ip está vacío y la columna queda como NaN/float64)
+    _ip_base["Movimiento Recurrente"] = _ip_base["Movimiento Recurrente"].fillna(False).astype(bool)
+
+    _ip_config = {
+        "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
+        "Valor Proyectado":      _money_column("💵 Valor Proyectado", width="small",
+                                     help="Monto que proyectas recibir (ej: 400.000)"),
+        "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
+                                     help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
+        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
+                                     help="Se propaga automáticamente al mes siguiente"),
+    }
+
+    # Forzar dtype object en columnas de texto/selección (evita StreamlitAPIException
+    # cuando _ip_base tiene 0 filas y reindex deja dtype float64 por defecto)
+    _ip_base["Descripción"]    = _ip_base["Descripción"].astype(object)
+    _ip_base["Destino Copia"]  = _ip_base["Destino Copia"].astype(object)
+    _ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles).astype(object)
+
+    df_ed_ip = st.data_editor(
+        _ip_base,
+        use_container_width=True,
+        num_rows="dynamic",
+        column_config=_ip_config,
+        key="ip_ed",
+        on_change=lambda: st.session_state.update({"datos_modificados": True})
+    )
+    df_ed_ip["Valor Proyectado"] = df_ed_ip["Valor Proyectado"].apply(_parse_miles)
+
+    # Calcular total proyectado — TODAS las filas suman al Saldo a Favor
+    # (solo dejan de sumar cuando se copian y desaparecen de la tabla)
+    _ip_df_calc = df_ed_ip.copy()
+    _ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
+    _total_ip = float(_ip_df_calc["Valor Proyectado"].sum())
+    _total_ip_con_destino = float(_ip_df_calc[
+        _ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
+    ]["Valor Proyectado"].sum())
+
+    # Redefinir _ip_sin_destino solo para referencia visual (no afecta cálculo)
+    _ip_sin_destino = _ip_df_calc[~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)]
+
+    if _total_ip > 0:
+        _msg_ip = f"📊 Total Ingresos Proyectados: $ {_total_ip:,.0f}"
+        if _total_ip_con_destino > 0:
+            _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: $ {_total_ip_con_destino:,.0f}"
+        st.markdown(
+            f'<p style="color:#ffffff; font-size:0.85rem; margin-top:-8px;">{_msg_ip}</p>',
+            unsafe_allow_html=True
+        )
+
+    # ── BOTÓN COPIAR ──────────────────────────────────────────
+    if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
+        _ip_con_destino = _ip_df_calc[
+            (_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)) &
+            (_ip_df_calc["Valor Proyectado"] > 0) &
+            (_ip_df_calc["Descripción"].notna()) &
+            (_ip_df_calc["Descripción"].str.strip() != "")
+        ].copy()
+
+        if _ip_con_destino.empty:
+            st.warning("⚠️ No hay filas con destino seleccionado y valor > 0 para copiar.")
+        else:
+            _a_oi   = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingresos Adicionales"]
+            _a_fijo = _ip_con_destino[_ip_con_destino["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
+
+            # ── Persistir migración a Otros Ingresos en Supabase ──
+            if not _a_oi.empty:
+                _oi_bd = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+                _oi_existentes_bd = set(_oi_bd["Descripción"].str.strip().str.upper().tolist()) if not _oi_bd.empty else set()
+                _filas_oi_nuevas = []
+                for _, _r in _a_oi.iterrows():
+                    _d = str(_r["Descripción"]).strip()
+                    if _d.upper() not in _oi_existentes_bd:
+                        _filas_oi_nuevas.append({"Descripción": _d, "Monto": float(_r["Valor Proyectado"])})
+                    else:
+                        _mask = _oi_bd["Descripción"].str.strip().str.upper() == _d.upper()
+                        _oi_bd.loc[_mask & (_oi_bd["Monto"].fillna(0) == 0), "Monto"] = float(_r["Valor Proyectado"])
+                if _filas_oi_nuevas:
+                    _oi_bd = pd.concat([_oi_bd, pd.DataFrame(_filas_oi_nuevas)], ignore_index=True)
+                # Guardar otros_ingresos actualizados en BD
+                try:
+                    supabase.postgrest.auth(token)
+                    supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                    for _, _row_oi in _oi_bd.iterrows():
+                        _desc_oi = str(_row_oi.get("Descripción","")).strip()
+                        _monto_oi = float(_row_oi.get("Monto", 0) or 0)
+                        if _desc_oi:
+                            supabase.table("otros_ingresos").insert({
+                                "anio": int(anio_s), "periodo": str(mes_s),
+                                "descripcion": _desc_oi, "monto": _monto_oi,
+                                "billetera": str(_row_oi.get("Billetera","") or "") or None,
+                                "usuario_id": str(u_id)
+                            }).execute()
+                except Exception as _e:
+                    st.error(f"Error al guardar ingresos adicionales: {_e}")
+
+            # ── Persistir migración a Ingreso Fijo en Supabase ──
+            if not _a_fijo.empty:
+                _suma_fijo_migrada = float(_a_fijo["Valor Proyectado"].sum())
+                try:
+                    supabase.postgrest.auth(token)
+                    _i_bd = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
+                    _n_actual = float(_i_bd["Nomina"].iloc[0]) if not _i_bd.empty else 0.0
+                    _s_actual = float(_i_bd["SaldoAnterior"].iloc[0]) if not _i_bd.empty else s_in
+                    _o_actual = float(_i_bd["Otros"].iloc[0]) if not _i_bd.empty and "Otros" in _i_bd.columns else 0.0
+                    _bill_act = str(_i_bd["Billetera"].iloc[0]) if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
+                    _n_nueva  = _n_actual + _suma_fijo_migrada
+                    supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                    supabase.table("ingresos_base").insert({
+                        "anio": int(anio_s), "periodo": str(mes_s),
+                        "saldo_anterior": _s_actual, "nomina": _n_nueva,
+                        "otros": _o_actual, "billetera": _bill_act or None,
+                        "usuario_id": str(u_id)
+                    }).execute()
+                except Exception as _e:
+                    st.error(f"Error al guardar ingreso fijo: {_e}")
+
+            # ── Eliminar filas migradas de ingresos_proyectados en BD ──
+            _descripciones_migradas = set(_ip_con_destino["Descripción"].str.strip().str.upper().tolist())
+            _ip_restantes = _ip_df_calc[
+                ~_ip_df_calc["Descripción"].str.strip().str.upper().isin(_descripciones_migradas)
+            ].copy()
+            guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_restantes)
+            st.rerun()
+
+
+    # ══════════════════════════════════════════════════════════
+    # 💰 INGRESOS ADICIONALES
+    # ══════════════════════════════════════════════════════════
+with st.expander("💰 Ingresos Adicionales", expanded=True):
+    df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+    _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
+    _oi_config = {"Monto": _money_column("Monto", help="Valor del ingreso (ej: 400.000)")}
+    if modulo_billeteras_activo and lista_billeteras:
+        _oi_config["Billetera"] = st.column_config.SelectboxColumn(
+            "💳 Billetera", options=opciones_bill, width="medium",
+            help="Cuenta donde recibes este ingreso"
+        )
+    _oi_base = df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True)
+    _oi_base["Monto"] = _oi_base["Monto"].apply(_fmt_miles)
+    df_ed_oi = st.data_editor(
+        _oi_base,
+        use_container_width=True, num_rows="dynamic",
+        column_config=_oi_config,
+        key="oi_ed"
+    )
+    df_ed_oi["Monto"] = df_ed_oi["Monto"].apply(_parse_miles)
+
+    # ══════════════════════════════════════════════════════════
 # 🔄 TRANSFERENCIAS ENTRE BILLETERAS
 # ══════════════════════════════════════════════════════════
 if modulo_billeteras_activo and len(lista_billeteras) >= 2:
-    st.markdown('<div class="section-header"><span>🔄 Transferencias entre Billeteras</span></div>', unsafe_allow_html=True)
-    st.caption("Registra movimientos entre tus propias billeteras. No afectan ingresos ni egresos.")
+    with st.expander("🔄 Transferencias entre Billeteras", expanded=True):
+        st.caption("Registra movimientos entre tus propias billeteras. No afectan ingresos ni egresos.")
 
-    with st.container():
-        _col_t1, _col_t2, _col_t3, _col_t4, _col_t5 = st.columns([2, 2, 2, 3, 1.5])
-        with _col_t1:
-            _origen = st.selectbox("Desde", lista_billeteras, key="tr_origen")
-        with _col_t2:
-            _destinos_disponibles = [b for b in lista_billeteras if b != _origen]
-            _destino = st.selectbox("Hacia", _destinos_disponibles, key="tr_destino")
-        with _col_t3:
-            _monto_tr = st.number_input("Monto", min_value=0.0, step=10000.0, format="%.0f", key="tr_monto")
-        with _col_t4:
-            _desc_tr = st.text_input("Descripción (opcional)", placeholder="Ej: Recarga Nequi", key="tr_desc")
-        with _col_t5:
-            st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("➕ Registrar", key="btn_registrar_tr", use_container_width=True):
-                if _monto_tr <= 0:
-                    st.error("❌ El monto debe ser mayor a cero.")
-                elif _origen == _destino:
-                    st.error("❌ Origen y destino deben ser diferentes.")
-                else:
-                    if guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
-                                            _origen, _destino, _monto_tr, _desc_tr):
-                        st.success(f"✅ Transferencia registrada: {_origen} → {_destino} por $ {_monto_tr:,.0f}")
+        with st.container():
+            _col_t1, _col_t2, _col_t3, _col_t4, _col_t5 = st.columns([2, 2, 2, 3, 1.5])
+            with _col_t1:
+                _origen = st.selectbox("Desde", lista_billeteras, key="tr_origen")
+            with _col_t2:
+                _destinos_disponibles = [b for b in lista_billeteras if b != _origen]
+                _destino = st.selectbox("Hacia", _destinos_disponibles, key="tr_destino")
+            with _col_t3:
+                _monto_tr = st.number_input("Monto", min_value=0.0, step=10000.0, format="%.0f", key="tr_monto")
+            with _col_t4:
+                _desc_tr = st.text_input("Descripción (opcional)", placeholder="Ej: Recarga Nequi", key="tr_desc")
+            with _col_t5:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("➕ Registrar", key="btn_registrar_tr", use_container_width=True):
+                    if _monto_tr <= 0:
+                        st.error("❌ El monto debe ser mayor a cero.")
+                    elif _origen == _destino:
+                        st.error("❌ Origen y destino deben ser diferentes.")
+                    else:
+                        if guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
+                                                _origen, _destino, _monto_tr, _desc_tr):
+                            st.success(f"✅ Transferencia registrada: {_origen} → {_destino} por $ {_monto_tr:,.0f}")
+                            st.rerun()
+
+        # Historial del mes (solo para eliminar si el usuario se equivocó)
+        if not df_transferencias_full.empty:
+            st.markdown("**Transferencias del mes:**")
+            for _, _tr in df_transferencias_full.iterrows():
+                _col_h1, _col_h2 = st.columns([8, 1])
+                with _col_h1:
+                    _desc_show = f" — {_tr['descripcion']}" if _tr.get('descripcion') else ""
+                    st.markdown(
+                        f'<div style="background:#3a3f44;border-radius:8px;padding:8px 14px;margin-bottom:4px;'
+                        f'font-size:0.85rem;color:#fff">'
+                        f'<span style="color:#4361ee;font-weight:700">{_tr["billetera_origen"]}</span>'
+                        f' → <span style="color:#2ecc71;font-weight:700">{_tr["billetera_destino"]}</span>'
+                        f' &nbsp;|&nbsp; <span style="color:#fca311;font-weight:700">$ {float(_tr["monto"]):,.0f}</span>'
+                        f'{_desc_show}</div>',
+                        unsafe_allow_html=True
+                    )
+                with _col_h2:
+                    if st.button("🗑", key=f"del_tr_{_tr['id']}", help="Eliminar", use_container_width=True):
+                        eliminar_transferencia(supabase, u_id, token, _tr["id"])
                         st.rerun()
 
-    # Historial del mes (solo para eliminar si el usuario se equivocó)
-    if not df_transferencias_full.empty:
-        st.markdown("**Transferencias del mes:**")
-        for _, _tr in df_transferencias_full.iterrows():
-            _col_h1, _col_h2 = st.columns([8, 1])
-            with _col_h1:
-                _desc_show = f" — {_tr['descripcion']}" if _tr.get('descripcion') else ""
-                st.markdown(
-                    f'<div style="background:#3a3f44;border-radius:8px;padding:8px 14px;margin-bottom:4px;'
-                    f'font-size:0.85rem;color:#fff">'
-                    f'<span style="color:#4361ee;font-weight:700">{_tr["billetera_origen"]}</span>'
-                    f' → <span style="color:#2ecc71;font-weight:700">{_tr["billetera_destino"]}</span>'
-                    f' &nbsp;|&nbsp; <span style="color:#fca311;font-weight:700">$ {float(_tr["monto"]):,.0f}</span>'
-                    f'{_desc_show}</div>',
-                    unsafe_allow_html=True
-                )
-            with _col_h2:
-                if st.button("🗑", key=f"del_tr_{_tr['id']}", help="Eliminar", use_container_width=True):
-                    eliminar_transferencia(supabase, u_id, token, _tr["id"])
-                    st.rerun()
-
-    # Recargar para el cálculo de saldos
+        # Recargar para el cálculo de saldos
     df_transferencias_full = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
 
 # ── CALCULAR MÉTRICAS ─────────────────────────────────────
@@ -1706,92 +1706,89 @@ st.divider()
 if modulo_billeteras_activo and lista_billeteras:
     _fecha_hoy_str = _hoy.strftime("%d/%m/%Y")
 
-    st.markdown(
-        f'<div class="section-header"><span>💳 Estado de Billeteras — {_fecha_hoy_str}</span></div>',
-        unsafe_allow_html=True
-    )
+    with st.expander(f"💳 Estado de Billeteras — {_fecha_hoy_str}", expanded=True):
 
-    if _mes_real == mes_s and _anio_real == anio_s:
-        # Estamos viendo el mes real → usar los datos en edición (incluye cambios sin guardar)
-        _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-        _df_g_calc  = df_ed_g.copy()
-        _df_g_calc["Periodo"] = mes_s
-        _df_g_calc["Año"]     = anio_s
-        if not _df_i_calc.empty:
-            _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
-            _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
+        if _mes_real == mes_s and _anio_real == anio_s:
+            # Estamos viendo el mes real → usar los datos en edición (incluye cambios sin guardar)
+            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
+            _df_g_calc  = df_ed_g.copy()
+            _df_g_calc["Periodo"] = mes_s
+            _df_g_calc["Año"]     = anio_s
+            if not _df_i_calc.empty:
+                _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
+                _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
+            else:
+                _df_i_calc = pd.DataFrame([{
+                    "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
+                    "Billetera": bill_nomina, "SaldoAnterior": s_in
+                }])
+            _df_oi_calc = df_ed_oi.copy()
+            _df_oi_calc["Periodo"] = mes_s
+            _df_oi_calc["Año"]     = anio_s
+            _df_sab_real = df_sab_input
+            _df_transf_real = df_transferencias_full
         else:
-            _df_i_calc = pd.DataFrame([{
-                "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
-                "Billetera": bill_nomina, "SaldoAnterior": s_in
-            }])
-        _df_oi_calc = df_ed_oi.copy()
-        _df_oi_calc["Periodo"] = mes_s
-        _df_oi_calc["Año"]     = anio_s
-        _df_sab_real = df_sab_input
-        _df_transf_real = df_transferencias_full
-    else:
-        # Estamos proyectando otro mes → el estado de billeteras siempre refleja el mes real (hoy)
-        _df_i_calc  = df_i_full[(df_i_full["Periodo"]==_mes_real) & (df_i_full["Año"]==_anio_real)].copy()
-        _df_g_calc  = df_g_full[(df_g_full["Periodo"]==_mes_real) & (df_g_full["Año"]==_anio_real)].copy()
-        _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==_mes_real) & (df_oi_full["Año"]==_anio_real)].copy()
-        _df_sab_real = df_sab_full
-        _df_transf_real = cargar_transferencias(supabase, u_id, token, _mes_real, _anio_real)
+            # Estamos proyectando otro mes → el estado de billeteras siempre refleja el mes real (hoy)
+            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==_mes_real) & (df_i_full["Año"]==_anio_real)].copy()
+            _df_g_calc  = df_g_full[(df_g_full["Periodo"]==_mes_real) & (df_g_full["Año"]==_anio_real)].copy()
+            _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==_mes_real) & (df_oi_full["Año"]==_anio_real)].copy()
+            _df_sab_real = df_sab_full
+            _df_transf_real = cargar_transferencias(supabase, u_id, token, _mes_real, _anio_real)
 
-    saldos_bill = calcular_saldo_billeteras(
-        _df_g_calc, _df_i_calc, _df_oi_calc,
-        _df_sab_real, lista_billeteras, _mes_real, _anio_real,
-        df_transferencias=_df_transf_real
-    )
-
-    total_bill = sum(saldos_bill.values())
-
-    _ncols = min(len(lista_billeteras), 4)
-    _cols_bill = st.columns(_ncols)
-    _colores_bill = ["#4361ee","#fca311","#2ecc71","#e74c3c","#9b5de5","#00b4d8"]
-    for _i, _b in enumerate(lista_billeteras):
-        _saldo = saldos_bill.get(_b, 0.0)
-        _col   = _colores_bill[_i % len(_colores_bill)]
-        _col_idx = _i % _ncols
-        _cols_bill[_col_idx].markdown(
-            f'<div class="card" style="border-bottom: 5px solid {_col}">'
-            f'<div class="card-label">💳 {_b}</div>'
-            f'<div class="card-value" style="color:{_col}; font-size:1.3rem">$ {_saldo:,.0f}</div>'
-            f'</div>',
-            unsafe_allow_html=True
+        saldos_bill = calcular_saldo_billeteras(
+            _df_g_calc, _df_i_calc, _df_oi_calc,
+            _df_sab_real, lista_billeteras, _mes_real, _anio_real,
+            df_transferencias=_df_transf_real
         )
 
-    if total_bill != 0:
-        import plotly.graph_objects as _go
-        _fig_bill = _go.Figure()
-        _colores_usados = [_colores_bill[i % len(_colores_bill)] for i in range(len(lista_billeteras))]
-        _saldos_vals = [saldos_bill.get(b, 0) for b in lista_billeteras]
-        _total_bill_chart = sum(_saldos_vals) if sum(_saldos_vals) != 0 else 1
-        _fig_bill.add_trace(_go.Bar(
-            x=lista_billeteras,
-            y=_saldos_vals,
-            marker_color=_colores_usados,
-            text=[f"$ {v:,.0f}<br>{(v/_total_bill_chart*100):.1f}%" for v in _saldos_vals],
-            textposition="outside",
-            textfont=dict(color="#ffffff", size=12),
-        ))
-        _fig_bill.update_layout(
-            **PLOTLY_LAYOUT,
-            height=260,
-            margin=dict(t=50, b=10, l=10, r=10),
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=False, showticklabels=False, range=[0, max(_saldos_vals) * 1.35 if max(_saldos_vals) > 0 else 1]),
-            showlegend=False,
-        )
-        st.markdown('<div class="chart-card"><div class="chart-title">Distribución de fondos por billetera</div>', unsafe_allow_html=True)
-        st.plotly_chart(_fig_bill, use_container_width=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        total_bill = sum(saldos_bill.values())
 
-        _diff_bill = fact - total_bill
-        if abs(_diff_bill) < 1:
-            st.success(f"✅ Total billeteras coincide con Dinero Disponible: **$ {total_bill:,.0f}**")
-        else:
-            st.warning(f"⚠️ Total billeteras **$ {total_bill:,.0f}** vs Dinero Disponible **$ {fact:,.0f}** — diferencia: **$ {_diff_bill:,.0f}**")
+        _ncols = min(len(lista_billeteras), 4)
+        _cols_bill = st.columns(_ncols)
+        _colores_bill = ["#4361ee","#fca311","#2ecc71","#e74c3c","#9b5de5","#00b4d8"]
+        for _i, _b in enumerate(lista_billeteras):
+            _saldo = saldos_bill.get(_b, 0.0)
+            _col   = _colores_bill[_i % len(_colores_bill)]
+            _col_idx = _i % _ncols
+            _cols_bill[_col_idx].markdown(
+                f'<div class="card" style="border-bottom: 5px solid {_col}">'
+                f'<div class="card-label">💳 {_b}</div>'
+                f'<div class="card-value" style="color:{_col}; font-size:1.3rem">$ {_saldo:,.0f}</div>'
+                f'</div>',
+                unsafe_allow_html=True
+            )
+
+        if total_bill != 0:
+            import plotly.graph_objects as _go
+            _fig_bill = _go.Figure()
+            _colores_usados = [_colores_bill[i % len(_colores_bill)] for i in range(len(lista_billeteras))]
+            _saldos_vals = [saldos_bill.get(b, 0) for b in lista_billeteras]
+            _total_bill_chart = sum(_saldos_vals) if sum(_saldos_vals) != 0 else 1
+            _fig_bill.add_trace(_go.Bar(
+                x=lista_billeteras,
+                y=_saldos_vals,
+                marker_color=_colores_usados,
+                text=[f"$ {v:,.0f}<br>{(v/_total_bill_chart*100):.1f}%" for v in _saldos_vals],
+                textposition="outside",
+                textfont=dict(color="#ffffff", size=12),
+            ))
+            _fig_bill.update_layout(
+                **PLOTLY_LAYOUT,
+                height=260,
+                margin=dict(t=50, b=10, l=10, r=10),
+                xaxis=dict(showgrid=False),
+                yaxis=dict(showgrid=False, showticklabels=False, range=[0, max(_saldos_vals) * 1.35 if max(_saldos_vals) > 0 else 1]),
+                showlegend=False,
+            )
+            st.markdown('<div class="chart-card"><div class="chart-title">Distribución de fondos por billetera</div>', unsafe_allow_html=True)
+            st.plotly_chart(_fig_bill, use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+            _diff_bill = fact - total_bill
+            if abs(_diff_bill) < 1:
+                st.success(f"✅ Total billeteras coincide con Dinero Disponible: **$ {total_bill:,.0f}**")
+            else:
+                st.warning(f"⚠️ Total billeteras **$ {total_bill:,.0f}** vs Dinero Disponible **$ {fact:,.0f}** — diferencia: **$ {_diff_bill:,.0f}**")
 
 with st.expander("📝 Movimiento de Gastos", expanded=True):
 
