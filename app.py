@@ -1409,7 +1409,11 @@ _ip_config = {
                                  help="Se propaga automáticamente al mes siguiente"),
 }
 
-_ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles)
+# Forzar dtype object en columnas de texto/selección (evita StreamlitAPIException
+# cuando _ip_base tiene 0 filas y reindex deja dtype float64 por defecto)
+_ip_base["Descripción"]    = _ip_base["Descripción"].astype(object)
+_ip_base["Destino Copia"]  = _ip_base["Destino Copia"].astype(object)
+_ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles).astype(object)
 
 df_ed_ip = st.data_editor(
     _ip_base,
