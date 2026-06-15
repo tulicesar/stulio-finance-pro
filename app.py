@@ -658,16 +658,10 @@ with st.sidebar:
         _total_ip_ant = float(_ip_ant["Valor Proyectado"].sum()) if not _ip_ant.empty else 0.0
         _it_ant  = _sal_ant + _nom_ant + _otr_ant  # Ingresos Proyectados ya NO suman al Saldo a Favor
         _periodo_key_ant = f"{m_ant}_{a_ant}"
-        _, _, _vpy_ant, fact_ant, _, _ = calcular_bf_real(
+        _, _, _vpy_ant, _, s_sug, _ = calcular_bf_real(
             g_ant, _nom_ant, _otr_ant, _sal_ant,
             _periodo_key_ant, st.session_state["cierre_mes_por_periodo"]
         )
-        # Usamos "Dinero Disponible" (fact) en lugar de "Saldo a Favor" (bf)
-        # para que el arrastre coincida con el total real de billeteras:
-        # bf resta obligaciones pendientes (aunque el dinero siga físicamente
-        # en las billeteras), por lo que usar bf desalinea el Saldo Anterior
-        # sugerido respecto al total de billeteras arrastrado.
-        s_sug = fact_ant
 
     st.divider()
     arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
