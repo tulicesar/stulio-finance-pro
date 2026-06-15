@@ -1271,7 +1271,7 @@ with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
     df_base_proy = df_proy_rows.reindex(
         columns=["Categoría", "Descripción", "Valor Referencia", "Es Referencia", "📋", "Movimiento Recurrente"]
     ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
-    df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles)
+    df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles).astype(object)
 
     df_ed_proy = st.data_editor(
         df_base_proy,
@@ -1368,7 +1368,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
                     ["Categoría", "Descripción"], ascending=[True, True]
                 ).reset_index(drop=True)
 
-    df_base_mov["Monto"] = df_base_mov["Monto"].apply(_fmt_miles)
+    df_base_mov["Monto"] = df_base_mov["Monto"].apply(_fmt_miles).astype(object)
 
     df_ed_mov = st.data_editor(
         df_base_mov,
@@ -1607,7 +1607,7 @@ with st.expander("💰 Ingresos Adicionales", expanded=True):
             help="Cuenta donde recibes este ingreso"
         )
     _oi_base = df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True)
-    _oi_base["Monto"] = _oi_base["Monto"].apply(_fmt_miles)
+    _oi_base["Monto"] = _oi_base["Monto"].apply(_fmt_miles).astype(object)
     df_ed_oi = st.data_editor(
         _oi_base,
         use_container_width=True, num_rows="dynamic",
