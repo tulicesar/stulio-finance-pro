@@ -1335,6 +1335,11 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
         columns=_cols_mov
     ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
 
+    if modulo_billeteras_activo and lista_billeteras and "Billetera Pago" in df_base_mov.columns:
+        df_base_mov["Billetera Pago"] = df_base_mov["Billetera Pago"].astype(object).where(
+            df_base_mov["Billetera Pago"].notna(), ""
+        )
+
     # ── 📋 COPIAR AL REGISTRAR ────────────────────────────────
     if not df_ed_proy_clean.empty:
         proy_con_copia = df_ed_proy_clean[df_ed_proy_clean["📋"] == True].copy()
