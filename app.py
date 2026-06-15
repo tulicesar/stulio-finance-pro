@@ -512,6 +512,10 @@ try:
 
     # ── Sincronizar estado de Cierre de Mes desde Supabase (persistente) ──
     st.session_state["cierre_mes_por_periodo"] = cfg_usuario.get("cierres_mes") or {}
+
+    # ── Sincronizar recurrentes excluidos por periodo (ítems que el usuario
+    #    eliminó explícitamente y que NO deben volver a propagarse) ──
+    st.session_state["recurrentes_excluidos_por_periodo"] = cfg_usuario.get("recurrentes_excluidos") or {}
 except Exception as e:
     if "JWT" in str(e) or "expired" in str(e).lower() or "token" in str(e).lower():
         st.warning("⏰ Tu sesión expiró por inactividad. Por favor recarga la página e inicia sesión nuevamente.")
@@ -1162,13 +1166,27 @@ df_mes_g = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)
 
 meses_map_r = {m: i for i, m in enumerate(meses_lista)}
 gastos_hist = df_g_full.copy()
+activos_raw = pd.DataFrame(columns=df_g_full.columns)
 if not gastos_hist.empty:
     p_actual = (anio_s * 12) + meses_lista.index(mes_s)
     gastos_hist["lt"] = (gastos_hist["Año"] * 12) + gastos_hist["Periodo"].map(meses_map_r)
     p_anterior    = p_actual - 1
     foto_anterior = gastos_hist[gastos_hist["lt"] == p_anterior]
     if not foto_anterior.empty:
-        activos = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
+        activos_raw = foto_anterior[foto_anterior["Movimiento Recurrente"] == True].copy()
+
+        # ── Excluir recurrentes que el usuario eliminó explícitamente de este periodo ──
+        _excluidos_periodo = set(
+            str(d).strip().upper() for d in
+            st.session_state.get("recurrentes_excluidos_por_periodo", {}).get(_periodo_key, [])
+        )
+        if _excluidos_periodo and not activos_raw.empty:
+            activos = activos_raw[
+                ~activos_raw["Descripción"].str.strip().str.upper().isin(_excluidos_periodo)
+            ].copy()
+        else:
+            activos = activos_raw.copy()
+
         if not activos.empty:
             if df_mes_g.empty:
                 # Mes vacío: cargar todos los recurrentes
@@ -2278,6 +2296,16 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     ].copy()
     df_oi_limpio = df_ed_oi.dropna(subset=["Descripción","Monto"], how="all")
 
+    # ── Detectar recurrentes (heredados del mes anterior) que el usuario
+    #    eliminó de este mes, para que NO se vuelvan a propagar al recargar ──
+    _nuevos_excluidos = []
+    if not activos_raw.empty:
+        _desc_guardadas = set(
+            df_g_limpio["Descripción"].dropna().astype(str).str.strip().str.upper().tolist()
+        ) if not df_g_limpio.empty else set()
+        _recurrentes_prev = activos_raw["Descripción"].dropna().astype(str).str.strip().str.upper().tolist()
+        _nuevos_excluidos = sorted(set(d for d in _recurrentes_prev if d not in _desc_guardadas))
+
     _errores_bill = []
     if modulo_billeteras_activo and lista_billeteras:
         if not bill_nomina:
@@ -2302,6 +2330,15 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                            df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
                            bill_nomina=bill_nomina,
                            df_sab_nuevo=df_sab_input)
+
+                # Persistir recurrentes excluidos (eliminados por el usuario en este periodo)
+                if _nuevos_excluidos:
+                    _excl_dict = dict(st.session_state.get("recurrentes_excluidos_por_periodo", {}))
+                    _actuales = set(_excl_dict.get(_periodo_key, []))
+                    _actuales.update(_nuevos_excluidos)
+                    _excl_dict[_periodo_key] = sorted(_actuales)
+                    st.session_state["recurrentes_excluidos_por_periodo"] = _excl_dict
+                    guardar_config(supabase, u_id, token, recurrentes_excluidos=_excl_dict)
                 # Guardar ingresos proyectados
                 _df_ip_guardar = df_ed_ip.dropna(subset=["Descripción","Valor Proyectado"], how="all").copy()
                 _df_ip_guardar["Valor Proyectado"] = pd.to_numeric(_df_ip_guardar["Valor Proyectado"], errors="coerce").fillna(0)
