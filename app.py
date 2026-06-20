@@ -1351,7 +1351,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
 
     df_base_mov = df_mov_rows.reindex(
         columns=_cols_mov
-    ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
+    ).sort_values(["Categoría", "Fecha Pago"], ascending=[True, False], na_position="last").reset_index(drop=True)
 
     if modulo_billeteras_activo and lista_billeteras and "Billetera Pago" in df_base_mov.columns:
         df_base_mov["Billetera Pago"] = df_base_mov["Billetera Pago"].astype(object).where(
@@ -1383,7 +1383,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
             if filas_nuevas:
                 df_nuevas = pd.DataFrame(filas_nuevas)
                 df_base_mov = pd.concat([df_base_mov, df_nuevas], ignore_index=True).sort_values(
-                    ["Categoría", "Descripción"], ascending=[True, True]
+                    ["Categoría", "Fecha Pago"], ascending=[True, False], na_position="last"
                 ).reset_index(drop=True)
 
     df_base_mov["Monto"] = df_base_mov["Monto"].apply(_fmt_miles).astype(object)
@@ -1833,7 +1833,7 @@ if modulo_billeteras_activo and lista_billeteras:
 with st.expander("📝 Movimiento de Gastos", expanded=True):
 
     if not df_mes_g.empty:
-        df_mes_g = df_mes_g.sort_values(["Categoría","Descripción"], ascending=[True,True]).reset_index(drop=True)
+        df_mes_g = df_mes_g.sort_values(["Categoría", "Fecha Pago"], ascending=[True, False], na_position="last").reset_index(drop=True)
 
 
     def render_resumen_gastos(df):
