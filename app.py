@@ -1490,18 +1490,23 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
     # cuando df_mes_ip está vacío y la columna queda como NaN/float64)
     _ip_base["Movimiento Recurrente"] = _ip_base["Movimiento Recurrente"].fillna(False).astype(bool)
 
+    # Añadir columna de selección para copiar individualmente
+    if "Ejecutar" not in _ip_base.columns:
+        _ip_base["Ejecutar"] = False
+    _ip_base["Ejecutar"] = _ip_base["Ejecutar"].fillna(False).astype(bool)
+
     _ip_config = {
+        "Ejecutar":           st.column_config.CheckboxColumn("✅ Ejecutar", default=False, width="small",
+                                     help="Marca los ingresos que ya recibiste para migrarlos"),
         "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
         "Valor Proyectado":      _money_column("💵 Valor Proyectado", width="small",
                                      help="Monto que proyectas recibir (ej: 400.000)"),
         "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
-                                     help="Elige a dónde migrar este ingreso al presionar Copiar. Vacío = solo suma al Saldo a Favor."),
+                                     help="Elige a dónde migrar este ingreso al presionar Copiar."),
         "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
                                      help="Se propaga automáticamente al mes siguiente"),
     }
 
-    # Forzar dtype object en columnas de texto/selección (evita StreamlitAPIException
-    # cuando _ip_base tiene 0 filas y reindex deja dtype float64 por defecto)
     _ip_base["Descripción"]    = _ip_base["Descripción"].astype(object)
     _ip_base["Destino Copia"]  = _ip_base["Destino Copia"].astype(object)
     _ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles).astype(object)
@@ -1511,41 +1516,42 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
         use_container_width=True,
         num_rows="dynamic",
         column_config=_ip_config,
+        column_order=["Ejecutar", "Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"],
         key="ip_ed",
         on_change=lambda: st.session_state.update({"datos_modificados": True})
     )
     df_ed_ip["Valor Proyectado"] = df_ed_ip["Valor Proyectado"].apply(_parse_miles)
 
-    # Calcular total proyectado — TODAS las filas suman al Saldo a Favor
-    # (solo dejan de sumar cuando se copian y desaparecen de la tabla)
     _ip_df_calc = df_ed_ip.copy()
     _ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
+    _ip_df_calc["Ejecutar"] = _ip_df_calc["Ejecutar"].fillna(False).astype(bool)
     _total_ip = float(_ip_df_calc["Valor Proyectado"].sum())
-    _total_ip_con_destino = float(_ip_df_calc[
-        _ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)
+    _total_ip_seleccionado = float(_ip_df_calc[
+        _ip_df_calc["Ejecutar"] == True
     ]["Valor Proyectado"].sum())
-
-    # Redefinir _ip_sin_destino solo para referencia visual (no afecta cálculo)
-    _ip_sin_destino = _ip_df_calc[~_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)]
 
     if _total_ip > 0:
         _msg_ip = f"📊 Total Ingresos Proyectados: $ {_total_ip:,.0f}"
-        if _total_ip_con_destino > 0:
-            _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;⏳ Listo para copiar: $ {_total_ip_con_destino:,.0f}"
+        if _total_ip_seleccionado > 0:
+            _msg_ip += f"&nbsp;&nbsp;|&nbsp;&nbsp;✅ Seleccionado para migrar: $ {_total_ip_seleccionado:,.0f}"
         st.markdown(
             f'<p style="color:#ffffff; font-size:0.85rem; margin-top:-8px;">{_msg_ip}</p>',
             unsafe_allow_html=True
         )
 
-    # ── BOTÓN COPIAR ──────────────────────────────────────────
-    if st.button("📋 Ejecutar copia a destinos", key="btn_copiar_ip"):
+    # ── BOTÓN COPIAR ────────────────────────
+    _hay_seleccionados = _ip_df_calc["Ejecutar"].any()
+    if st.button("📋 Ejecutar copia a destinos",
+                 key="btn_copiar_ip",
+                 disabled=not _hay_seleccionados,
+                 use_container_width=True):
         _ip_con_destino = _ip_df_calc[
+            (_ip_df_calc["Ejecutar"] == True) &
             (_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)) &
             (_ip_df_calc["Valor Proyectado"] > 0) &
             (_ip_df_calc["Descripción"].notna()) &
             (_ip_df_calc["Descripción"].str.strip() != "")
         ].copy()
-
         if _ip_con_destino.empty:
             st.warning("⚠️ No hay filas con destino seleccionado y valor > 0 para copiar.")
         else:
