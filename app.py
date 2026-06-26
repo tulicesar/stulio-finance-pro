@@ -1478,114 +1478,112 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
 
     _OPCIONES_DESTINO = ["Ingresos Adicionales", "Ingreso Fijo (Sueldo/Nómina)"]
 
-    # ── CABECERA DE LA TABLA ──
-    _hc = st.columns([3, 1.5, 2, 0.8, 1])
-    for _txt, _col in zip(["Descripción", "Valor Proyectado", "Copiar a", "Recurrente", ""], _hc):
-        _col.markdown(f'<p style="color:#6c757d;font-size:0.75rem;margin:0;font-weight:600">{_txt}</p>', unsafe_allow_html=True)
-    st.markdown('<hr style="margin:4px 0;border-color:#3a3f44">', unsafe_allow_html=True)
-
-    # ── FILAS EXISTENTES ──
+    _ip_cols = ["Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente", "Migrar"]
     _ip_base = df_mes_ip.reindex(columns=["Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"]).reset_index(drop=True)
     _ip_base["Destino Copia"] = _ip_base["Destino Copia"].apply(lambda v: v if v in _OPCIONES_DESTINO else None)
     _ip_base["Movimiento Recurrente"] = _ip_base["Movimiento Recurrente"].fillna(False).astype(bool)
-    _ip_base["Valor Proyectado"] = pd.to_numeric(_ip_base["Valor Proyectado"], errors="coerce").fillna(0)
+    _ip_base["Migrar"] = False  # siempre False al cargar
 
-    _total_ip = 0.0
-    for _i, _row in _ip_base.iterrows():
-        _desc_r   = str(_row.get("Descripción", "") or "").strip()
-        _monto_r  = float(_row.get("Valor Proyectado", 0) or 0)
-        _dest_r   = _row.get("Destino Copia", None)
-        _recur_r  = bool(_row.get("Movimiento Recurrente", False))
-        _total_ip += _monto_r
+    _ip_config = {
+        "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
+        "Valor Proyectado":      _money_column("💵 Valor Proyectado", width="small",
+                                     help="Monto que proyectas recibir"),
+        "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
+                                     help="¿A dónde migrar este ingreso?"),
+        "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
+                                     help="Se propaga al mes siguiente"),
+        "Migrar":                st.column_config.CheckboxColumn("📤 Migrar", default=False, width="small",
+                                     help="Marca para migrar este ingreso a su destino inmediatamente"),
+    }
 
-        _c1, _c2, _c3, _c4, _c5 = st.columns([3, 1.5, 2, 0.8, 1])
-        _desc_new  = _c1.text_input("", value=_desc_r,  key=f"ip_desc_{_i}",  label_visibility="collapsed")
-        _monto_new = _c2.text_input("", value=_fmt_miles(_monto_r), key=f"ip_monto_{_i}", label_visibility="collapsed")
-        _dest_new  = _c3.selectbox("", options=[""] + _OPCIONES_DESTINO,
-                         index=([""] + _OPCIONES_DESTINO).index(_dest_r) if _dest_r in _OPCIONES_DESTINO else 0,
-                         key=f"ip_dest_{_i}", label_visibility="collapsed")
-        _recur_new = _c4.checkbox("", value=_recur_r, key=f"ip_rec_{_i}", label_visibility="collapsed")
+    _ip_base["Descripción"]    = _ip_base["Descripción"].astype(object)
+    _ip_base["Destino Copia"]  = _ip_base["Destino Copia"].astype(object)
+    _ip_base["Valor Proyectado"] = _ip_base["Valor Proyectado"].apply(_fmt_miles).astype(object)
 
-        # Botón migrar solo si tiene destino seleccionado
-        if _dest_new in _OPCIONES_DESTINO and _monto_r > 0 and _desc_r:
-            if _c5.button("📤", key=f"btn_mig_{_i}", help=f"Migrar a {_dest_new}"):
-                if _dest_new == "Ingresos Adicionales":
-                    _oi_bd = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-                    _oi_exist = set(_oi_bd["Descripción"].str.strip().str.upper().tolist()) if not _oi_bd.empty else set()
-                    if _desc_r.upper() not in _oi_exist:
-                        _oi_bd = pd.concat([_oi_bd, pd.DataFrame([{"Descripción": _desc_r, "Monto": _monto_r}])], ignore_index=True)
-                    try:
-                        supabase.postgrest.auth(token)
-                        supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                        for _, _rr in _oi_bd.iterrows():
-                            _d2 = str(_rr.get("Descripción","")).strip()
-                            _m2 = float(_rr.get("Monto", 0) or 0)
-                            if _d2:
-                                supabase.table("otros_ingresos").insert({
-                                    "anio": int(anio_s), "periodo": str(mes_s),
-                                    "descripcion": _d2, "monto": _m2,
-                                    "billetera": str(_rr.get("Billetera","") or "") or None,
-                                    "usuario_id": str(u_id)
-                                }).execute()
-                    except Exception as _e:
-                        st.error(f"Error migrando: {_e}")
-                elif _dest_new == "Ingreso Fijo (Sueldo/Nómina)":
-                    try:
-                        supabase.postgrest.auth(token)
-                        _i_bd = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
-                        _n_a = float(_i_bd["Nomina"].iloc[0]) if not _i_bd.empty else 0.0
-                        _s_a = float(_i_bd["SaldoAnterior"].iloc[0]) if not _i_bd.empty else s_in
-                        _o_a = float(_i_bd["Otros"].iloc[0]) if not _i_bd.empty and "Otros" in _i_bd.columns else 0.0
-                        _b_a = str(_i_bd["Billetera"].iloc[0]) if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
-                        supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
-                        supabase.table("ingresos_base").insert({
+    df_ed_ip = st.data_editor(
+        _ip_base,
+        use_container_width=True,
+        num_rows="dynamic",
+        column_config=_ip_config,
+        column_order=["Migrar", "Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"],
+        key="ip_ed",
+        on_change=lambda: st.session_state.update({"datos_modificados": True})
+    )
+    df_ed_ip["Valor Proyectado"] = df_ed_ip["Valor Proyectado"].apply(_parse_miles)
+    df_ed_ip["Migrar"] = df_ed_ip["Migrar"].fillna(False).astype(bool)
+
+    _ip_df_calc = df_ed_ip.copy()
+    _ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
+    _total_ip = float(_ip_df_calc["Valor Proyectado"].sum())
+
+    if _total_ip > 0:
+        st.markdown(
+            f'<p style="color:#ffffff; font-size:0.85rem; margin-top:-8px;">📊 Total Ingresos Proyectados: $ {_total_ip:,.0f}</p>',
+            unsafe_allow_html=True
+        )
+
+    # ── MIGRACIÓN: procesar filas marcadas con Migrar=True ──
+    _filas_migrar = _ip_df_calc[
+        (_ip_df_calc["Migrar"] == True) &
+        (_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)) &
+        (_ip_df_calc["Valor Proyectado"] > 0) &
+        (_ip_df_calc["Descripción"].notna()) &
+        (_ip_df_calc["Descripción"].str.strip() != "")
+    ].copy()
+
+    if not _filas_migrar.empty:
+        _a_oi   = _filas_migrar[_filas_migrar["Destino Copia"] == "Ingresos Adicionales"]
+        _a_fijo = _filas_migrar[_filas_migrar["Destino Copia"] == "Ingreso Fijo (Sueldo/Nómina)"]
+
+        if not _a_oi.empty:
+            _oi_bd = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+            _oi_exist = set(_oi_bd["Descripción"].str.strip().str.upper().tolist()) if not _oi_bd.empty else set()
+            for _, _r in _a_oi.iterrows():
+                _d = str(_r["Descripción"]).strip()
+                if _d.upper() not in _oi_exist:
+                    _oi_bd = pd.concat([_oi_bd, pd.DataFrame([{"Descripción": _d, "Monto": float(_r["Valor Proyectado"])}])], ignore_index=True)
+            try:
+                supabase.postgrest.auth(token)
+                supabase.table("otros_ingresos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                for _, _row_oi in _oi_bd.iterrows():
+                    _d2 = str(_row_oi.get("Descripción","")).strip()
+                    _m2 = float(_row_oi.get("Monto", 0) or 0)
+                    if _d2:
+                        supabase.table("otros_ingresos").insert({
                             "anio": int(anio_s), "periodo": str(mes_s),
-                            "saldo_anterior": _s_a, "nomina": _n_a + _monto_r,
-                            "otros": _o_a, "billetera": _b_a or None,
+                            "descripcion": _d2, "monto": _m2,
+                            "billetera": str(_row_oi.get("Billetera","") or "") or None,
                             "usuario_id": str(u_id)
                         }).execute()
-                    except Exception as _e:
-                        st.error(f"Error migrando: {_e}")
-                # Guardar cambios en la fila antes de eliminarla
-                _ip_guardadas = []
-                for _j, _r2 in _ip_base.iterrows():
-                    if _j == _i:
-                        continue  # esta fila se migró, no la guardamos
-                    _ip_guardadas.append({
-                        "Descripción": str(_r2.get("Descripción","")).strip(),
-                        "Valor Proyectado": float(_r2.get("Valor Proyectado", 0) or 0),
-                        "Destino Copia": _r2.get("Destino Copia", None),
-                        "Movimiento Recurrente": bool(_r2.get("Movimiento Recurrente", False))
-                    })
-                _ip_restantes = pd.DataFrame(_ip_guardadas) if _ip_guardadas else pd.DataFrame(columns=["Descripción","Valor Proyectado","Destino Copia","Movimiento Recurrente"])
-                guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_restantes)
-                st.rerun()
+            except Exception as _e:
+                st.error(f"Error migrando a Ingresos Adicionales: {_e}")
 
-    # ── FILA NUEVA ──
-    st.markdown('<hr style="margin:4px 0;border-color:#3a3f44">', unsafe_allow_html=True)
-    _nc1, _nc2, _nc3, _nc4, _nc5 = st.columns([3, 1.5, 2, 0.8, 1])
-    _new_desc  = _nc1.text_input("", placeholder="Nueva descripción...", key="ip_new_desc", label_visibility="collapsed")
-    _new_monto = _nc2.text_input("", placeholder="0", key="ip_new_monto", label_visibility="collapsed")
-    _new_dest  = _nc3.selectbox("", options=[""] + _OPCIONES_DESTINO, key="ip_new_dest", label_visibility="collapsed")
-    _new_recur = _nc4.checkbox("", value=False, key="ip_new_rec", label_visibility="collapsed")
-    if _nc5.button("➕", key="ip_btn_add", help="Agregar fila"):
-        _new_monto_v = _parse_miles(_new_monto)
-        if _new_desc.strip() and _new_monto_v > 0:
-            _ip_nueva = pd.DataFrame([{
-                "Descripción": _new_desc.strip(),
-                "Valor Proyectado": _new_monto_v,
-                "Destino Copia": _new_dest if _new_dest in _OPCIONES_DESTINO else None,
-                "Movimiento Recurrente": _new_recur
-            }])
-            _ip_total = pd.concat([_ip_base, _ip_nueva], ignore_index=True)
-            guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_total)
-            st.rerun()
-        else:
-            st.warning("⚠️ Completa descripción y monto.")
+        if not _a_fijo.empty:
+            _suma_fijo = float(_a_fijo["Valor Proyectado"].sum())
+            try:
+                supabase.postgrest.auth(token)
+                _i_bd = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)]
+                _n_a = float(_i_bd["Nomina"].iloc[0]) if not _i_bd.empty else 0.0
+                _s_a = float(_i_bd["SaldoAnterior"].iloc[0]) if not _i_bd.empty else s_in
+                _o_a = float(_i_bd["Otros"].iloc[0]) if not _i_bd.empty and "Otros" in _i_bd.columns else 0.0
+                _b_a = str(_i_bd["Billetera"].iloc[0]) if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
+                supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                supabase.table("ingresos_base").insert({
+                    "anio": int(anio_s), "periodo": str(mes_s),
+                    "saldo_anterior": _s_a, "nomina": _n_a + _suma_fijo,
+                    "otros": _o_a, "billetera": _b_a or None,
+                    "usuario_id": str(u_id)
+                }).execute()
+            except Exception as _e:
+                st.error(f"Error migrando a Ingreso Fijo: {_e}")
 
-    st.markdown('<hr style="margin:4px 0;border-color:#3a3f44">', unsafe_allow_html=True)
-    if _total_ip > 0:
-        st.markdown(f'<p style="color:#ffffff;font-size:0.85rem;margin:4px 0">📊 Total Ingresos Proyectados: $ {_total_ip:,.0f}</p>', unsafe_allow_html=True)
+        # Eliminar filas migradas y guardar las restantes
+        _desc_migradas = set(_filas_migrar["Descripción"].str.strip().str.upper().tolist())
+        _ip_restantes = _ip_df_calc[
+            ~_ip_df_calc["Descripción"].str.strip().str.upper().isin(_desc_migradas)
+        ].copy()
+        guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_restantes)
+        st.rerun()
 with st.expander("💰 Ingresos Adicionales", expanded=True):
     df_mes_oi = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
     _oi_cols   = ["Descripción","Monto"] + (["Billetera"] if modulo_billeteras_activo and lista_billeteras else [])
@@ -2311,7 +2309,7 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                     st.session_state["recurrentes_excluidos_por_periodo"] = _excl_dict
                     guardar_config(supabase, u_id, token, recurrentes_excluidos=_excl_dict)
                 # Guardar ingresos proyectados (se guardan fila a fila en tiempo real)
-                guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_base)
+                guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_df_calc)
                 st.session_state.datos_modificados = False
                 st.balloons()
                 st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
