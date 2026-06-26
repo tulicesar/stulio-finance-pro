@@ -715,31 +715,32 @@ with st.sidebar:
         with st.expander("💳 Saldo por billetera", expanded=True):
             st.caption("Digita el saldo actual de cada billetera.")
 
-             # Si Arrastrar ON: siempre recalcular saldos finales del mes anterior
-            # Si Arrastrar OFF: leer saldos guardados del mes actual
+             # Prioridad:
+            # 1. Si hay saldos guardados para el mes actual -> usarlos siempre
+            # 2. Si no hay guardados Y arr_on ON -> calcular finales del mes anterior
+            # 3. Si arr_on OFF y no hay guardados -> ceros
             _sab_dict = {}
-            if arr_on and lista_billeteras:
+            _sab_mes = df_sab_full[
+                (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
+            ] if not df_sab_full.empty else pd.DataFrame()
+            if not _sab_mes.empty:
+                # Hay saldos guardados para este mes: usarlos directamente
+                for _, _r in _sab_mes.iterrows():
+                    _b = str(_r.get("billetera") or _r.get("Billetera","")).strip()
+                    _sab_dict[_b] = float(_r.get("monto") or _r.get("Monto", 0) or 0)
+            elif arr_on and lista_billeteras:
+                # No hay guardados para este mes: calcular finales del mes anterior
                 _sab_ant_mes = df_sab_full[
                     (df_sab_full["Periodo"] == m_ant) & (df_sab_full["Año"] == a_ant)
                 ] if not df_sab_full.empty else pd.DataFrame()
                 if not _sab_ant_mes.empty:
-                    # Calcular saldo real final del mes anterior por billetera
                     _saldos_fin_ant = calcular_saldo_billeteras(
                         df_g_full, df_i_full, df_oi_full,
                         df_sab_full, lista_billeteras, m_ant, a_ant
                     )
                     if any(v != 0 for v in _saldos_fin_ant.values()):
                         _sab_dict = {b: _saldos_fin_ant.get(b, 0.0) for b in lista_billeteras}
-                        st.caption(f"💡 Saldos arrastrados de {m_ant} {a_ant}")
-            else:
-                # Arrastrar OFF: leer lo guardado para el mes actual
-                _sab_mes = df_sab_full[
-                    (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
-                ] if not df_sab_full.empty else pd.DataFrame()
-                if not _sab_mes.empty:
-                    for _, _r in _sab_mes.iterrows():
-                        _b = str(_r.get("billetera") or _r.get("Billetera","")).strip()
-                        _sab_dict[_b] = float(_r.get("monto") or _r.get("Monto", 0) or 0)
+                        st.caption(f"💡 Saldos arrastrados de {m_ant} {a_ant} — guarda para confirmar")
 
             sab_rows = []
             _total_dist = 0.0
