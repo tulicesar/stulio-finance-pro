@@ -734,9 +734,11 @@ with st.sidebar:
                     (df_sab_full["Periodo"] == m_ant) & (df_sab_full["Año"] == a_ant)
                 ] if not df_sab_full.empty else pd.DataFrame()
                 if not _sab_ant_mes.empty:
+                    _df_transf_ant = cargar_transferencias(supabase, u_id, token, m_ant, a_ant)
                     _saldos_fin_ant = calcular_saldo_billeteras(
                         df_g_full, df_i_full, df_oi_full,
-                        df_sab_full, lista_billeteras, m_ant, a_ant
+                        df_sab_full, lista_billeteras, m_ant, a_ant,
+                        df_transferencias=_df_transf_ant
                     )
                     if any(v != 0 for v in _saldos_fin_ant.values()):
                         _sab_dict = {b: _saldos_fin_ant.get(b, 0.0) for b in lista_billeteras}
