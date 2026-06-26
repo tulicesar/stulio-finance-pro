@@ -1489,12 +1489,17 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
     # cuando df_mes_ip está vacío y la columna queda como NaN/float64)
     _ip_base["Movimiento Recurrente"] = _ip_base["Movimiento Recurrente"].fillna(False).astype(bool)
 
+    # Columna Ejecutar: siempre False al cargar (el usuario la marca manualmente)
+    _ip_base["Ejecutar"] = False
+
     _ip_config = {
+        "Ejecutar":              st.column_config.CheckboxColumn("✅ Ejecutar", default=False, width="small",
+                                     help="Marca para migrar este ingreso a su destino"),
         "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
         "Valor Proyectado":      _money_column("💵 Valor Proyectado", width="small",
                                      help="Monto que proyectas recibir (ej: 400.000)"),
         "Destino Copia":         st.column_config.SelectboxColumn("📋 Copiar a", options=_OPCIONES_DESTINO, width="medium",
-                                     help="Selecciona el destino para migrar este ingreso de inmediato."),
+                                     help="Elige el destino y marca Ejecutar para migrar"),
         "Movimiento Recurrente": st.column_config.CheckboxColumn("🔁 Recurrente", default=False, width="small",
                                      help="Se propaga automáticamente al mes siguiente"),
     }
@@ -1508,6 +1513,7 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
         use_container_width=True,
         num_rows="dynamic",
         column_config=_ip_config,
+        column_order=["Ejecutar", "Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"],
         key="ip_ed",
         on_change=lambda: st.session_state.update({"datos_modificados": True})
     )
@@ -1515,6 +1521,7 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
 
     _ip_df_calc = df_ed_ip.copy()
     _ip_df_calc["Valor Proyectado"] = pd.to_numeric(_ip_df_calc["Valor Proyectado"], errors="coerce").fillna(0)
+    _ip_df_calc["Ejecutar"] = _ip_df_calc["Ejecutar"].fillna(False).astype(bool)
     _total_ip = float(_ip_df_calc["Valor Proyectado"].sum())
 
     if _total_ip > 0:
@@ -1523,8 +1530,9 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
             unsafe_allow_html=True
         )
 
-    # ── MIGRACIÓN AUTOMÁTICA al seleccionar destino ──
+    # ── MIGRACIÓN: solo filas con Ejecutar=True y destino seleccionado ──
     _ip_con_destino = _ip_df_calc[
+        (_ip_df_calc["Ejecutar"].fillna(False).astype(bool) == True) &
         (_ip_df_calc["Destino Copia"].isin(_OPCIONES_DESTINO)) &
         (_ip_df_calc["Valor Proyectado"] > 0) &
         (_ip_df_calc["Descripción"].notna()) &
