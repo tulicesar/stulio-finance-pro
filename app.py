@@ -1768,16 +1768,16 @@ if modulo_billeteras_activo and lista_billeteras:
             _df_sab_real = df_sab_input
             _df_transf_real = df_transferencias_full
         else:
-            # Estamos proyectando otro mes → el estado de billeteras siempre refleja el mes real (hoy)
-            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==_mes_real) & (df_i_full["Año"]==_anio_real)].copy()
-            _df_g_calc  = df_g_full[(df_g_full["Periodo"]==_mes_real) & (df_g_full["Año"]==_anio_real)].copy()
-            _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==_mes_real) & (df_oi_full["Año"]==_anio_real)].copy()
+            # Estamos viendo un mes diferente al real → usar los datos del mes seleccionado
+            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
+            _df_g_calc  = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
+            _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
             _df_sab_real = df_sab_full
-            _df_transf_real = cargar_transferencias(supabase, u_id, token, _mes_real, _anio_real)
+            _df_transf_real = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
 
         saldos_bill = calcular_saldo_billeteras(
             _df_g_calc, _df_i_calc, _df_oi_calc,
-            _df_sab_real, lista_billeteras, _mes_real, _anio_real,
+            _df_sab_real, lista_billeteras, mes_s, anio_s,
             df_transferencias=_df_transf_real
         )
 
