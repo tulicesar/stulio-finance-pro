@@ -740,7 +740,6 @@ with st.sidebar:
                         df_sab_full, lista_billeteras, m_ant, a_ant,
                         df_transferencias=_df_transf_ant
                     )
-                    st.caption(f"🔍 DEBUG arrastre {m_ant}: {_saldos_fin_ant}")
                     if any(v != 0 for v in _saldos_fin_ant.values()):
                         _sab_dict = {b: _saldos_fin_ant.get(b, 0.0) for b in lista_billeteras}
                         st.caption(f"💡 Saldos arrastrados de {m_ant} {a_ant} — guarda para confirmar")
