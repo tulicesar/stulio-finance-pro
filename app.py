@@ -2310,14 +2310,8 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                     _excl_dict[_periodo_key] = sorted(_actuales)
                     st.session_state["recurrentes_excluidos_por_periodo"] = _excl_dict
                     guardar_config(supabase, u_id, token, recurrentes_excluidos=_excl_dict)
-                # Guardar ingresos proyectados
-                _df_ip_guardar = df_ed_ip.dropna(subset=["Descripción","Valor Proyectado"], how="all").copy()
-                _df_ip_guardar["Valor Proyectado"] = pd.to_numeric(_df_ip_guardar["Valor Proyectado"], errors="coerce").fillna(0)
-                _df_ip_guardar = _df_ip_guardar[
-                    (_df_ip_guardar["Descripción"].notna()) &
-                    (_df_ip_guardar["Descripción"].str.strip() != "")
-                ]
-                guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _df_ip_guardar)
+                # Guardar ingresos proyectados (se guardan fila a fila en tiempo real)
+                guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_base)
                 st.session_state.datos_modificados = False
                 st.balloons()
                 st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
