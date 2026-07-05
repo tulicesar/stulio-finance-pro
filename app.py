@@ -1264,6 +1264,34 @@ else:
 
 descripciones_históricas = sorted(df_g_full["Descripción"].dropna().unique().tolist()) if not df_g_full.empty else []
 
+
+def calcular_estado_pago_proyectados(df_proy_rows, df_mov_rows):
+    """
+    Para cada ítem proyectado, calcula cuánto se ha pagado según los
+    movimientos ya guardados (BD) que lo referencian en 'Presupuesto Asociado'.
+    Retorna un dict {descripcion_proyectada: estado} con estado en
+    ('completo', 'parcial', 'pendiente').
+    """
+    estados = {}
+    for _, proy in df_proy_rows.iterrows():
+        desc_proy = str(proy.get("Descripción", "")).strip()
+        valor_proyectado = float(proy.get("Valor Referencia", 0) or 0)
+
+        movimientos_asociados = df_mov_rows[
+            df_mov_rows["Presupuesto Asociado"].astype(str).str.strip() == desc_proy
+        ]
+        pagados = movimientos_asociados[movimientos_asociados["Pagado"] == True]
+        total_pagado = pagados["Monto"].fillna(0).sum()
+
+        if total_pagado <= 0:
+            estados[desc_proy] = "pendiente"
+        elif valor_proyectado > 0 and total_pagado >= valor_proyectado:
+            estados[desc_proy] = "completo"
+        else:
+            estados[desc_proy] = "parcial"
+    return estados
+
+
 # ══════════════════════════════════════════════════════════
 # TABLA 1: GASTOS / EGRESOS PROYECTADOS
 # ══════════════════════════════════════════════════════════
@@ -1275,11 +1303,20 @@ with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
     if "Es Referencia" not in df_proy_rows.columns:
         df_proy_rows["Es Referencia"] = False
 
+    # ── Estado de pago (✅ completo / 🟡 parcial / ⬜ pendiente) ──
+    # Se calcula contra los movimientos ya guardados en BD, por lo que
+    # se actualiza al guardar, no en vivo mientras se edita.
+    df_mov_bd_estado = df_mes_g[df_mes_g["Es Proyectado"] == False]
+    estados_pago = calcular_estado_pago_proyectados(df_proy_rows, df_mov_bd_estado)
+    _emoji_estado = {"completo": "✅", "parcial": "🟡", "pendiente": "⬜"}
+
     config_proy = {
         "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
         "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
         "Valor Referencia":      _money_column("Valor Proyectado", width="small",
                                      help="Monto que proyectas gastar en este ítem (ej: 400.000)"),
+        "Estado":                st.column_config.TextColumn("Estado", width="small", disabled=True,
+                                     help="✅ Pagado completo · 🟡 Pago parcial · ⬜ Pendiente (se actualiza al guardar)"),
         "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
                                      help="Activa para hacer seguimiento de este ítem"),
         "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
@@ -1292,6 +1329,12 @@ with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
         columns=["Categoría", "Descripción", "Valor Referencia", "Es Referencia", "📋", "Movimiento Recurrente"]
     ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
     df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles).astype(object)
+    df_base_proy["Estado"] = df_base_proy["Descripción"].map(
+        lambda d: _emoji_estado.get(estados_pago.get(str(d).strip(), "pendiente"), "⬜")
+    )
+    df_base_proy = df_base_proy[
+        ["Categoría", "Descripción", "Valor Referencia", "Estado", "Es Referencia", "📋", "Movimiento Recurrente"]
+    ]
 
     df_ed_proy = st.data_editor(
         df_base_proy,
