@@ -1308,15 +1308,15 @@ with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
     # se actualiza al guardar, no en vivo mientras se edita.
     df_mov_bd_estado = df_mes_g[df_mes_g["Es Proyectado"] == False]
     estados_pago = calcular_estado_pago_proyectados(df_proy_rows, df_mov_bd_estado)
-    _emoji_estado = {"completo": "✅", "parcial": "🟡", "pendiente": "⬜"}
+    _emoji_estado = {"completo": "✅ Pagado", "parcial": "🟡 Parcial", "pendiente": "○ Pendiente"}
 
     config_proy = {
         "Categoría":             st.column_config.SelectboxColumn("Categoría", options=LISTA_CATEGORIAS, width="medium"),
         "Descripción":           st.column_config.TextColumn("Descripción", width="large"),
         "Valor Referencia":      _money_column("Valor Proyectado", width="small",
                                      help="Monto que proyectas gastar en este ítem (ej: 400.000)"),
-        "Estado":                st.column_config.TextColumn("Estado", width="small", disabled=True,
-                                     help="✅ Pagado completo · 🟡 Pago parcial · ⬜ Pendiente (se actualiza al guardar)"),
+        "Estado":                st.column_config.TextColumn("Estado", width="medium", disabled=True,
+                                     help="✅ Pagado completo · 🟡 Pago parcial · ○ Pendiente (se actualiza al guardar)"),
         "Es Referencia":         st.column_config.CheckboxColumn("📌 Referencia", default=False, width="small",
                                      help="Activa para hacer seguimiento de este ítem"),
         "📋":                    st.column_config.CheckboxColumn("📋 Copiar al registrar", default=False, width="small",
@@ -1330,7 +1330,7 @@ with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
     ).sort_values(["Categoría", "Descripción"], ascending=[True, True]).reset_index(drop=True)
     df_base_proy["Valor Referencia"] = df_base_proy["Valor Referencia"].apply(_fmt_miles).astype(object)
     df_base_proy["Estado"] = df_base_proy["Descripción"].map(
-        lambda d: _emoji_estado.get(estados_pago.get(str(d).strip(), "pendiente"), "⬜")
+        lambda d: _emoji_estado.get(estados_pago.get(str(d).strip(), "pendiente"), "○ Pendiente")
     )
     df_base_proy = df_base_proy[
         ["Categoría", "Descripción", "Valor Referencia", "Estado", "Es Referencia", "📋", "Movimiento Recurrente"]
