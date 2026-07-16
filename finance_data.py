@@ -206,24 +206,6 @@ def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s
     return saldos
 
 
-# ── FUENTE ÚNICA DE VERDAD: DINERO DISPONIBLE REAL ───────────────────────────
-def calcular_fact_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s, df_transferencias=None):
-    """
-    Envuelve calcular_saldo_billeteras() y devuelve (saldos_dict, total).
-    `total` es el Dinero Disponible REAL del periodo cuando el módulo de
-    billeteras está activo: la suma de los saldos de cada billetera.
-    Esta es la única fuente de verdad para "Dinero Disponible" y para el
-    "Saldo Anterior sugerido" del mes siguiente — evita que ambos cálculos
-    diverjan entre sí (bug histórico: Saldo Anterior se recalculaba en vivo
-    mientras Total Billeteras dependía de un snapshot guardado).
-    """
-    saldos = calcular_saldo_billeteras(
-        df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s,
-        df_transferencias=df_transferencias
-    )
-    return saldos, sum(saldos.values())
-
-
 # ── CALCULAR MÉTRICAS ─────────────────────────────────────────────────────────
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
