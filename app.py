@@ -12,7 +12,7 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia, guardar_ingresos_proyectados
+from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, calcular_fact_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia, guardar_ingresos_proyectados
 from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_proyeccion
 
 # --- HELPERS DE FORMATO DE MONTOS (separador de miles estilo CO) ---
@@ -423,6 +423,22 @@ def calcular_bf_real(df_g, n_in, otr_v, s_in, periodo_key, cierre_dict=None):
     return it_total, vp, vpy, fact, bf, ahorro_p
 
 
+def _billeteras_activo_periodo(mes_chk, anio_chk, meses_lista_ref, bill_desde_p, bill_desde_a):
+    """
+    Determina si el módulo de billeteras está activo para un periodo (mes/año)
+    dado, según el toggle 'Activar desde tal mes' guardado en config_usuario.
+    Reutilizable para el mes seleccionado y para el mes anterior.
+    """
+    if not (bill_desde_p and bill_desde_a):
+        return False
+    _idx_chk  = meses_lista_ref.index(mes_chk) if mes_chk in meses_lista_ref else 0
+    _idx_desd = meses_lista_ref.index(bill_desde_p) if bill_desde_p in meses_lista_ref else 0
+    return (
+        int(anio_chk) > int(bill_desde_a) or
+        (int(anio_chk) == int(bill_desde_a) and _idx_chk >= _idx_desd)
+    )
+
+
 # --- 7. LAYOUT BASE PLOTLY ---
 PLOTLY_LAYOUT = dict(
     paper_bgcolor='rgba(0,0,0,0)',
@@ -650,8 +666,34 @@ with st.sidebar:
     g_ant  = df_g_full[(df_g_full["Periodo"]==m_ant) & (df_g_full["Año"]==a_ant)]
     oi_ant = df_oi_full[(df_oi_full["Periodo"]==m_ant) & (df_oi_full["Año"]==a_ant)]
 
+    # ── Lista de billeteras del usuario ───────────────────
+    lista_billeteras = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+    opciones_bill    = [""] + lista_billeteras
+
+    # ── Determinar si billeteras están activas para este periodo y el anterior ──
+    _bill_desde_p = cfg_usuario.get("billeteras_desde_periodo", None)
+    _bill_desde_a = cfg_usuario.get("billeteras_desde_anio", None)
+    modulo_billeteras_activo = _billeteras_activo_periodo(
+        mes_s, anio_s, meses_lista, _bill_desde_p, _bill_desde_a
+    )
+    _bill_activo_ant = _billeteras_activo_periodo(
+        m_ant, a_ant, meses_lista, _bill_desde_p, _bill_desde_a
+    )
+
+    # ── SALDO ANTERIOR SUGERIDO (s_sug) ───────────────────
+    # Fuente única de verdad: si billeteras estaba activo el mes anterior,
+    # s_sug = suma real de billeteras al cierre de ese mes (el mismo número
+    # que se mostró como "Dinero Disponible" en ese mes). Así se elimina la
+    # divergencia entre "Saldo Anterior" y "Total Billeteras" al cambiar de mes.
     s_sug = 0.0
-    if not i_ant.empty:
+    if _bill_activo_ant and lista_billeteras:
+        _df_transf_ant_sug = cargar_transferencias(supabase, u_id, token, m_ant, a_ant)
+        _saldos_ant_sug, s_sug = calcular_fact_billeteras(
+            df_g_full, df_i_full, df_oi_full, df_sab_full,
+            lista_billeteras, m_ant, a_ant,
+            df_transferencias=_df_transf_ant_sug
+        )
+    elif not i_ant.empty:
         _nom_ant = float(i_ant["Nomina"].sum())
         _otr_ant = float(oi_ant["Monto"].sum()) if not oi_ant.empty else 0.0
         _sal_ant = float(i_ant["SaldoAnterior"].iloc[0])
@@ -677,23 +719,6 @@ with st.sidebar:
     val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
     n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
     n_in  = parse_moneda(n_txt)
-
-    # ── Lista de billeteras del usuario ───────────────────
-    lista_billeteras = df_b_full["nombre"].tolist() if not df_b_full.empty else []
-    opciones_bill    = [""] + lista_billeteras
-
-    # ── Determinar si billeteras están activas para este periodo ──
-    _bill_desde_p = cfg_usuario.get("billeteras_desde_periodo", None)
-    _bill_desde_a = cfg_usuario.get("billeteras_desde_anio", None)
-    if _bill_desde_p and _bill_desde_a:
-        _idx_act  = meses_lista.index(mes_s)   if mes_s   in meses_lista else 0
-        _idx_desd = meses_lista.index(_bill_desde_p) if _bill_desde_p in meses_lista else 0
-        modulo_billeteras_activo = (
-            int(anio_s) > int(_bill_desde_a) or
-            (int(anio_s) == int(_bill_desde_a) and _idx_act >= _idx_desd)
-        )
-    else:
-        modulo_billeteras_activo = False
 
     bill_nomina  = ""
     df_sab_input = pd.DataFrame(columns=["billetera","monto"])
@@ -1711,6 +1736,52 @@ placeholder_otros.text_input("Otros Ingresos (Total)", value=f"$ {otr_v:,.0f}", 
 it_total, vp, vpy, fact, bf, ahorro_p = calcular_bf_real(
     df_ed_g, n_in, otr_v, s_in, _periodo_key, st.session_state["cierre_mes_por_periodo"]
 )
+
+# ── FUENTE ÚNICA DE VERDAD: DINERO DISPONIBLE REAL ────────
+# Si el módulo de billeteras está activo, "Dinero Disponible" (fact) se
+# reemplaza SIEMPRE por la suma real de las billeteras (total_bill), en vez
+# de la fórmula agregada s_in+n_in+otr_v-vp. Esto elimina de raíz la
+# divergencia entre "Dinero Disponible" y "Total Billeteras" al cambiar de mes.
+saldos_bill = {}
+total_bill  = 0.0
+if modulo_billeteras_activo and lista_billeteras:
+    if _mes_real == mes_s and _anio_real == anio_s:
+        # Mes real → usar los datos en edición (incluye cambios sin guardar)
+        _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
+        _df_g_calc  = df_ed_g.copy()
+        _df_g_calc["Periodo"] = mes_s
+        _df_g_calc["Año"]     = anio_s
+        if not _df_i_calc.empty:
+            _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
+            _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
+        else:
+            _df_i_calc = pd.DataFrame([{
+                "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
+                "Billetera": bill_nomina, "SaldoAnterior": s_in
+            }])
+        _df_oi_calc = df_ed_oi.copy()
+        _df_oi_calc["Periodo"] = mes_s
+        _df_oi_calc["Año"]     = anio_s
+        _df_sab_real = df_sab_input
+        _df_transf_real = df_transferencias_full
+    else:
+        # Mes diferente al real → usar datos guardados del mes seleccionado
+        _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
+        _df_g_calc  = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
+        _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
+        _df_sab_real = df_sab_full
+        _df_transf_real = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
+
+    saldos_bill, total_bill = calcular_fact_billeteras(
+        _df_g_calc, _df_i_calc, _df_oi_calc,
+        _df_sab_real, lista_billeteras, mes_s, anio_s,
+        df_transferencias=_df_transf_real
+    )
+
+    fact = total_bill
+    bf   = fact - vpy
+    ahorro_p = (bf / it_total * 100) if it_total > 0 else 0.0
+
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
 # ── SALDO PROYECTADO (incluye Ingresos Proyectados aún no migrados) ──
@@ -1759,41 +1830,8 @@ if modulo_billeteras_activo and lista_billeteras:
     _fecha_hoy_str = _hoy.strftime("%d/%m/%Y")
 
     with st.expander(f"💳 Estado de Billeteras — {_fecha_hoy_str}", expanded=True):
-
-        if _mes_real == mes_s and _anio_real == anio_s:
-            # Estamos viendo el mes real → usar los datos en edición (incluye cambios sin guardar)
-            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-            _df_g_calc  = df_ed_g.copy()
-            _df_g_calc["Periodo"] = mes_s
-            _df_g_calc["Año"]     = anio_s
-            if not _df_i_calc.empty:
-                _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
-                _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
-            else:
-                _df_i_calc = pd.DataFrame([{
-                    "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
-                    "Billetera": bill_nomina, "SaldoAnterior": s_in
-                }])
-            _df_oi_calc = df_ed_oi.copy()
-            _df_oi_calc["Periodo"] = mes_s
-            _df_oi_calc["Año"]     = anio_s
-            _df_sab_real = df_sab_input
-            _df_transf_real = df_transferencias_full
-        else:
-            # Estamos viendo un mes diferente al real → usar datos del mes seleccionado
-            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-            _df_g_calc  = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
-            _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-            _df_sab_real = df_sab_full
-            _df_transf_real = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
-
-        saldos_bill = calcular_saldo_billeteras(
-            _df_g_calc, _df_i_calc, _df_oi_calc,
-            _df_sab_real, lista_billeteras, mes_s, anio_s,
-            df_transferencias=_df_transf_real
-        )
-
-        total_bill = sum(saldos_bill.values())
+        # saldos_bill / total_bill ya se calcularon arriba (fuente única de
+        # verdad para "Dinero Disponible"); aquí solo se muestran.
 
         _ncols = min(len(lista_billeteras), 4)
         _cols_bill = st.columns(_ncols)
@@ -1836,11 +1874,7 @@ if modulo_billeteras_activo and lista_billeteras:
             st.plotly_chart(_fig_bill, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            _diff_bill = fact - total_bill
-            if abs(_diff_bill) < 1:
-                st.success(f"✅ Total billeteras coincide con Dinero Disponible: **$ {total_bill:,.0f}**")
-            else:
-                st.warning(f"⚠️ Total billeteras **$ {total_bill:,.0f}** vs Dinero Disponible **$ {fact:,.0f}** — diferencia: **$ {_diff_bill:,.0f}**")
+            st.success(f"✅ Dinero Disponible (calculado desde tus billeteras): **$ {total_bill:,.0f}**")
 
 with st.expander("📝 Movimiento de Gastos", expanded=True):
 
