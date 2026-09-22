@@ -12,7 +12,12 @@ from supabase import create_client, Client
 
 # ── Importar módulos propios ──────────────────────────────
 from auth    import mostrar_login, cerrar_sesion, mostrar_eliminar_cuenta
-from finance_data import cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras, cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email, cargar_transferencias, guardar_transferencia, eliminar_transferencia, guardar_ingresos_proyectados
+from finance_data import (
+    cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras,
+    cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email,
+    cargar_transferencias, cargar_transferencias_todas, guardar_transferencia, eliminar_transferencia,
+    guardar_ingresos_proyectados, calcular_cadena_billeteras, asegurar_billetera_defecto, orden_periodo
+)
 from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_proyeccion
 
 # --- HELPERS DE FORMATO DE MONTOS (separador de miles estilo CO) ---
@@ -385,7 +390,7 @@ def calcular_bf_real(df_g, n_in, otr_v, s_in, periodo_key, cierre_dict=None):
     """
     Calcula Saldo a Favor (bf) de forma consistente para:
       - El KPI principal del dashboard
-      - El "Saldo Anterior" sugerido al cambiar de mes
+      - El "Saldo Anterior" sugerido (solo meses históricos, antes del mes de inicio de billeteras)
       - El gráfico "Tendencia de Ahorro"
     Aplica el mismo filtro de Cierre de Mes que el KPI principal.
     """
@@ -508,6 +513,11 @@ token = st.session_state.token
 supabase.postgrest.auth(token)
 try:
     df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full, df_ip_full = cargar_bd(supabase, u_id, token)
+
+    # ── Billeteras obligatorias: todo usuario tiene al menos una ──
+    if asegurar_billetera_defecto(supabase, token, u_id):
+        df_g_full, df_i_full, df_oi_full, df_b_full, df_sab_full, df_ip_full = cargar_bd(supabase, u_id, token)
+
     cfg_usuario = cargar_config(supabase, u_id, token)
 
     # ── Sincronizar estado de Cierre de Mes desde Supabase (persistente) ──
@@ -640,27 +650,78 @@ with st.sidebar:
     _periodo_key = f"{mes_s}_{anio_s}"
     df_transferencias_full = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
 
-    i_m_act = df_i_full[(df_i_full["Periodo"] == mes_s) & (df_i_full["Año"] == anio_s)]
-
     idx   = meses_lista.index(mes_s)
     m_ant = meses_lista[idx-1] if idx > 0 else "Diciembre"
     a_ant = anio_s if idx > 0 else anio_s - 1
+
+    # ══════════════════════════════════════════════════════
+    # 💳 BILLETERAS OBLIGATORIAS + CADENA DE SALDOS
+    #   - Mes de inicio: el usuario digita el saldo real de cada billetera.
+    #   - Meses siguientes: saldo inicial = saldo final del mes anterior
+    #     (calculado, nunca leído de una foto guardada).
+    #   - Meses anteriores al inicio: modo histórico (sin billeteras).
+    # ══════════════════════════════════════════════════════
+    lista_billeteras = (df_b_full["nombre"].tolist()
+                        if not df_b_full.empty and "nombre" in df_b_full.columns else [])
+    bill_defecto  = lista_billeteras[0] if lista_billeteras else ""
+    opciones_bill = lista_billeteras
+
+    _ord_act = orden_periodo(mes_s, anio_s, meses_lista)
+
+    _cfg_ini_p = cfg_usuario.get("billeteras_desde_periodo", None)
+    _cfg_ini_a = cfg_usuario.get("billeteras_desde_anio", None)
+    _ord_ini_cfg = orden_periodo(_cfg_ini_p, _cfg_ini_a, meses_lista) if (_cfg_ini_p and _cfg_ini_a) else None
+
+    # Hasta dónde calcular la cadena: el mes visto o el último mes con datos
+    _ords_datos = [_ord_act]
+    for _df_o in (df_i_full, df_g_full, df_oi_full):
+        if not _df_o.empty and "Periodo" in _df_o.columns and "Año" in _df_o.columns:
+            for _p, _a in _df_o[["Periodo", "Año"]].drop_duplicates().itertuples(index=False):
+                _o = orden_periodo(_p, _a, meses_lista)
+                if _o is not None:
+                    _ords_datos.append(_o)
+
+    if lista_billeteras:
+        _df_tr_todas = cargar_transferencias_todas(supabase, u_id, token)
+        ord_inicio_bill, cadena_bill = calcular_cadena_billeteras(
+            df_g_full, df_i_full, df_oi_full, df_sab_full, _df_tr_todas,
+            lista_billeteras, meses_lista, max(_ords_datos),
+            ord_inicio=_ord_ini_cfg, billetera_defecto=bill_defecto
+        )
+    else:
+        ord_inicio_bill, cadena_bill = None, {}
+
+    # Sincronizar en memoria el Saldo Anterior de cada mes de la cadena,
+    # para que KPIs, tendencia y reportes usen el mismo número.
+    if cadena_bill and not df_i_full.empty:
+        for _o, (_ini_o, _fin_o) in cadena_bill.items():
+            _mask_o = (df_i_full["Periodo"] == meses_lista[_o % 12]) & (df_i_full["Año"] == _o // 12)
+            if _mask_o.any():
+                df_i_full.loc[_mask_o, "SaldoAnterior"] = float(sum(_ini_o.values()))
+
+    if not lista_billeteras:
+        modo_bill = "historico"
+    elif ord_inicio_bill is None or _ord_act == ord_inicio_bill:
+        modo_bill = "inicio"
+    elif _ord_act < ord_inicio_bill:
+        modo_bill = "historico"
+    else:
+        modo_bill = "cadena"
+    modulo_billeteras_activo = modo_bill != "historico"
+
+    i_m_act = df_i_full[(df_i_full["Periodo"] == mes_s) & (df_i_full["Año"] == anio_s)]
 
     i_ant  = df_i_full[(df_i_full["Periodo"]==m_ant) & (df_i_full["Año"]==a_ant)]
     g_ant  = df_g_full[(df_g_full["Periodo"]==m_ant) & (df_g_full["Año"]==a_ant)]
     oi_ant = df_oi_full[(df_oi_full["Periodo"]==m_ant) & (df_oi_full["Año"]==a_ant)]
 
+    # Saldo sugerido "legacy" (solo se usa en modo histórico y para
+    # pre-llenar el mes de inicio cuando aún no tiene saldos guardados)
     s_sug = 0.0
     if not i_ant.empty:
         _nom_ant = float(i_ant["Nomina"].sum())
         _otr_ant = float(oi_ant["Monto"].sum()) if not oi_ant.empty else 0.0
         _sal_ant = float(i_ant["SaldoAnterior"].iloc[0])
-        # Ingresos proyectados del mes anterior que aún no fueron migrados
-        _ip_ant = df_ip_full[
-            (df_ip_full["Periodo"] == m_ant) & (df_ip_full["Año"] == a_ant)
-        ] if not df_ip_full.empty else pd.DataFrame()
-        _total_ip_ant = float(_ip_ant["Valor Proyectado"].sum()) if not _ip_ant.empty else 0.0
-        _it_ant  = _sal_ant + _nom_ant + _otr_ant  # Ingresos Proyectados ya NO suman al Saldo a Favor
         _periodo_key_ant = f"{m_ant}_{a_ant}"
         _, _, _vpy_ant, _, s_sug, _ = calcular_bf_real(
             g_ant, _nom_ant, _otr_ant, _sal_ant,
@@ -668,38 +729,37 @@ with st.sidebar:
         )
 
     st.divider()
-    arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
 
-    val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
-    s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
-    s_in  = parse_moneda(s_txt)
+    df_sab_input = pd.DataFrame(columns=["billetera", "monto"])
+    val_s_init   = 0.0
+
+    if modo_bill == "cadena":
+        _ini_mes = cadena_bill.get(_ord_act, ({}, {}))[0]
+        s_in = float(sum(_ini_mes.values()))
+        st.text_input(
+            "Saldo Anterior", value=format_moneda(s_in), disabled=True,
+            help=f"Suma de tus billeteras al cierre de {m_ant} {a_ant}. Se calcula automáticamente."
+        )
+        df_sab_input = pd.DataFrame([
+            {"billetera": _b, "monto": float(_ini_mes.get(_b, 0.0))} for _b in lista_billeteras
+        ])
+    else:
+        arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
+        val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
+        if modo_bill == "historico":
+            s_txt = st.text_input("Saldo Anterior", value=format_moneda(val_s_init))
+            s_in  = parse_moneda(s_txt)
+        else:
+            s_in = 0.0  # en modo inicio se calcula abajo = suma de billeteras
 
     val_n_init = float(i_m_act["Nomina"].iloc[0] if not i_m_act.empty else 0.0)
     n_txt = st.text_input("Ingreso Fijo (Sueldo o Nomina)", value=format_moneda(val_n_init))
     n_in  = parse_moneda(n_txt)
 
-    # ── Lista de billeteras del usuario ───────────────────
-    lista_billeteras = df_b_full["nombre"].tolist() if not df_b_full.empty else []
-    opciones_bill    = [""] + lista_billeteras
+    bill_nomina = ""
 
-    # ── Determinar si billeteras están activas para este periodo ──
-    _bill_desde_p = cfg_usuario.get("billeteras_desde_periodo", None)
-    _bill_desde_a = cfg_usuario.get("billeteras_desde_anio", None)
-    if _bill_desde_p and _bill_desde_a:
-        _idx_act  = meses_lista.index(mes_s)   if mes_s   in meses_lista else 0
-        _idx_desd = meses_lista.index(_bill_desde_p) if _bill_desde_p in meses_lista else 0
-        modulo_billeteras_activo = (
-            int(anio_s) > int(_bill_desde_a) or
-            (int(anio_s) == int(_bill_desde_a) and _idx_act >= _idx_desd)
-        )
-    else:
-        modulo_billeteras_activo = False
-
-    bill_nomina  = ""
-    df_sab_input = pd.DataFrame(columns=["billetera","monto"])
-
-    if modulo_billeteras_activo and lista_billeteras:
-        # Billetera del ingreso fijo
+    if modulo_billeteras_activo:
+        # Billetera del ingreso fijo (obligatoria, preseleccionada la por defecto)
         _bill_nom_saved = ""
         if not i_m_act.empty and "Billetera" in i_m_act.columns:
             _bill_nom_saved = str(i_m_act["Billetera"].iloc[0] or "")
@@ -711,51 +771,45 @@ with st.sidebar:
             key="sel_bill_nomina"
         )
 
-        # ── Saldo inicial por billetera ───────────────────
-        with st.expander("💳 Saldo por billetera", expanded=True):
-            st.caption("Digita el saldo actual de cada billetera.")
-
-            # Leer saldos guardados para el mes actual
-            _sab_mes = df_sab_full[
-                (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
-            ] if not df_sab_full.empty else pd.DataFrame()
-            _sab_dict = {}
-            if not _sab_mes.empty:
-                for _, _r in _sab_mes.iterrows():
-                    _b = str(_r.get("billetera") or _r.get("Billetera","")).strip()
-                    _sab_dict[_b] = float(_r.get("monto") or _r.get("Monto", 0) or 0)
-
-            # ── FIX: Si el mes actual no tiene saldos guardados y "Arrastrar"
-            #    está ON, calcular saldos finales del mes anterior como sugerencia ──
-            if not _sab_dict and arr_on and lista_billeteras:
-                _sab_ant_mes = df_sab_full[
-                    (df_sab_full["Periodo"] == m_ant) & (df_sab_full["Año"] == a_ant)
-                ] if not df_sab_full.empty else pd.DataFrame()
-                _sab_ant_existe = not _sab_ant_mes.empty
-
-                if _sab_ant_existe:
-                    # Calcular saldo real final del mes anterior por billetera
-                    _df_transf_ant = cargar_transferencias(supabase, u_id, token, m_ant, a_ant)
-                    _saldos_fin_ant = calcular_saldo_billeteras(
-                        df_g_full, df_i_full, df_oi_full,
-                        df_sab_full, lista_billeteras, m_ant, a_ant,
-                        df_transferencias=_df_transf_ant
-                    )
-                    if any(v != 0 for v in _saldos_fin_ant.values()):
-                        _sab_dict = {b: _saldos_fin_ant.get(b, 0.0) for b in lista_billeteras}
-                        st.caption(f"💡 Saldos arrastrados de {m_ant} {a_ant}")
-
-            sab_rows = []
-            _total_dist = 0.0
-            for _b in lista_billeteras:
-                _m = _sab_dict.get(_b, 0.0)
-                _m_new = st.number_input(
-                    f"{_b}", value=_m, step=1000.0,
-                    format="%.0f", key=f"sab_{_b}_{mes_s}_{anio_s}"
+        if modo_bill == "cadena":
+            with st.expander("💳 Saldo inicial por billetera", expanded=False):
+                st.caption(f"🔗 Arrastrado automáticamente del cierre de {m_ant} {a_ant}.")
+                for _b in lista_billeteras:
+                    st.markdown(f"**{_b}** · {format_moneda(_ini_mes.get(_b, 0.0))}")
+                st.caption(
+                    "¿No cuadra con tu banco? Registra un movimiento **AJUSTE** "
+                    "(ingreso adicional o gasto pagado) en esa billetera."
                 )
-                sab_rows.append({"billetera": _b, "monto": _m_new})
-                _total_dist += _m_new
-            df_sab_input = pd.DataFrame(sab_rows)
+        else:
+            # ── MES DE INICIO: el usuario digita el saldo real de cada billetera ──
+            with st.expander("💳 Saldo inicial por billetera", expanded=True):
+                st.caption(
+                    "📍 Mes de inicio de tus billeteras. Digita el saldo real de cada una; "
+                    "los meses siguientes se calcularán solos."
+                )
+                _sab_mes = df_sab_full[
+                    (df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)
+                ] if (not df_sab_full.empty and "Periodo" in df_sab_full.columns) else pd.DataFrame()
+                _sab_dict = {}
+                if not _sab_mes.empty:
+                    for _, _r in _sab_mes.iterrows():
+                        _b = str(_r.get("billetera") or _r.get("Billetera", "")).strip()
+                        _sab_dict[_b] = _sab_dict.get(_b, 0.0) + float(_r.get("monto") or _r.get("Monto", 0) or 0)
+                if not _sab_dict:
+                    # Sin saldos guardados: todo el saldo sugerido va a la billetera por defecto
+                    _sab_dict = {bill_defecto: float(val_s_init)}
+
+                sab_rows = []
+                for _b in lista_billeteras:
+                    _m_new = st.number_input(
+                        f"{_b}", value=float(_sab_dict.get(_b, 0.0)), step=1000.0,
+                        format="%.0f", key=f"sab_{_b}_{mes_s}_{anio_s}"
+                    )
+                    sab_rows.append({"billetera": _b, "monto": _m_new})
+                df_sab_input = pd.DataFrame(sab_rows)
+
+            s_in = float(df_sab_input["monto"].sum()) if not df_sab_input.empty else 0.0
+            st.caption(f"Saldo Anterior (suma de billeteras): **{format_moneda(s_in)}**")
 
     placeholder_otros = st.empty()
 
@@ -938,30 +992,52 @@ with st.sidebar:
 
     # ── 💳 GESTIÓN DE BILLETERAS ──────────────────────────
     with st.expander("💳 Mis Billeteras"):
-        _nombres_actuales = df_b_full["nombre"].tolist() if not df_b_full.empty else []
+        _nombres_actuales = lista_billeteras
 
         st.markdown(
             '<p style="color:#fca311;font-weight:800;font-size:0.78rem;'
             'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:2px">'
             'Módulo Billeteras</p>', unsafe_allow_html=True
         )
-        if modulo_billeteras_activo:
-            st.caption(f"✅ Activo desde {_bill_desde_p} {_bill_desde_a}")
-            if st.button("🔴 Desactivar billeteras", key="btn_desact_bill", use_container_width=True):
-                guardar_config(supabase, u_id, token,
-                               billeteras_desde_periodo=None,
-                               billeteras_desde_anio=None)
-                st.rerun()
+        if ord_inicio_bill is not None:
+            _m_ini = meses_lista[ord_inicio_bill % 12]
+            _a_ini = ord_inicio_bill // 12
+            st.caption(f"📍 Mes de inicio: **{_m_ini} {_a_ini}**. Desde ahí, cada mes arranca con el saldo final del anterior.")
         else:
-            st.caption(f"Inactivo para {mes_s} {anio_s}. Al activar, aplica a este mes y los siguientes.")
-            if _nombres_actuales:
-                if st.button(f"🟢 Activar desde {mes_s} {anio_s}", key="btn_act_bill", use_container_width=True):
+            st.caption("📍 Aún no hay mes de inicio. Se fijará al guardar tu primer mes.")
+        if bill_defecto:
+            st.caption(f"⭐ Billetera por defecto: **{bill_defecto}**")
+
+        # ── Reiniciar la cadena desde el mes que se está viendo ──
+        if ord_inicio_bill is not None and _ord_act != ord_inicio_bill:
+            _conf_ini = st.checkbox(
+                f"Reiniciar la cadena desde {mes_s} {anio_s}",
+                key="chk_fijar_inicio_bill",
+                help="Úsalo solo para empezar de cero con saldos reales del banco. "
+                     "Los meses anteriores quedarán como histórico."
+            )
+            if st.button(f"📍 Fijar {mes_s} {anio_s} como inicio", key="btn_fijar_inicio_bill",
+                         use_container_width=True, disabled=not _conf_ini):
+                try:
+                    supabase.postgrest.auth(token)
+                    _tiene_sab_mes = (
+                        not df_sab_full.empty and "Periodo" in df_sab_full.columns and
+                        ((df_sab_full["Periodo"] == mes_s) & (df_sab_full["Año"] == anio_s)).any()
+                    )
+                    # Si el mes no tiene saldos guardados, se toman los que se ven hoy
+                    if not _tiene_sab_mes and not df_sab_input.empty:
+                        for _, _rs in df_sab_input.iterrows():
+                            supabase.table("saldo_anterior_billetera").insert({
+                                "usuario_id": str(u_id), "periodo": str(mes_s),
+                                "anio": int(anio_s), "billetera": str(_rs["billetera"]),
+                                "monto": float(_rs["monto"] or 0)
+                            }).execute()
                     guardar_config(supabase, u_id, token,
                                    billeteras_desde_periodo=mes_s,
                                    billeteras_desde_anio=int(anio_s))
                     st.rerun()
-            else:
-                st.warning("Primero crea al menos una billetera.")
+                except Exception as _e_ini:
+                    st.error(f"❌ Error: {_e_ini}")
 
         st.markdown("---")
 
@@ -969,14 +1045,17 @@ with st.sidebar:
             st.markdown("**Billeteras registradas:**")
             for _bn in _nombres_actuales:
                 _col_n, _col_x = st.columns([5, 1])
-                _col_n.markdown(f"💳 {_bn}")
-                if _col_x.button("🗑", key=f"del_bill_{_bn}", help=f"Eliminar {_bn}"):
-                    _lista_nueva = [x for x in _nombres_actuales if x != _bn]
-                    if guardar_billeteras(supabase, token, u_id, _lista_nueva):
-                        st.rerun()
+                _col_n.markdown(f"💳 {_bn}" + (" ⭐" if _bn == bill_defecto else ""))
+                if len(_nombres_actuales) > 1:
+                    if _col_x.button("🗑", key=f"del_bill_{_bn}", help=f"Eliminar {_bn}"):
+                        _lista_nueva = [x for x in _nombres_actuales if x != _bn]
+                        if guardar_billeteras(supabase, token, u_id, _lista_nueva):
+                            st.rerun()
+            if len(_nombres_actuales) == 1:
+                st.caption("Debes tener al menos una billetera.")
+            else:
+                st.caption("Si eliminas una billetera, su saldo y movimientos pasan a la billetera por defecto ⭐.")
             st.markdown("---")
-        else:
-            st.caption("Aún no tienes billeteras.")
 
         _nueva_bill = st.text_input(
             "Nueva billetera",
@@ -1386,6 +1465,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
     if modulo_billeteras_activo and lista_billeteras:
         config_mov["Billetera Pago"] = st.column_config.SelectboxColumn(
             "💳 Billetera", options=opciones_bill, width="medium",
+            default=bill_defecto,
             help="Billetera con la que pagas este gasto"
         )
 
@@ -1399,9 +1479,9 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
     ).sort_values(["Categoría", "Fecha Pago"], ascending=[True, False], na_position="last").reset_index(drop=True)
 
     if modulo_billeteras_activo and lista_billeteras and "Billetera Pago" in df_base_mov.columns:
-        df_base_mov["Billetera Pago"] = df_base_mov["Billetera Pago"].astype(object).where(
-            df_base_mov["Billetera Pago"].notna(), ""
-        )
+        # Movimientos sin billetera (o con una eliminada) → billetera por defecto
+        _bp = df_base_mov["Billetera Pago"].astype(object)
+        df_base_mov["Billetera Pago"] = _bp.where(_bp.isin(lista_billeteras), bill_defecto).astype(object)
 
     # ── 📋 COPIAR AL REGISTRAR ────────────────────────────────
     if not df_ed_proy_clean.empty:
@@ -1414,14 +1494,17 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
                 cat_proy   = str(proy_row.get("Categoría", ""))
                 val_proy   = float(proy_row.get("Valor Referencia", 0) or 0)
                 if desc_proy.upper() not in descripciones_existentes:
-                    filas_nuevas.append({
+                    _fila_n = {
                         "Categoría":            cat_proy,
                         "Descripción":          desc_proy,
                         "Monto":                val_proy,
                         "Presupuesto Asociado": desc_proy,
                         "Pagado":               False,
                         "Fecha Pago":           pd.NaT,
-                    })
+                    }
+                    if "Billetera Pago" in df_base_mov.columns:
+                        _fila_n["Billetera Pago"] = bill_defecto
+                    filas_nuevas.append(_fila_n)
                 else:
                     mask = df_base_mov["Descripción"].str.strip().str.upper() == desc_proy.upper()
                     df_base_mov.loc[mask & (df_base_mov["Monto"].fillna(0) == 0), "Monto"] = val_proy
@@ -1591,11 +1674,14 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
                 for _, _row_oi in _oi_bd.iterrows():
                     _d2 = str(_row_oi.get("Descripción","")).strip()
                     _m2 = float(_row_oi.get("Monto", 0) or 0)
+                    _b2 = str(_row_oi.get("Billetera","") or "").strip()
+                    if _b2 in ("nan", "None"):
+                        _b2 = ""
                     if _d2:
                         supabase.table("otros_ingresos").insert({
                             "anio": int(anio_s), "periodo": str(mes_s),
                             "descripcion": _d2, "monto": _m2,
-                            "billetera": str(_row_oi.get("Billetera","") or "") or None,
+                            "billetera": _b2 or (bill_defecto or None),
                             "usuario_id": str(u_id)
                         }).execute()
             except Exception as _e:
@@ -1609,12 +1695,14 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
                 _n_a = float(_i_bd["Nomina"].iloc[0]) if not _i_bd.empty else 0.0
                 _s_a = float(_i_bd["SaldoAnterior"].iloc[0]) if not _i_bd.empty else s_in
                 _o_a = float(_i_bd["Otros"].iloc[0]) if not _i_bd.empty and "Otros" in _i_bd.columns else 0.0
-                _b_a = str(_i_bd["Billetera"].iloc[0]) if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
+                _b_a = str(_i_bd["Billetera"].iloc[0] or "") if not _i_bd.empty and "Billetera" in _i_bd.columns else ""
+                if _b_a in ("nan", "None"):
+                    _b_a = ""
                 supabase.table("ingresos_base").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
                 supabase.table("ingresos_base").insert({
                     "anio": int(anio_s), "periodo": str(mes_s),
                     "saldo_anterior": _s_a, "nomina": _n_a + _suma_fijo,
-                    "otros": _o_a, "billetera": _b_a or None,
+                    "otros": _o_a, "billetera": _b_a or (bill_defecto or None),
                     "usuario_id": str(u_id)
                 }).execute()
             except Exception as _e:
@@ -1634,9 +1722,14 @@ with st.expander("💰 Ingresos Adicionales", expanded=True):
     if modulo_billeteras_activo and lista_billeteras:
         _oi_config["Billetera"] = st.column_config.SelectboxColumn(
             "💳 Billetera", options=opciones_bill, width="medium",
+            default=bill_defecto,
             help="Cuenta donde recibes este ingreso"
         )
     _oi_base = df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True)
+    if "Billetera" in _oi_base.columns:
+        # Ingresos sin billetera (o con una eliminada) → billetera por defecto
+        _bo = _oi_base["Billetera"].astype(object)
+        _oi_base["Billetera"] = _bo.where(_bo.isin(lista_billeteras), bill_defecto).astype(object)
     _oi_base["Monto"] = _oi_base["Monto"].apply(_fmt_miles).astype(object)
     df_ed_oi = st.data_editor(
         _oi_base,
@@ -1754,43 +1847,32 @@ st.divider()
 
 # ══════════════════════════════════════════════════════════
 # 💳 SECCIÓN BILLETERAS
+# Siempre se calcula con los datos que se ven en pantalla del mes
+# seleccionado + el saldo inicial de la cadena. Así el total de
+# billeteras coincide con el Dinero Disponible en cualquier mes.
 # ══════════════════════════════════════════════════════════
 if modulo_billeteras_activo and lista_billeteras:
-    _fecha_hoy_str = _hoy.strftime("%d/%m/%Y")
+    _es_mes_real   = (_mes_real == mes_s and _anio_real == anio_s)
+    _titulo_estado = _hoy.strftime("%d/%m/%Y") if _es_mes_real else f"cierre de {mes_s} {anio_s}"
 
-    with st.expander(f"💳 Estado de Billeteras — {_fecha_hoy_str}", expanded=True):
+    with st.expander(f"💳 Estado de Billeteras — {_titulo_estado}", expanded=True):
 
-        if _mes_real == mes_s and _anio_real == anio_s:
-            # Estamos viendo el mes real → usar los datos en edición (incluye cambios sin guardar)
-            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-            _df_g_calc  = df_ed_g.copy()
-            _df_g_calc["Periodo"] = mes_s
-            _df_g_calc["Año"]     = anio_s
-            if not _df_i_calc.empty:
-                _df_i_calc.loc[_df_i_calc.index[0], "Nomina"]    = n_in
-                _df_i_calc.loc[_df_i_calc.index[0], "Billetera"] = bill_nomina
-            else:
-                _df_i_calc = pd.DataFrame([{
-                    "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
-                    "Billetera": bill_nomina, "SaldoAnterior": s_in
-                }])
-            _df_oi_calc = df_ed_oi.copy()
-            _df_oi_calc["Periodo"] = mes_s
-            _df_oi_calc["Año"]     = anio_s
-            _df_sab_real = df_sab_input
-            _df_transf_real = df_transferencias_full
-        else:
-            # Estamos viendo un mes diferente al real → usar datos del mes seleccionado
-            _df_i_calc  = df_i_full[(df_i_full["Periodo"]==mes_s) & (df_i_full["Año"]==anio_s)].copy()
-            _df_g_calc  = df_g_full[(df_g_full["Periodo"]==mes_s) & (df_g_full["Año"]==anio_s)].copy()
-            _df_oi_calc = df_oi_full[(df_oi_full["Periodo"]==mes_s) & (df_oi_full["Año"]==anio_s)].copy()
-            _df_sab_real = df_sab_full
-            _df_transf_real = cargar_transferencias(supabase, u_id, token, mes_s, anio_s)
+        _df_i_calc = pd.DataFrame([{
+            "Año": anio_s, "Periodo": mes_s, "Nomina": n_in,
+            "Billetera": bill_nomina or bill_defecto, "SaldoAnterior": s_in
+        }])
+        _df_g_calc = df_ed_g.copy()
+        _df_g_calc["Periodo"] = mes_s
+        _df_g_calc["Año"]     = anio_s
+        _df_oi_calc = df_ed_oi.copy()
+        _df_oi_calc["Periodo"] = mes_s
+        _df_oi_calc["Año"]     = anio_s
 
         saldos_bill = calcular_saldo_billeteras(
             _df_g_calc, _df_i_calc, _df_oi_calc,
-            _df_sab_real, lista_billeteras, mes_s, anio_s,
-            df_transferencias=_df_transf_real
+            df_sab_input, lista_billeteras, mes_s, anio_s,
+            df_transferencias=df_transferencias_full,
+            billetera_defecto=bill_defecto
         )
 
         total_bill = sum(saldos_bill.values())
@@ -1836,11 +1918,15 @@ if modulo_billeteras_activo and lista_billeteras:
             st.plotly_chart(_fig_bill, use_container_width=True)
             st.markdown('</div>', unsafe_allow_html=True)
 
-            _diff_bill = fact - total_bill
-            if abs(_diff_bill) < 1:
-                st.success(f"✅ Total billeteras coincide con Dinero Disponible: **$ {total_bill:,.0f}**")
-            else:
-                st.warning(f"⚠️ Total billeteras **$ {total_bill:,.0f}** vs Dinero Disponible **$ {fact:,.0f}** — diferencia: **$ {_diff_bill:,.0f}**")
+        # "\$" evita que Streamlit interprete los signos de pesos como fórmulas LaTeX
+        _diff_bill = fact - total_bill
+        if abs(_diff_bill) < 1:
+            st.success(f"✅ Total billeteras coincide con Dinero Disponible: **\\$ {total_bill:,.0f}**")
+        else:
+            st.warning(
+                f"⚠️ Total billeteras **\\$ {total_bill:,.0f}** vs Dinero Disponible "
+                f"**\\$ {fact:,.0f}** — diferencia: **\\$ {_diff_bill:,.0f}**"
+            )
 
 with st.expander("📝 Movimiento de Gastos", expanded=True):
 
@@ -2321,11 +2407,11 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     _errores_bill = []
     if modulo_billeteras_activo and lista_billeteras:
         if not bill_nomina:
-            _errores_bill.append("❌ El **Ingreso Fijo** no tiene billetera asignada.")
+            bill_nomina = bill_defecto
         _mov_pagados_sin_bill = df_g_limpio[
             (df_g_limpio["Pagado"].fillna(False).astype(bool)) &
             (df_g_limpio["Es Proyectado"].fillna(False).astype(bool) == False) &
-            (df_g_limpio["Billetera Pago"].fillna("").astype(str).str.strip() == "")
+            (~df_g_limpio["Billetera Pago"].fillna("").astype(str).str.strip().isin(lista_billeteras))
         ] if "Billetera Pago" in df_g_limpio.columns else pd.DataFrame()
         if not _mov_pagados_sin_bill.empty:
             _errores_bill.append(f"❌ **{len(_mov_pagados_sin_bill)} gasto(s) pagado(s)** sin billetera asignada.")
@@ -2341,7 +2427,15 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                 guardar_bd(supabase, token, u_id, mes_s, anio_s,
                            df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
                            bill_nomina=bill_nomina,
-                           df_sab_nuevo=df_sab_input)
+                           # Solo el mes de inicio guarda saldos por billetera;
+                           # los demás se calculan en cadena.
+                           df_sab_nuevo=df_sab_input if modo_bill == "inicio" else None)
+
+                # Si aún no había mes de inicio, este mes queda fijado como inicio
+                if modo_bill == "inicio" and _ord_ini_cfg is None:
+                    guardar_config(supabase, u_id, token,
+                                   billeteras_desde_periodo=mes_s,
+                                   billeteras_desde_anio=int(anio_s))
 
                 # Persistir recurrentes excluidos (eliminados por el usuario en este periodo)
                 if _nuevos_excluidos:
