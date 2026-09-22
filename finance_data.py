@@ -1,5 +1,5 @@
 """
-data.py — Carga de datos desde Supabase y cálculo de métricas financieras
+finance_data.py — Carga de datos desde Supabase y cálculo de métricas financieras
 """
 import pandas as pd
 import streamlit as st
@@ -81,7 +81,12 @@ def cargar_bd(supabase, u_id, token):
 
 # ── CARGAR / GUARDAR CONFIG DE USUARIO ───────────────────────────────────────
 def cargar_config(supabase, u_id, token):
-    """Retorna dict con configuración del usuario. Claves: billeteras_desde_periodo, billeteras_desde_anio."""
+    """
+    Retorna dict con configuración del usuario.
+    billeteras_desde_periodo / billeteras_desde_anio = MES DE INICIO de la
+    cadena de saldos por billetera (desde ahí cada mes arranca con el saldo
+    final del mes anterior).
+    """
     try:
         supabase.postgrest.auth(token)
         r = supabase.table("config_usuario").select("*").eq("usuario_id", str(u_id)).execute()
@@ -138,49 +143,106 @@ def cargar_bd_usuario(supabase, u_id, token):
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 
-# ── CALCULAR SALDO REAL POR BILLETERA ────────────────────────────────────────
-def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s, df_transferencias=None):
+# ── UTILIDADES DE PERIODO ────────────────────────────────────────────────────
+def orden_periodo(mes, anio, meses_lista):
+    """Convierte (mes, año) en un entero ordenable: año*12 + índice del mes."""
+    try:
+        return int(anio) * 12 + meses_lista.index(str(mes))
+    except (ValueError, TypeError):
+        return None
+
+
+def _resolver_billetera(nombre, lista_billeteras, billetera_defecto):
     """
-    Retorna dict {nombre_billetera: saldo_real} para el periodo dado.
-    Saldo real = saldo_anterior + ingresos_recibidos - gastos_pagados +/- transferencias
+    Devuelve la billetera a la que se asigna un movimiento.
+    Si el movimiento no tiene billetera (o tiene una que ya no existe),
+    se asigna a la billetera por defecto. Así ningún peso queda por fuera
+    y el total de billeteras siempre coincide con el Dinero Disponible.
+    """
+    b = str(nombre or "").strip()
+    if b in lista_billeteras:
+        return b
+    if billetera_defecto and billetera_defecto in lista_billeteras:
+        return billetera_defecto
+    return None
+
+
+# ── BILLETERA POR DEFECTO (billeteras obligatorias) ──────────────────────────
+def asegurar_billetera_defecto(supabase, token, u_id, nombre="EFECTIVO"):
+    """
+    Si el usuario no tiene ninguna billetera, le crea una por defecto.
+    Solo inserta (nunca borra) y solo si la consulta confirma que no hay
+    billeteras, para no afectar datos ante un error de carga.
+    Retorna True si creó la billetera.
+    """
+    try:
+        supabase.postgrest.auth(token)
+        r = supabase.table("billeteras").select("id").eq("usuario_id", str(u_id)).limit(1).execute()
+        if r.data:
+            return False
+        supabase.table("billeteras").insert({
+            "usuario_id": str(u_id),
+            "nombre":     nombre
+        }).execute()
+        return True
+    except Exception:
+        return False
+
+
+# ── CALCULAR SALDO REAL POR BILLETERA (un mes) ───────────────────────────────
+def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s, anio_s,
+                              df_transferencias=None, billetera_defecto=""):
+    """
+    Retorna dict {nombre_billetera: saldo_final} para el periodo dado.
+    Saldo final = saldo inicial + ingresos recibidos - gastos pagados +/- transferencias
     Solo cuenta movimientos PAGADOS en gastos.
+    Movimientos sin billetera se asignan a la billetera por defecto.
     """
     saldos = {b: 0.0 for b in lista_billeteras}
     if not lista_billeteras:
         return saldos
 
-    # 1. Saldo anterior distribuido por billetera
-    if not df_sab.empty:
+    def _res(n):
+        return _resolver_billetera(n, lista_billeteras, billetera_defecto)
+
+    # 1. Saldo inicial por billetera
+    if df_sab is not None and not df_sab.empty:
         # df_sab puede venir como tabla completa de BD (con Periodo/Año)
-        # o como df_sab_input local (solo columnas billetera/monto sin filtrar)
+        # o ya filtrado (solo columnas billetera/monto)
         if "Periodo" in df_sab.columns and "Año" in df_sab.columns:
             filtro = (df_sab["Periodo"] == mes_s) & (df_sab["Año"] == anio_s)
             _df_sab_iter = df_sab[filtro]
         else:
-            _df_sab_iter = df_sab  # ya viene filtrado por periodo desde el sidebar
+            _df_sab_iter = df_sab
         for _, row in _df_sab_iter.iterrows():
-            b = str(row.get("billetera") or row.get("Billetera", "")).strip()
-            if b in saldos:
+            b = _res(row.get("billetera") or row.get("Billetera", ""))
+            if b:
                 saldos[b] += float(row.get("monto") or row.get("Monto", 0) or 0)
 
     # 2. Ingreso fijo (nómina) del mes
-    if not df_i.empty:
+    if df_i is not None and not df_i.empty and "Periodo" in df_i.columns:
         filtro_i = (df_i["Periodo"] == mes_s) & (df_i["Año"] == anio_s)
         for _, row in df_i[filtro_i].iterrows():
-            b = str(row.get("Billetera", "") or "").strip()
-            if b in saldos:
-                saldos[b] += float(row.get("Nomina", 0) or 0)
+            _nom = float(row.get("Nomina", 0) or 0)
+            if _nom == 0:
+                continue
+            b = _res(row.get("Billetera", ""))
+            if b:
+                saldos[b] += _nom
 
     # 3. Otros ingresos del mes
-    if not df_oi.empty:
+    if df_oi is not None and not df_oi.empty and "Periodo" in df_oi.columns:
         filtro_oi = (df_oi["Periodo"] == mes_s) & (df_oi["Año"] == anio_s)
         for _, row in df_oi[filtro_oi].iterrows():
-            b = str(row.get("Billetera", "") or "").strip()
-            if b in saldos:
-                saldos[b] += float(row.get("Monto", 0) or 0)
+            _m = float(row.get("Monto", 0) or 0)
+            if _m == 0:
+                continue
+            b = _res(row.get("Billetera", ""))
+            if b:
+                saldos[b] += _m
 
     # 4. Gastos PAGADOS del mes (restan)
-    if not df_g.empty:
+    if df_g is not None and not df_g.empty and "Periodo" in df_g.columns:
         filtro_g = (
             (df_g["Periodo"] == mes_s) &
             (df_g["Año"] == anio_s) &
@@ -188,22 +250,99 @@ def calcular_saldo_billeteras(df_g, df_i, df_oi, df_sab, lista_billeteras, mes_s
             (df_g["Es Proyectado"].fillna(False).astype(bool) == False)
         )
         for _, row in df_g[filtro_g].iterrows():
-            b = str(row.get("Billetera Pago", "") or "").strip()
-            if b in saldos:
-                saldos[b] -= float(row.get("Monto", 0) or 0)
+            _m = float(row.get("Monto", 0) or 0)
+            if _m == 0:
+                continue
+            b = _res(row.get("Billetera Pago", ""))
+            if b:
+                saldos[b] -= _m
 
     # 5. Transferencias entre billeteras (neutrales para ingresos/egresos)
     if df_transferencias is not None and not df_transferencias.empty:
         for _, row in df_transferencias.iterrows():
-            origen  = str(row.get("billetera_origen",  "")).strip()
-            destino = str(row.get("billetera_destino", "")).strip()
             monto_t = float(row.get("monto", 0) or 0)
-            if origen in saldos:
+            origen  = _res(row.get("billetera_origen",  ""))
+            destino = _res(row.get("billetera_destino", ""))
+            if origen:
                 saldos[origen]  -= monto_t
-            if destino in saldos:
+            if destino:
                 saldos[destino] += monto_t
 
     return saldos
+
+
+# ── CADENA DE SALDOS MES A MES ───────────────────────────────────────────────
+def calcular_cadena_billeteras(df_g, df_i, df_oi, df_sab, df_transferencias_todas,
+                               lista_billeteras, meses_lista, hasta_ord,
+                               ord_inicio=None, billetera_defecto=""):
+    """
+    Calcula la cadena de saldos por billetera desde el MES DE INICIO hasta hasta_ord.
+
+      - Mes de inicio: saldo inicial = lo guardado en saldo_anterior_billetera
+        para ese mes (lo que el usuario digitó).
+      - Meses siguientes: saldo inicial = saldo FINAL del mes anterior
+        (nunca se lee una foto guardada, así nada se desincroniza).
+
+    Retorna (ord_inicio, cadena) donde cadena = {ord: (saldos_iniciales, saldos_finales)}.
+    Si no hay mes de inicio, retorna (None, {}).
+    """
+    if not lista_billeteras:
+        return None, {}
+
+    _tiene_sab = (df_sab is not None and not df_sab.empty
+                  and "Periodo" in df_sab.columns and "Año" in df_sab.columns)
+
+    if ord_inicio is None:
+        if not _tiene_sab:
+            return None, {}
+        _ords = [orden_periodo(p, a, meses_lista) for p, a in zip(df_sab["Periodo"], df_sab["Año"])]
+        _ords = [o for o in _ords if o is not None]
+        if not _ords:
+            return None, {}
+        ord_inicio = min(_ords)
+
+    # Límite de seguridad: máximo 10 años de cadena
+    ord_fin = min(max(int(hasta_ord), ord_inicio), ord_inicio + 120)
+
+    _tr_ok = (df_transferencias_todas is not None and not df_transferencias_todas.empty
+              and "periodo" in df_transferencias_todas.columns)
+
+    cadena = {}
+    saldos_prev = None
+    for o in range(ord_inicio, ord_fin + 1):
+        mes  = meses_lista[o % 12]
+        anio = o // 12
+
+        if o == ord_inicio:
+            ini = {b: 0.0 for b in lista_billeteras}
+            if _tiene_sab:
+                _filas = df_sab[(df_sab["Periodo"] == mes) & (df_sab["Año"] == anio)]
+                for _, r in _filas.iterrows():
+                    b = _resolver_billetera(r.get("billetera") or r.get("Billetera", ""),
+                                            lista_billeteras, billetera_defecto)
+                    if b:
+                        ini[b] += float(r.get("monto") or r.get("Monto", 0) or 0)
+        else:
+            ini = dict(saldos_prev)
+
+        df_ini = pd.DataFrame([{"billetera": b, "monto": v} for b, v in ini.items()])
+
+        if _tr_ok:
+            _tr_mes = df_transferencias_todas[
+                (df_transferencias_todas["periodo"] == mes) &
+                (pd.to_numeric(df_transferencias_todas["anio"], errors="coerce") == anio)
+            ]
+        else:
+            _tr_mes = None
+
+        fin = calcular_saldo_billeteras(
+            df_g, df_i, df_oi, df_ini, lista_billeteras, mes, anio,
+            df_transferencias=_tr_mes, billetera_defecto=billetera_defecto
+        )
+        cadena[o] = (ini, fin)
+        saldos_prev = fin
+
+    return ord_inicio, cadena
 
 
 # ── CALCULAR MÉTRICAS ─────────────────────────────────────────────────────────
@@ -286,9 +425,11 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s,
                df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
                bill_nomina="", df_sab_nuevo=None):
     """
-    Parámetros nuevos:
-      bill_nomina   — nombre de billetera asignada al ingreso fijo
-      df_sab_nuevo  — DataFrame con columnas [billetera, monto] del saldo anterior
+      bill_nomina   — billetera asignada al ingreso fijo
+      df_sab_nuevo  — DataFrame [billetera, monto] con el saldo inicial por billetera.
+                      Solo se pasa en el MES DE INICIO. En los demás meses es None
+                      y cualquier foto vieja de ese mes se elimina (el saldo inicial
+                      se calcula en cadena desde el mes anterior).
     """
     supabase.postgrest.auth(token)
 
@@ -345,19 +486,18 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s,
         "usuario_id": str(u_id)
     }).execute()
 
-    # Insertar saldo anterior por billetera
+    # Insertar saldo inicial por billetera (solo mes de inicio).
+    # Se guardan también las billeteras en 0 para que el mes de inicio
+    # nunca "desaparezca" de la tabla.
     if df_sab_nuevo is not None and not df_sab_nuevo.empty:
-        sab_db = []
         for _, row in df_sab_nuevo.iterrows():
             b = str(row.get("billetera","")).strip()
             m = float(row.get("monto", 0) or 0)
-            if b and m != 0:
-                sab_db.append({
+            if b:
+                supabase.table("saldo_anterior_billetera").insert({
                     "usuario_id": str(u_id), "periodo": str(mes_s),
                     "anio": int(anio_s), "billetera": b, "monto": m
-                })
-        if sab_db:
-            supabase.table("saldo_anterior_billetera").insert(sab_db).execute()
+                }).execute()
 
 
 # ── GUARDAR BILLETERAS ────────────────────────────────────────────────────────
@@ -382,6 +522,10 @@ def guardar_billeteras(supabase, token, u_id, nombres_lista):
 
 
 # ── TRANSFERENCIAS ENTRE BILLETERAS ──────────────────────────────────────────
+_COLS_TRANSF = ["id","usuario_id","anio","periodo","billetera_origen",
+                "billetera_destino","monto","descripcion","created_at"]
+
+
 def cargar_transferencias(supabase, u_id, token, mes_s, anio_s):
     """Retorna DataFrame con transferencias del periodo."""
     try:
@@ -397,13 +541,29 @@ def cargar_transferencias(supabase, u_id, token, mes_s, anio_s):
             df = pd.DataFrame(r.data)
             df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
             return df
-        return pd.DataFrame(columns=["id","usuario_id","anio","periodo",
-                                     "billetera_origen","billetera_destino",
-                                     "monto","descripcion","created_at"])
+        return pd.DataFrame(columns=_COLS_TRANSF)
     except Exception as e:
-        import streamlit as st
         st.error(f"Error al cargar transferencias: {e}")
-        return pd.DataFrame()
+        return pd.DataFrame(columns=_COLS_TRANSF)
+
+
+def cargar_transferencias_todas(supabase, u_id, token):
+    """Retorna DataFrame con TODAS las transferencias del usuario (para la cadena de saldos)."""
+    try:
+        supabase.postgrest.auth(token)
+        r = (supabase.table("transferencias_billeteras")
+             .select("*")
+             .eq("usuario_id", u_id)
+             .execute())
+        if r.data:
+            df = pd.DataFrame(r.data)
+            df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
+            df["anio"]  = pd.to_numeric(df["anio"],  errors="coerce").fillna(0).astype(int)
+            return df
+        return pd.DataFrame(columns=_COLS_TRANSF)
+    except Exception as e:
+        st.error(f"Error al cargar transferencias: {e}")
+        return pd.DataFrame(columns=_COLS_TRANSF)
 
 
 def guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
@@ -422,7 +582,6 @@ def guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
         }).execute()
         return True
     except Exception as e:
-        import streamlit as st
         st.error(f"Error al guardar transferencia: {e}")
         return False
 
@@ -435,64 +594,6 @@ def eliminar_transferencia(supabase, u_id, token, transfer_id):
             "id", transfer_id).eq("usuario_id", str(u_id)).execute()
         return True
     except Exception as e:
-        import streamlit as st
-        st.error(f"Error al eliminar transferencia: {e}")
-        return False
-# ── TRANSFERENCIAS ENTRE BILLETERAS ──────────────────────────────────────────
-def cargar_transferencias(supabase, u_id, token, mes_s, anio_s):
-    """Retorna DataFrame con transferencias del periodo."""
-    try:
-        supabase.postgrest.auth(token)
-        r = (supabase.table("transferencias_billeteras")
-             .select("*")
-             .eq("usuario_id", u_id)
-             .eq("anio", anio_s)
-             .eq("periodo", mes_s)
-             .order("created_at")
-             .execute())
-        if r.data:
-            df = pd.DataFrame(r.data)
-            df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
-            return df
-        return pd.DataFrame(columns=["id","usuario_id","anio","periodo",
-                                     "billetera_origen","billetera_destino",
-                                     "monto","descripcion","created_at"])
-    except Exception as e:
-        import streamlit as st
-        st.error(f"Error al cargar transferencias: {e}")
-        return pd.DataFrame()
-
-
-def guardar_transferencia(supabase, u_id, token, mes_s, anio_s,
-                          origen, destino, monto, descripcion=""):
-    """Inserta una transferencia entre billeteras."""
-    try:
-        supabase.postgrest.auth(token)
-        supabase.table("transferencias_billeteras").insert({
-            "usuario_id":        str(u_id),
-            "anio":              int(anio_s),
-            "periodo":           str(mes_s),
-            "billetera_origen":  origen,
-            "billetera_destino": destino,
-            "monto":             float(monto),
-            "descripcion":       descripcion or None,
-        }).execute()
-        return True
-    except Exception as e:
-        import streamlit as st
-        st.error(f"Error al guardar transferencia: {e}")
-        return False
-
-
-def eliminar_transferencia(supabase, u_id, token, transfer_id):
-    """Elimina una transferencia por ID."""
-    try:
-        supabase.postgrest.auth(token)
-        supabase.table("transferencias_billeteras").delete().eq(
-            "id", transfer_id).eq("usuario_id", str(u_id)).execute()
-        return True
-    except Exception as e:
-        import streamlit as st
         st.error(f"Error al eliminar transferencia: {e}")
         return False
 
@@ -520,6 +621,5 @@ def guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, df_ip_lim
                 }).execute()
         return True
     except Exception as e:
-        import streamlit as st
         st.error(f"Error al guardar ingresos proyectados: {e}")
         return False
