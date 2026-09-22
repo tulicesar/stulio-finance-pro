@@ -745,6 +745,39 @@ with st.sidebar:
             if _mask_o.any():
                 df_i_full.loc[_mask_o, "SaldoAnterior"] = float(sum(_ini_o.values()))
 
+    # ── MESES FUTUROS: Saldo Anterior = Saldo a Favor/Déficit del mes anterior ──
+    # Mes en curso y pasados → plata REAL de las billeteras (cuadra con el banco).
+    # Meses futuros         → real − obligaciones pendientes de los meses previos
+    #                         (desde el mes en curso). Equivale a arrastrar el
+    #                         Saldo a Favor mes a mes.
+    _ord_real = orden_periodo(_mes_real, _anio_real, meses_lista)
+    pend_acum_bill = {}   # ord -> (pendientes acumulados antes de ese mes, [meses])
+    if cadena_bill and _ord_real is not None:
+        _o_desde = max(_ord_real, ord_inicio_bill)
+        _o_max   = max(cadena_bill.keys())
+        if _o_desde < _o_max:
+            _acum, _meses_acum = 0.0, []
+            _gef = _gastos_efectivos_rango(_o_desde, _o_max - 1)
+            for _o in range(_o_desde, _o_max):
+                _dfm = _gef.get(_o, pd.DataFrame())
+                if not _dfm.empty:
+                    _mn, _an = meses_lista[_o % 12], _o // 12
+                    _, _, _vpy_o, _, _, _ = calcular_bf_real(
+                        _dfm, 0, 0, 0, f"{_mn}_{_an}", st.session_state["cierre_mes_por_periodo"]
+                    )
+                    if _vpy_o > 0:
+                        _acum += _vpy_o
+                        _meses_acum.append(_mn[:3])
+                pend_acum_bill[_o + 1] = (_acum, list(_meses_acum))
+
+            # Reflejarlo también en reportes / PDF de meses futuros
+            if not df_i_full.empty:
+                for _o, (_pa, _) in pend_acum_bill.items():
+                    if _o in cadena_bill:
+                        _mask_o = (df_i_full["Periodo"] == meses_lista[_o % 12]) & (df_i_full["Año"] == _o // 12)
+                        if _mask_o.any():
+                            df_i_full.loc[_mask_o, "SaldoAnterior"] = float(sum(cadena_bill[_o][0].values())) - _pa
+
     if not lista_billeteras:
         modo_bill = "historico"
     elif ord_inicio_bill is None or _ord_act == ord_inicio_bill:
@@ -782,38 +815,25 @@ with st.sidebar:
     _meses_pend_prev   = []
 
     if modo_bill == "cadena":
-        _ini_mes = cadena_bill.get(_ord_act, ({}, {}))[0]
-        s_in = float(sum(_ini_mes.values()))
-        st.text_input(
-            "Saldo Anterior", value=format_moneda(s_in), disabled=True,
-            help=f"Suma de tus billeteras al cierre de {m_ant} {a_ant}. Se calcula automáticamente."
-        )
+        _ini_mes   = cadena_bill.get(_ord_act, ({}, {}))[0]
+        s_in_real  = float(sum(_ini_mes.values()))
+        pendientes_previos, _meses_pend_prev = pend_acum_bill.get(_ord_act, (0.0, []))
+        s_in = s_in_real - pendientes_previos
+        if pendientes_previos > 0:
+            _help_sa = (f"Saldo a Favor proyectado de {m_ant} {a_ant}: plata real "
+                        f"{format_moneda(s_in_real)} menos {format_moneda(pendientes_previos)} "
+                        f"de obligaciones pendientes de {', '.join(_meses_pend_prev)}.")
+        else:
+            _help_sa = f"Suma de tus billeteras al cierre de {m_ant} {a_ant}. Se calcula automáticamente."
+        st.text_input("Saldo Anterior", value=format_moneda(s_in), disabled=True, help=_help_sa)
+        if pendientes_previos > 0:
+            st.caption(
+                f"🔮 Proyectado: Saldo a Favor de {m_ant}. "
+                f"Real hoy en billeteras: **{format_moneda(s_in_real)}**"
+            )
         df_sab_input = pd.DataFrame([
             {"billetera": _b, "monto": float(_ini_mes.get(_b, 0.0))} for _b in lista_billeteras
         ])
-
-        # ── PROYECCIÓN: pendientes de meses anteriores (desde el mes real) ──
-        # Si miras un mes futuro, lo que aún debes pagar en los meses previos
-        # se descuenta para proyectar cuánto te va a quedar.
-        _ord_real = orden_periodo(_mes_real, _anio_real, meses_lista)
-        if _ord_real is not None and _ord_act > _ord_real:
-            _o_desde = max(_ord_real, ord_inicio_bill)
-            if _o_desde < _ord_act:
-                for _o, _dfm in _gastos_efectivos_rango(_o_desde, _ord_act - 1).items():
-                    if _dfm.empty:
-                        continue
-                    _mn, _an = meses_lista[_o % 12], _o // 12
-                    _, _, _vpy_o, _, _, _ = calcular_bf_real(
-                        _dfm, 0, 0, 0, f"{_mn}_{_an}", st.session_state["cierre_mes_por_periodo"]
-                    )
-                    if _vpy_o > 0:
-                        pendientes_previos += _vpy_o
-                        _meses_pend_prev.append(_mn[:3])
-        if pendientes_previos > 0:
-            st.caption(
-                f"🔮 Proyectado tras pagar pendientes de {', '.join(_meses_pend_prev)}: "
-                f"**{format_moneda(s_in - pendientes_previos)}**"
-            )
     else:
         arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
         val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
@@ -1880,8 +1900,7 @@ label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 # ── SALDO PROYECTADO ──
 #   = Saldo a Favor del mes
 #   + Ingresos Proyectados aún no migrados
-#   − Obligaciones pendientes de los meses anteriores (solo al mirar meses futuros)
-saldo_proyectado = bf + float(_total_ip) - float(pendientes_previos)
+saldo_proyectado = bf + float(_total_ip)
 label_saldo_proy = "SALDO PROYECTADO" if saldo_proyectado >= 0 else "DÉFICIT PROYECTADO"
 
 # ── BANNER DATOS PENDIENTES ──────────────────────────────
@@ -1909,12 +1928,8 @@ for i, (l, v, col) in enumerate(tarj):
         unsafe_allow_html=True
     )
 
-if _total_ip > 0 or pendientes_previos > 0:
-    _det_proy = []
-    if pendientes_previos > 0:
-        _det_proy.append(f"descontando $ {pendientes_previos:,.0f} pendientes de {', '.join(_meses_pend_prev)}")
-    if _total_ip > 0:
-        _det_proy.append(f"sumando $ {_total_ip:,.0f} de Ingresos Proyectados")
+if _total_ip > 0:
+    _det_proy = [f"sumando $ {_total_ip:,.0f} de Ingresos Proyectados"]
     st.markdown(
         f'<div class="card" style="border:1px dashed #999; opacity:0.85;">'
         f'<div class="card-label">{label_saldo_proy} AL CIERRE DE {mes_s.upper()} '
@@ -2000,7 +2015,13 @@ if modulo_billeteras_activo and lista_billeteras:
 
         # "\$" evita que Streamlit interprete los signos de pesos como fórmulas LaTeX
         _diff_bill = fact - total_bill
-        if abs(_diff_bill) < 1:
+        if pendientes_previos > 0 and abs(_diff_bill + pendientes_previos) < 1:
+            st.info(
+                f"🔮 Las billeteras muestran la plata real arrastrada (**\\$ {total_bill:,.0f}**). "
+                f"El Dinero Disponible proyectado (**\\$ {fact:,.0f}**) ya descuenta "
+                f"**\\$ {pendientes_previos:,.0f}** de obligaciones pendientes de {', '.join(_meses_pend_prev)}."
+            )
+        elif abs(_diff_bill) < 1:
             st.success(f"✅ Total billeteras coincide con Dinero Disponible: **\\$ {total_bill:,.0f}**")
         else:
             st.warning(
