@@ -638,6 +638,52 @@ def enviar_correo_extracto_proyeccion(dest_email, nombre_user, mes_s, anio_s,
         return False, str(e)
 
 
+# ── GASTOS EFECTIVOS POR MES (para proyectar meses futuros) ──
+def _gastos_efectivos_rango(o_desde, o_hasta):
+    """
+    Devuelve {ord: DataFrame de gastos} entre o_desde y o_hasta.
+    Para meses aún no guardados, propaga los recurrentes del mes anterior
+    en cascada (como hace la app al abrir el mes), para que la proyección
+    incluya arriendo, servicios, etc. de octubre, noviembre...
+    """
+    res = {}
+    _excl = st.session_state.get("recurrentes_excluidos_por_periodo", {}) or {}
+    _cols = ["Categoría","Descripción","Monto","Valor Referencia","Pagado",
+             "Movimiento Recurrente","Es Proyectado","Presupuesto Asociado","Es Referencia"]
+
+    def _db(o):
+        return df_g_full[(df_g_full["Periodo"] == meses_lista[o % 12]) &
+                         (df_g_full["Año"] == o // 12)].copy()
+
+    prev = _db(o_desde - 1)
+    for o in range(o_desde, o_hasta + 1):
+        cur = _db(o)
+        _pk = f"{meses_lista[o % 12]}_{o // 12}"
+        _ex = set(str(d).strip().upper() for d in _excl.get(_pk, []))
+        if not prev.empty and "Movimiento Recurrente" in prev.columns:
+            rec = prev[prev["Movimiento Recurrente"].fillna(False).astype(bool)].copy()
+        else:
+            rec = pd.DataFrame(columns=_cols)
+        if _ex and not rec.empty:
+            rec = rec[~rec["Descripción"].astype(str).str.strip().str.upper().isin(_ex)]
+        if not rec.empty and not cur.empty:
+            _ya = set(cur["Descripción"].astype(str).str.strip().str.upper())
+            rec = rec[~rec["Descripción"].astype(str).str.strip().str.upper().isin(_ya)]
+        if not rec.empty:
+            rec = rec.reindex(columns=_cols)
+            rec["Pagado"] = False
+            rec["Monto"]  = 0.0
+            rec["Es Proyectado"] = rec.apply(
+                lambda r: True if float(r.get("Valor Referencia", 0) or 0) > 0
+                          else bool(r.get("Es Proyectado", False)), axis=1
+            )
+            rec["Es Referencia"] = rec["Es Referencia"].fillna(False).astype(bool)
+            cur = pd.concat([cur, rec], ignore_index=True)
+        res[o] = cur
+        prev = cur
+    return res
+
+
 # --- SIDEBAR ---
 with st.sidebar:
     if os.path.exists(LOGO_SIDEBAR):
@@ -732,6 +778,8 @@ with st.sidebar:
 
     df_sab_input = pd.DataFrame(columns=["billetera", "monto"])
     val_s_init   = 0.0
+    pendientes_previos = 0.0
+    _meses_pend_prev   = []
 
     if modo_bill == "cadena":
         _ini_mes = cadena_bill.get(_ord_act, ({}, {}))[0]
@@ -743,6 +791,29 @@ with st.sidebar:
         df_sab_input = pd.DataFrame([
             {"billetera": _b, "monto": float(_ini_mes.get(_b, 0.0))} for _b in lista_billeteras
         ])
+
+        # ── PROYECCIÓN: pendientes de meses anteriores (desde el mes real) ──
+        # Si miras un mes futuro, lo que aún debes pagar en los meses previos
+        # se descuenta para proyectar cuánto te va a quedar.
+        _ord_real = orden_periodo(_mes_real, _anio_real, meses_lista)
+        if _ord_real is not None and _ord_act > _ord_real:
+            _o_desde = max(_ord_real, ord_inicio_bill)
+            if _o_desde < _ord_act:
+                for _o, _dfm in _gastos_efectivos_rango(_o_desde, _ord_act - 1).items():
+                    if _dfm.empty:
+                        continue
+                    _mn, _an = meses_lista[_o % 12], _o // 12
+                    _, _, _vpy_o, _, _, _ = calcular_bf_real(
+                        _dfm, 0, 0, 0, f"{_mn}_{_an}", st.session_state["cierre_mes_por_periodo"]
+                    )
+                    if _vpy_o > 0:
+                        pendientes_previos += _vpy_o
+                        _meses_pend_prev.append(_mn[:3])
+        if pendientes_previos > 0:
+            st.caption(
+                f"🔮 Proyectado tras pagar pendientes de {', '.join(_meses_pend_prev)}: "
+                f"**{format_moneda(s_in - pendientes_previos)}**"
+            )
     else:
         arr_on = st.toggle(f"Arrastrar saldo de {m_ant} {a_ant}", value=True)
         val_s_init = s_sug if arr_on else float(i_m_act["SaldoAnterior"].iloc[0] if not i_m_act.empty else 0.0)
@@ -1806,8 +1877,11 @@ it_total, vp, vpy, fact, bf, ahorro_p = calcular_bf_real(
 )
 label_ahorro = "SALDO A FAVOR" if bf >= 0 else "DÉFICIT"
 
-# ── SALDO PROYECTADO (incluye Ingresos Proyectados aún no migrados) ──
-saldo_proyectado = bf + float(_total_ip)
+# ── SALDO PROYECTADO ──
+#   = Saldo a Favor del mes
+#   + Ingresos Proyectados aún no migrados
+#   − Obligaciones pendientes de los meses anteriores (solo al mirar meses futuros)
+saldo_proyectado = bf + float(_total_ip) - float(pendientes_previos)
 label_saldo_proy = "SALDO PROYECTADO" if saldo_proyectado >= 0 else "DÉFICIT PROYECTADO"
 
 # ── BANNER DATOS PENDIENTES ──────────────────────────────
@@ -1835,10 +1909,16 @@ for i, (l, v, col) in enumerate(tarj):
         unsafe_allow_html=True
     )
 
-if _total_ip > 0:
+if _total_ip > 0 or pendientes_previos > 0:
+    _det_proy = []
+    if pendientes_previos > 0:
+        _det_proy.append(f"descontando $ {pendientes_previos:,.0f} pendientes de {', '.join(_meses_pend_prev)}")
+    if _total_ip > 0:
+        _det_proy.append(f"sumando $ {_total_ip:,.0f} de Ingresos Proyectados")
     st.markdown(
         f'<div class="card" style="border:1px dashed #999; opacity:0.85;">'
-        f'<div class="card-label">{label_saldo_proy} <span style="font-weight:normal;">(si se cumplen los Ingresos Proyectados)</span></div>'
+        f'<div class="card-label">{label_saldo_proy} AL CIERRE DE {mes_s.upper()} '
+        f'<span style="font-weight:normal;">({" · ".join(_det_proy)})</span></div>'
         f'<div class="card-value" style="color:#9b59b6">$ {saldo_proyectado:,.0f}</div></div>',
         unsafe_allow_html=True
     )
