@@ -8,7 +8,7 @@ import re
 
 
 ADMIN_EMAIL = "arqtulicesar@gmail.com"
-APP_URL = "https://stulio-finance-pro-7xa6pgb2ttmkdper9lwqqo.streamlit.app"
+APP_URL = "https://stulio-finance-pro.streamlit.app"
 
 
 def _validar_password(pwd):
@@ -242,14 +242,14 @@ def _procesar_accion_url(supabase):
 
             if sign_res.user:
                 try:
-                    supabase.table("usuarios").upsert({
+                    supabase_admin.table("usuarios").upsert({
                         "usuario_id":      sign_res.user.id,
                         "nombre_completo": nombre,
                     }).execute()
                 except:
                     pass
 
-                supabase.table("solicitudes_registro") \
+                r_update = supabase_admin.table("solicitudes_registro") \
                     .update({"estado": "aprobado"}) \
                     .eq("token_aprobacion", token).execute()
 
@@ -261,13 +261,15 @@ def _procesar_accion_url(supabase):
 
                 st.success(f"✅ Cuenta de **{nombre}** ({email}) aprobada.")
                 st.info("Se le envió un correo de invitación para que cree su contraseña e ingrese.")
+                if not r_update.data:
+                    st.warning("⚠️ La invitación se envió pero el estado de la solicitud no se pudo actualizar. Revísalo manualmente en la tabla.")
             else:
                 st.error("❌ No se pudo crear la cuenta en Supabase Auth.")
         except Exception as e:
             err = str(e).lower()
             if "already registered" in err or "already exists" in err:
                 st.warning(f"⚠️ El correo {email} ya tiene una cuenta registrada.")
-                supabase.table("solicitudes_registro") \
+                supabase_admin.table("solicitudes_registro") \
                     .update({"estado": "aprobado"}) \
                     .eq("token_aprobacion", token).execute()
             else:
@@ -275,7 +277,12 @@ def _procesar_accion_url(supabase):
 
     elif accion == "rechazar":
         try:
-            supabase.table("solicitudes_registro") \
+            from supabase import create_client
+            _service_key = st.secrets.get("supabase", {}).get("service_role_key", "")
+            _url          = st.secrets.get("supabase", {}).get("url", "")
+            supabase_admin = create_client(_url, _service_key)
+
+            supabase_admin.table("solicitudes_registro") \
                 .update({"estado": "rechazado"}) \
                 .eq("token_aprobacion", token).execute()
 
