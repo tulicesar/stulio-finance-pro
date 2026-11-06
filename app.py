@@ -16,7 +16,8 @@ from finance_data import (
     cargar_bd, calcular_metricas, guardar_bd, guardar_billeteras, calcular_saldo_billeteras,
     cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email,
     cargar_transferencias, cargar_transferencias_todas, guardar_transferencia, eliminar_transferencia,
-    guardar_ingresos_proyectados, calcular_cadena_billeteras, asegurar_billetera_defecto, orden_periodo
+    guardar_ingresos_proyectados, calcular_cadena_billeteras, asegurar_billetera_defecto, orden_periodo,
+    desglose_billeteras_mes, movimientos_fuera_de_mes
 )
 from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_proyeccion
 
@@ -854,7 +855,8 @@ with st.sidebar:
         _bill_nom_saved = ""
         if not i_m_act.empty and "Billetera" in i_m_act.columns:
             _bill_nom_saved = str(i_m_act["Billetera"].iloc[0] or "")
-        _bill_nom_idx = opciones_bill.index(_bill_nom_saved) if _bill_nom_saved in opciones_bill else 0
+        _bill_nom_idx = (opciones_bill.index(_bill_nom_saved) if _bill_nom_saved in opciones_bill
+                         else (opciones_bill.index(bill_defecto) if bill_defecto in opciones_bill else 0))
         bill_nomina = st.selectbox(
             "💳 Billetera del ingreso fijo",
             options=opciones_bill,
@@ -1135,8 +1137,14 @@ with st.sidebar:
         if _nombres_actuales:
             st.markdown("**Billeteras registradas:**")
             for _bn in _nombres_actuales:
-                _col_n, _col_x = st.columns([5, 1])
+                _col_n, _col_s, _col_x = st.columns([4, 1, 1])
                 _col_n.markdown(f"💳 {_bn}" + (" ⭐" if _bn == bill_defecto else ""))
+                if _bn != bill_defecto:
+                    if _col_s.button("⭐", key=f"def_bill_{_bn}", help=f"Usar {_bn} como predeterminada"):
+                        # La predeterminada es la primera de la lista: se reordena dejándola de primera
+                        _lista_nueva = [_bn] + [x for x in _nombres_actuales if x != _bn]
+                        if guardar_billeteras(supabase, token, u_id, _lista_nueva):
+                            st.rerun()
                 if len(_nombres_actuales) > 1:
                     if _col_x.button("🗑", key=f"del_bill_{_bn}", help=f"Eliminar {_bn}"):
                         _lista_nueva = [x for x in _nombres_actuales if x != _bn]
@@ -1145,7 +1153,7 @@ with st.sidebar:
             if len(_nombres_actuales) == 1:
                 st.caption("Debes tener al menos una billetera.")
             else:
-                st.caption("Si eliminas una billetera, su saldo y movimientos pasan a la billetera por defecto ⭐.")
+                st.caption("Toca ⭐ para cambiar la billetera predeterminada. Si eliminas una billetera, su saldo y movimientos pasan a la predeterminada.")
             st.markdown("---")
 
         _nueva_bill = st.text_input(
@@ -1511,7 +1519,7 @@ with st.expander("📅 Gastos / Egresos Proyectados", expanded=True):
         use_container_width=True,
         num_rows="dynamic",
         column_config=config_proy,
-        key="proy_ed",
+        key=f"proy_ed_{_periodo_key}",
         on_change=lambda: st.session_state.update({"datos_modificados": True})
     )
 
@@ -1612,7 +1620,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
         use_container_width=True,
         num_rows="dynamic",
         column_config=config_mov,
-        key="mov_ed",
+        key=f"mov_ed_{_periodo_key}",
         on_change=lambda: st.session_state.update({"datos_modificados": True})
     )
     df_ed_mov["Monto"] = df_ed_mov["Monto"].apply(_parse_miles)
@@ -1723,7 +1731,7 @@ with st.expander("📈 Ingresos Proyectados", expanded=True):
         num_rows="dynamic",
         column_config=_ip_config,
         column_order=["Migrar", "Descripción", "Valor Proyectado", "Destino Copia", "Movimiento Recurrente"],
-        key="ip_ed",
+        key=f"ip_ed_{_periodo_key}",
         on_change=lambda: st.session_state.update({"datos_modificados": True})
     )
     df_ed_ip["Valor Proyectado"] = df_ed_ip["Valor Proyectado"].apply(_parse_miles)
@@ -1826,7 +1834,7 @@ with st.expander("💰 Ingresos Adicionales", expanded=True):
         _oi_base,
         use_container_width=True, num_rows="dynamic",
         column_config=_oi_config,
-        key="oi_ed"
+        key=f"oi_ed_{_periodo_key}"
     )
     df_ed_oi["Monto"] = df_ed_oi["Monto"].apply(_parse_miles)
 
@@ -2028,6 +2036,84 @@ if modulo_billeteras_activo and lista_billeteras:
                 f"⚠️ Total billeteras **\\$ {total_bill:,.0f}** vs Dinero Disponible "
                 f"**\\$ {fact:,.0f}** — diferencia: **\\$ {_diff_bill:,.0f}**"
             )
+
+        # ══════════════════════════════════════════════════
+        # 🔍 AUDITORÍA DE SALDOS (para cuadrar con el banco)
+        # ══════════════════════════════════════════════════
+        with st.expander("🔍 Auditoría de saldos — cuadrar con el banco", expanded=False):
+            st.caption(
+                "Así calcula la app cada billetera, mes a mes, con lo que está **guardado**. "
+                "Compara el saldo final de cada mes con tu extracto bancario para encontrar "
+                "el mes exacto donde se descuadra."
+            )
+            if cadena_bill:
+                _filas_aud = []
+                for _o in sorted(cadena_bill):
+                    if _o > _ord_act:
+                        break
+                    _mn_a, _an_a = meses_lista[_o % 12], _o // 12
+                    _ini_a, _fin_a = cadena_bill[_o]
+                    _des = desglose_billeteras_mes(
+                        df_g_full, df_i_full, df_oi_full, _df_tr_todas,
+                        lista_billeteras, _mn_a, _an_a, bill_defecto
+                    )
+                    for _b in lista_billeteras:
+                        _d = _des.get(_b, {})
+                        _filas_aud.append({
+                            "Mes": f"{_mn_a[:3]} {_an_a}",
+                            "Billetera": _b,
+                            "Saldo inicial": format_moneda(_ini_a.get(_b, 0)),
+                            "+ Ingresos": format_moneda(_d.get("ingresos", 0)),
+                            "− Gastos pagados": format_moneda(_d.get("gastos", 0)),
+                            "± Transferencias": format_moneda(_d.get("transferencias", 0)),
+                            "= Saldo final": format_moneda(_fin_a.get(_b, 0)),
+                        })
+                st.dataframe(pd.DataFrame(_filas_aud), use_container_width=True, hide_index=True)
+                if st.session_state.get("datos_modificados", False):
+                    st.caption("⚠️ Tienes cambios sin guardar: esta tabla aún no los incluye.")
+            else:
+                st.info("Aún no hay cadena de saldos para auditar.")
+
+            # ── Movimientos pagados con fecha de otro mes ──
+            _fuera = movimientos_fuera_de_mes(df_g_full, meses_lista)
+            if not _fuera.empty:
+                st.markdown("**📅 Gastos pagados con fecha de otro mes**")
+                st.caption(
+                    "La app los descuenta en el mes de la hoja donde están registrados, "
+                    "pero el banco los descuenta en la fecha real. Por eso el saldo de cierre "
+                    "de cada mes no coincide con el extracto aunque el total de hoy sí cuadre. "
+                    "Si quieres que cuadre mes a mes, muévelos a la hoja del mes de su fecha."
+                )
+                _fuera_show = _fuera.copy()
+                _fuera_show["Monto"] = _fuera_show["Monto"].apply(format_moneda)
+                st.dataframe(_fuera_show, use_container_width=True, hide_index=True)
+
+            # ── Conciliación rápida con el banco ──
+            if _es_mes_real:
+                st.markdown("**🏦 Conciliación rápida**")
+                _cc1, _cc2 = st.columns(2)
+                with _cc1:
+                    _b_conc = st.selectbox("Billetera", lista_billeteras,
+                                           index=lista_billeteras.index(bill_defecto) if bill_defecto in lista_billeteras else 0,
+                                           key="conc_bill")
+                with _cc2:
+                    _real_conc = st.number_input("Saldo real hoy (banco)", min_value=0.0, step=1000.0,
+                                                 format="%.0f", key="conc_real")
+                if _real_conc > 0:
+                    _app_conc = float(saldos_bill.get(_b_conc, 0.0))
+                    _dif_conc = _real_conc - _app_conc
+                    if abs(_dif_conc) < 1:
+                        st.success(f"✅ {_b_conc} cuadra con el banco.")
+                    elif _dif_conc > 0:
+                        st.warning(
+                            f"El banco tiene **\\$ {_dif_conc:,.0f} más** que la app en {_b_conc}. "
+                            f"Revisa ingresos sin registrar o gastos marcados como pagados que no salieron de esa cuenta."
+                        )
+                    else:
+                        st.warning(
+                            f"El banco tiene **\\$ {abs(_dif_conc):,.0f} menos** que la app en {_b_conc}. "
+                            f"Revisa gastos sin registrar, sin marcar como pagados o asignados a otra billetera."
+                        )
 
 with st.expander("📝 Movimiento de Gastos", expanded=True):
 
