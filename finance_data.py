@@ -345,6 +345,62 @@ def calcular_cadena_billeteras(df_g, df_i, df_oi, df_sab, df_transferencias_toda
     return ord_inicio, cadena
 
 
+# ── AUDITORÍA: DESGLOSE DE UN MES POR BILLETERA ─────────────────────────────
+def desglose_billeteras_mes(df_g, df_i, df_oi, df_transferencias_todas,
+                            lista_billeteras, mes, anio, billetera_defecto=""):
+    """
+    Devuelve {billetera: {"ingresos", "gastos", "transferencias"}} del mes,
+    usando exactamente las mismas reglas que calcular_saldo_billeteras.
+    """
+    _tr = None
+    if (df_transferencias_todas is not None and not df_transferencias_todas.empty
+            and "periodo" in df_transferencias_todas.columns):
+        _tr = df_transferencias_todas[
+            (df_transferencias_todas["periodo"] == mes) &
+            (pd.to_numeric(df_transferencias_todas["anio"], errors="coerce") == anio)
+        ]
+    ing = calcular_saldo_billeteras(None, df_i, df_oi, None, lista_billeteras, mes, anio,
+                                    billetera_defecto=billetera_defecto)
+    gas = calcular_saldo_billeteras(df_g, None, None, None, lista_billeteras, mes, anio,
+                                    billetera_defecto=billetera_defecto)
+    trf = calcular_saldo_billeteras(None, None, None, None, lista_billeteras, mes, anio,
+                                    df_transferencias=_tr, billetera_defecto=billetera_defecto)
+    return {b: {"ingresos": ing.get(b, 0.0),
+                "gastos": -gas.get(b, 0.0),
+                "transferencias": trf.get(b, 0.0)} for b in lista_billeteras}
+
+
+def movimientos_fuera_de_mes(df_g, meses_lista):
+    """
+    Gastos pagados cuya Fecha Pago cae en un mes distinto al de la hoja
+    donde están registrados (ej: fecha 31/10 guardado en Noviembre).
+    """
+    cols = ["Hoja", "Fecha", "Descripción", "Monto", "Billetera"]
+    if df_g is None or df_g.empty or "Fecha Pago" not in df_g.columns:
+        return pd.DataFrame(columns=cols)
+    df = df_g.copy()
+    df["_f"] = pd.to_datetime(df["Fecha Pago"], errors="coerce")
+    df = df[
+        df["Pagado"].fillna(False).astype(bool) &
+        (df["Es Proyectado"].fillna(False).astype(bool) == False) &
+        df["_f"].notna()
+    ]
+    if df.empty:
+        return pd.DataFrame(columns=cols)
+    _idx = df["Periodo"].map({m: i + 1 for i, m in enumerate(meses_lista)})
+    df = df[(df["_f"].dt.month != _idx) | (df["_f"].dt.year != df["Año"])]
+    if df.empty:
+        return pd.DataFrame(columns=cols)
+    df = df.sort_values("_f")
+    return pd.DataFrame({
+        "Hoja":        df["Periodo"].astype(str) + " " + df["Año"].astype(str),
+        "Fecha":       df["_f"].dt.strftime("%d/%m/%Y"),
+        "Descripción": df["Descripción"].astype(str),
+        "Monto":       pd.to_numeric(df["Monto"], errors="coerce").fillna(0),
+        "Billetera":   df.get("Billetera Pago", pd.Series("", index=df.index)).fillna("").astype(str),
+    }).reset_index(drop=True)
+
+
 # ── CALCULAR MÉTRICAS ─────────────────────────────────────────────────────────
 def calcular_metricas(df_g, nom, otr, s_ant):
     it = float(s_ant) + float(nom) + float(otr)
