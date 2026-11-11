@@ -837,6 +837,7 @@ with st.sidebar:
     n_in  = parse_moneda(n_txt)
 
     bill_nomina = ""
+    bill_nuevos = bill_defecto
 
     if modulo_billeteras_activo:
         # Billetera del ingreso fijo (obligatoria, preseleccionada la por defecto)
@@ -851,6 +852,11 @@ with st.sidebar:
             index=_bill_nom_idx,
             key="sel_bill_nomina"
         )
+        # Billetera que se preselecciona en filas NUEVAS (gastos e ingresos):
+        # la misma del ingreso fijo. Las filas ya guardadas sin billetera siguen
+        # usando bill_defecto en los cálculos, para no mover saldos históricos.
+        bill_nuevos = bill_nomina if bill_nomina in lista_billeteras else bill_defecto
+
 
         if modo_bill == "cadena":
             with st.expander("💳 Saldo inicial por billetera", expanded=False):
@@ -1552,7 +1558,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
     if modulo_billeteras_activo and lista_billeteras:
         config_mov["Billetera Pago"] = st.column_config.SelectboxColumn(
             "💳 Billetera", options=opciones_bill, width="medium",
-            default=bill_defecto,
+            default=bill_nuevos,
             help="Billetera con la que pagas este gasto"
         )
 
@@ -1590,7 +1596,7 @@ with st.expander("✏️ Editar / Agregar Movimientos", expanded=True):
                         "Fecha Pago":           pd.NaT,
                     }
                     if "Billetera Pago" in df_base_mov.columns:
-                        _fila_n["Billetera Pago"] = bill_defecto
+                        _fila_n["Billetera Pago"] = bill_nuevos
                     filas_nuevas.append(_fila_n)
                 else:
                     mask = df_base_mov["Descripción"].str.strip().str.upper() == desc_proy.upper()
@@ -1809,7 +1815,7 @@ with st.expander("💰 Ingresos Adicionales", expanded=True):
     if modulo_billeteras_activo and lista_billeteras:
         _oi_config["Billetera"] = st.column_config.SelectboxColumn(
             "💳 Billetera", options=opciones_bill, width="medium",
-            default=bill_defecto,
+            default=bill_nuevos,
             help="Cuenta donde recibes este ingreso"
         )
     _oi_base = df_mes_oi.reindex(columns=_oi_cols).reset_index(drop=True)
