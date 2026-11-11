@@ -476,6 +476,44 @@ def buscar_usuario_por_email(supabase, email, token):
         return None
 
 
+# ── PROTECCIÓN: QUÉ FILAS GUARDADAS SE PERDERÍAN AL GUARDAR ─────────────────
+_CAMPOS_GASTO = ["anio", "periodo", "categoria", "descripcion", "monto", "valor_referencia",
+                 "pagado", "recurrente", "fecha_pago", "es_proyectado", "es_referencia",
+                 "presupuesto_asociado", "billetera_pago", "usuario_id"]
+
+
+def _llave_gasto(es_proy, desc):
+    return (bool(es_proy), str(desc or "").strip().upper())
+
+
+def filas_que_se_perderian(supabase, token, u_id, mes_s, anio_s, df_g_pantalla):
+    """
+    Lee de la BD, EN ESTE MOMENTO, los gastos guardados del mes y devuelve los que
+    no están en la pantalla (comparando por tipo + descripción, contando repetidos).
+    Si la pantalla está desactualizada (otra pestaña, otro dispositivo, tabla que
+    se reinició, fila borrada sin querer), aquí aparecen las filas que se borrarían.
+    """
+    from collections import Counter
+    supabase.postgrest.auth(token)
+    r = supabase.table("gastos").select("*").eq("usuario_id", str(u_id)) \
+        .eq("anio", int(anio_s)).eq("periodo", str(mes_s)).execute()
+    filas_bd = r.data or []
+
+    en_pantalla = Counter()
+    if df_g_pantalla is not None and not df_g_pantalla.empty:
+        for _, row in df_g_pantalla.iterrows():
+            en_pantalla[_llave_gasto(row.get("Es Proyectado", False), row.get("Descripción", ""))] += 1
+
+    perdidas = []
+    for f in filas_bd:
+        k = _llave_gasto(f.get("es_proyectado", False), f.get("descripcion", ""))
+        if en_pantalla[k] > 0:
+            en_pantalla[k] -= 1
+        else:
+            perdidas.append(f)
+    return perdidas
+
+
 # ── GUARDAR BD ────────────────────────────────────────────────────────────────
 def guardar_bd(supabase, token, u_id, mes_s, anio_s,
                df_g_limpio, df_oi_limpio, s_in, n_in, otr_v,
@@ -488,6 +526,11 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s,
                       se calcula en cadena desde el mes anterior).
     """
     supabase.postgrest.auth(token)
+
+    # Respaldo en memoria de los gastos guardados del mes (para restaurar si algo falla)
+    _r_prev = supabase.table("gastos").select("*").eq("usuario_id", str(u_id)) \
+        .eq("anio", int(anio_s)).eq("periodo", str(mes_s)).execute()
+    _respaldo_gastos = [{c: f.get(c) for c in _CAMPOS_GASTO} for f in (_r_prev.data or [])]
 
     # Borrar registros anteriores del mes
     supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
@@ -518,7 +561,22 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s,
                 "billetera_pago": bill_pago if bill_pago else None,
                 "usuario_id": str(u_id)
             })
-        supabase.table("gastos").insert(gastos_db).execute()
+        try:
+            supabase.table("gastos").insert(gastos_db).execute()
+            # Verificar que quedaron todas las filas (el insert en lote puede fallar
+            # en silencio por RLS); si no, reintentar fila por fila.
+            _chk = supabase.table("gastos").select("id").eq("usuario_id", str(u_id)) \
+                .eq("anio", int(anio_s)).eq("periodo", str(mes_s)).execute()
+            if len(_chk.data or []) != len(gastos_db):
+                supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+                for _g in gastos_db:
+                    supabase.table("gastos").insert(_g).execute()
+        except Exception:
+            # Algo falló: dejar el mes exactamente como estaba antes de guardar
+            supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
+            for _g in _respaldo_gastos:
+                supabase.table("gastos").insert(_g).execute()
+            raise
 
     # Insertar otros ingresos
     if not df_oi_limpio.empty:

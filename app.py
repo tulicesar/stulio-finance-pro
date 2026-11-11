@@ -17,7 +17,7 @@ from finance_data import (
     cargar_config, guardar_config, cargar_bd_usuario, cargar_vinculos, buscar_usuario_por_email,
     cargar_transferencias, cargar_transferencias_todas, guardar_transferencia, eliminar_transferencia,
     guardar_ingresos_proyectados, calcular_cadena_billeteras, asegurar_billetera_defecto, orden_periodo,
-    desglose_billeteras_mes, movimientos_fuera_de_mes
+    desglose_billeteras_mes, movimientos_fuera_de_mes, filas_que_se_perderian
 )
 from reportes_v2 import generar_pdf_reporte, generar_excel_reporte, generar_pdf_proyeccion
 
@@ -2567,6 +2567,22 @@ Sé directo, usa los números reales, habla como asesor financiero de confianza.
 st.markdown("<br>", unsafe_allow_html=True)
 st.markdown('<div class="save-btn">', unsafe_allow_html=True)
 
+# ── Protección: filas guardadas que este guardado borraría ──
+_clave_perd = f"perdidas_{_periodo_key}"
+import hashlib as _hl
+def _clave_conf_de(_lst):
+    return f"confirmo_borrado_{_periodo_key}_" + _hl.md5(repr(_lst).encode()).hexdigest()[:10]
+if st.session_state.get(_clave_perd):
+    _lst = st.session_state[_clave_perd]
+    _det = "\n".join(f"- **{d}** — \\$ {m:,.0f}" + (f" ({f})" if f else "") for d, m, f in _lst)
+    st.error(
+        f"🛑 **No se guardó.** En la base de datos hay **{len(_lst)} fila(s)** de {mes_s} que NO están "
+        f"en esta pantalla. Si guardas, se borrarían:\n\n{_det}\n\n"
+        "Lo más probable es que esta pantalla esté desactualizada (otra pestaña o dispositivo, "
+        "o la tabla se reinició). **Recarga la página (F5)** y vuelve a registrar tus cambios."
+    )
+    st.checkbox("Sé lo que hago: quiero ELIMINAR esas filas al guardar", key=_clave_conf_de(_lst))
+
 if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
     df_g_limpio = df_ed_g.dropna(subset=["Categoría", "Descripción"], how="all")
     df_g_limpio = df_g_limpio[
@@ -2596,6 +2612,25 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
         ] if "Billetera Pago" in df_g_limpio.columns else pd.DataFrame()
         if not _mov_pagados_sin_bill.empty:
             _errores_bill.append(f"❌ **{len(_mov_pagados_sin_bill)} gasto(s) pagado(s)** sin billetera asignada.")
+
+    _perdidas = []
+    if not _errores_bill:
+        try:
+            _perdidas = filas_que_se_perderian(supabase, token, u_id, mes_s, anio_s, df_g_limpio)
+        except Exception as _e_chk:
+            _errores_bill.append(f"❌ No se pudo verificar la base de datos antes de guardar: {_e_chk}")
+    if _perdidas:
+        _resumen = sorted(
+            (str(f.get("descripcion") or ""),
+             float(f.get("monto") or 0) or float(f.get("valor_referencia") or 0),
+             str(f.get("fecha_pago") or "")[:10])
+            for f in _perdidas
+        )
+        _ya_confirmado = (st.session_state.get(_clave_perd) == _resumen and
+                          st.session_state.get(_clave_conf_de(_resumen), False))
+        if not _ya_confirmado:
+            st.session_state[_clave_perd] = _resumen
+            st.rerun()
 
     if _errores_bill:
         for _e in _errores_bill:
@@ -2628,6 +2663,7 @@ if st.button("💾  GUARDAR CAMBIOS DEFINITIVOS", use_container_width=True):
                     guardar_config(supabase, u_id, token, recurrentes_excluidos=_excl_dict)
                 # Guardar ingresos proyectados (se guardan fila a fila en tiempo real)
                 guardar_ingresos_proyectados(supabase, token, u_id, mes_s, anio_s, _ip_df_calc)
+                st.session_state.pop(_clave_perd, None)
                 st.session_state.datos_modificados = False
                 st.balloons()
                 st.success("✅ ¡Todo guardado y sincronizado de forma segura!")
