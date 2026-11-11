@@ -1,3 +1,4 @@
+import types
 """
 finance_data.py — Carga de datos desde Supabase y cálculo de métricas financieras
 """
@@ -6,15 +7,48 @@ import streamlit as st
 
 
 # ── CARGAR BASE DE DATOS ──────────────────────────────────────────────────────
+def _select_todo(supabase, tabla, u_id, orden=None):
+    """
+    Trae TODAS las filas del usuario en `tabla`, por páginas de 1000.
+    Supabase devuelve máximo 1000 filas por consulta: sin esto, cuando el
+    historial pasa de 1000 filas, algunas no se cargan y al guardar ese mes
+    se borran.
+    """
+    _pag = 1000
+    filas, ini = [], 0
+    _ordenes = [orden] if orden else []
+    _ordenes.append("id")
+    while True:
+        q = supabase.table(tabla).select("*").eq("usuario_id", u_id)
+        for _o in _ordenes:
+            q = q.order(_o)
+        try:
+            r = q.range(ini, ini + _pag - 1).execute()
+        except Exception:
+            # Tabla sin columna id: ordenar solo por lo que haya
+            if "id" in _ordenes:
+                _ordenes.remove("id")
+                if not _ordenes:
+                    _ordenes = ["anio", "periodo"]
+                continue
+            raise
+        datos = r.data or []
+        filas.extend(datos)
+        if len(datos) < _pag:
+            break
+        ini += _pag
+    return types.SimpleNamespace(data=filas)
+
+
 def cargar_bd(supabase, u_id, token):
     try:
         supabase.postgrest.auth(token)
-        r_g   = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
-        r_i   = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
-        r_oi  = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
-        r_b   = supabase.table("billeteras").select("*").eq("usuario_id", u_id).order("created_at").execute()
-        r_sab = supabase.table("saldo_anterior_billetera").select("*").eq("usuario_id", u_id).execute()
-        r_ip  = supabase.table("ingresos_proyectados").select("*").eq("usuario_id", u_id).execute()
+        r_g   = _select_todo(supabase, "gastos", u_id)
+        r_i   = _select_todo(supabase, "ingresos_base", u_id)
+        r_oi  = _select_todo(supabase, "otros_ingresos", u_id)
+        r_b   = _select_todo(supabase, "billeteras", u_id, orden="created_at")
+        r_sab = _select_todo(supabase, "saldo_anterior_billetera", u_id)
+        r_ip  = _select_todo(supabase, "ingresos_proyectados", u_id)
 
         df_g = pd.DataFrame(r_g.data) if r_g.data else pd.DataFrame(columns=[
             "anio","periodo","categoria","descripcion","monto","valor_referencia",
@@ -113,9 +147,9 @@ def guardar_config(supabase, u_id, token, **kwargs):
 def cargar_bd_usuario(supabase, u_id, token):
     try:
         supabase.postgrest.auth(token)
-        r_g  = supabase.table("gastos").select("*").eq("usuario_id", u_id).execute()
-        r_i  = supabase.table("ingresos_base").select("*").eq("usuario_id", u_id).execute()
-        r_oi = supabase.table("otros_ingresos").select("*").eq("usuario_id", u_id).execute()
+        r_g  = _select_todo(supabase, "gastos", u_id)
+        r_i  = _select_todo(supabase, "ingresos_base", u_id)
+        r_oi = _select_todo(supabase, "otros_ingresos", u_id)
 
         df_g  = pd.DataFrame(r_g.data)  if r_g.data  else pd.DataFrame()
         df_i  = pd.DataFrame(r_i.data)  if r_i.data  else pd.DataFrame()
@@ -565,7 +599,7 @@ def guardar_bd(supabase, token, u_id, mes_s, anio_s,
             supabase.table("gastos").insert(gastos_db).execute()
             # Verificar que quedaron todas las filas (el insert en lote puede fallar
             # en silencio por RLS); si no, reintentar fila por fila.
-            _chk = supabase.table("gastos").select("id").eq("usuario_id", str(u_id)) \
+            _chk = supabase.table("gastos").select("descripcion").eq("usuario_id", str(u_id)) \
                 .eq("anio", int(anio_s)).eq("periodo", str(mes_s)).execute()
             if len(_chk.data or []) != len(gastos_db):
                 supabase.table("gastos").delete().eq("usuario_id", u_id).eq("anio", anio_s).eq("periodo", mes_s).execute()
@@ -665,10 +699,7 @@ def cargar_transferencias_todas(supabase, u_id, token):
     """Retorna DataFrame con TODAS las transferencias del usuario (para la cadena de saldos)."""
     try:
         supabase.postgrest.auth(token)
-        r = (supabase.table("transferencias_billeteras")
-             .select("*")
-             .eq("usuario_id", u_id)
-             .execute())
+        r = _select_todo(supabase, "transferencias_billeteras", u_id)
         if r.data:
             df = pd.DataFrame(r.data)
             df["monto"] = pd.to_numeric(df["monto"], errors="coerce").fillna(0)
